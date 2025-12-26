@@ -1,0 +1,24 @@
+# PDF Processing
+PyMuPDF>=1.23.0
+pdfplumber>=0.10.0
+
+# Text Processing & NLP
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-text-splitters>=0.0.1
+
+# Embeddings - PubMedBERT
+sentence-transformers>=2.2.0
+torch>=2.0.0
+
+# Vector Database
+chromadb>=0.4.0
+
+# LLM - Google Gemini
+google-generativeai>=0.3.0
+langchain-google-genai>=0.0.5
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+pydantic>=2.0.0
