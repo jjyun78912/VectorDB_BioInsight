@@ -6,11 +6,26 @@ Strategy:
 2. Further split large sections using RecursiveCharacterTextSplitter
 3. Preserve section/subsection context in metadata
 """
+import re
 from dataclasses import dataclass
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .config import CHUNK_SIZE, CHUNK_OVERLAP
 from .pdf_parser import PaperSection, PaperMetadata
+
+# Patterns to filter out from chunks (non-scientific content)
+JUNK_PATTERNS = [
+    # Author contributions
+    r"(?:Author\s+)?Contributions?[:.].*?(?:Writing|Review|Editing|Conceptualization|Methodology|Validation|Investigation|Supervision|Data\s+curation)",
+    # Funding statements
+    r"(?:Funding|Financial\s+Support)[:.].*?(?:grant|funding|supported|funded)",
+    # Conflicts of interest
+    r"(?:Conflicts?\s+of\s+Interest|Competing\s+Interests?|Declaration)[:.].*?(?:declare|conflict|interest)",
+    # Acknowledgments
+    r"Acknowledgm?ents?[:.].*",
+    # References list items
+    r"^\d+\.\s+[A-Z][a-z]+\s+[A-Z]{1,2}[,.].*?(?:\d{4}|\(\d{4}\))",
+]
 
 
 @dataclass
@@ -20,9 +35,10 @@ class TextChunk:
     metadata: dict
 
     def __post_init__(self):
-        """Validate chunk."""
-        if not self.content.strip():
-            raise ValueError("Chunk content cannot be empty")
+        """Validate and clean chunk."""
+        self.content = self.content.strip()
+        # Allow empty chunks to be filtered later instead of raising error
+        # This prevents pipeline failures on edge cases
 
 
 class BioPaperSplitter:
@@ -89,7 +105,30 @@ class BioPaperSplitter:
             chunks.extend(section_chunks)
             chunk_index += len(section_chunks)
 
+        # Filter out empty chunks and junk content
+        chunks = [c for c in chunks if c.content.strip() and not self._is_junk_content(c.content)]
+
         return chunks
+
+    def _is_junk_content(self, text: str) -> bool:
+        """Check if chunk contains mostly non-scientific content."""
+        # Check for junk patterns
+        for pattern in JUNK_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
+                # If pattern matches more than 50% of content, it's junk
+                match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                if match and len(match.group()) > len(text) * 0.3:
+                    return True
+
+        # Check if chunk is mostly author contribution style text
+        contrib_keywords = ["writing", "editing", "review", "conceptualization",
+                          "methodology", "validation", "investigation", "supervision",
+                          "data curation", "visualization", "funding acquisition"]
+        keyword_count = sum(1 for kw in contrib_keywords if kw.lower() in text.lower())
+        if keyword_count >= 4:  # If 4+ contribution keywords, likely junk
+            return True
+
+        return False
 
     def _split_section(
         self,

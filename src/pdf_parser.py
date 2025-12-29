@@ -5,6 +5,14 @@ from dataclasses import dataclass, field
 from typing import Optional
 import fitz  # PyMuPDF
 
+# Optional OCR support
+try:
+    import pytesseract
+    from pdf2image import convert_from_path
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+
 from .config import BIO_PAPER_SECTIONS, METHODS_SUBSECTIONS, EXCLUDE_SECTIONS
 
 
@@ -119,6 +127,14 @@ class BioPaperParser:
         # 2. 전체 텍스트 추출
         full_text, text_blocks = self._extract_text_with_positions(doc)
 
+        # 2.5. 텍스트가 거의 없으면 OCR 시도
+        if len(full_text.strip()) < 500:
+            print(f"  [!] Low text content ({len(full_text)} chars), attempting OCR...")
+            ocr_text = self._extract_text_with_ocr(pdf_path)
+            if ocr_text and len(ocr_text) > len(full_text):
+                full_text = ocr_text
+                print(f"  [+] OCR extracted {len(full_text)} chars")
+
         doc.close()
 
         # 3. 메타데이터 추출
@@ -134,7 +150,43 @@ class BioPaperParser:
         # 5. 제외 섹션 필터링
         sections = [s for s in sections if s.name not in EXCLUDE_SECTIONS]
 
+        # 5.5. Abstract를 섹션 맨 앞에 추가 (메타데이터에서 추출된 경우)
+        if metadata.abstract and len(metadata.abstract) > 50:
+            # Abstract가 이미 섹션에 없으면 추가
+            has_abstract = any(s.name.lower() == "abstract" for s in sections)
+            if not has_abstract:
+                abstract_section = PaperSection(name="Abstract", content=metadata.abstract)
+                sections.insert(0, abstract_section)
+
+        # 6. 섹션이 없거나 내용이 거의 없으면 전체 텍스트를 하나의 섹션으로
+        total_content = sum(len(s.content) for s in sections)
+        if not sections or total_content < 500:
+            clean_text = re.sub(r"\[PAGE_\d+\]", "", full_text).strip()
+            if clean_text:
+                sections = [PaperSection(name="Full Text", content=clean_text)]
+
         return metadata, sections
+
+    def _extract_text_with_ocr(self, pdf_path: Path) -> str:
+        """Extract text from PDF using OCR (for scanned/image PDFs)."""
+        if not OCR_AVAILABLE:
+            print("  [!] OCR not available. Install pytesseract and pdf2image.")
+            return ""
+
+        try:
+            # Convert PDF pages to images
+            images = convert_from_path(str(pdf_path), dpi=200)
+
+            # OCR each page
+            full_text = ""
+            for i, image in enumerate(images):
+                text = pytesseract.image_to_string(image, lang='eng')
+                full_text += f"\n[PAGE_{i}]\n{text}"
+
+            return self._clean_text(full_text)
+        except Exception as e:
+            print(f"  [!] OCR failed: {e}")
+            return ""
 
     def _detect_section_headers_by_font(self, doc) -> list[dict]:
         """폰트 크기/볼드 기반으로 섹션 헤더 감지."""
@@ -253,9 +305,29 @@ class BioPaperParser:
         if doi_match:
             metadata.doi = doi_match.group().strip()
 
-        year_match = re.search(r"\b(19|20)\d{2}\b", text[:2000])
-        if year_match:
-            metadata.year = year_match.group()
+        # 출판년도 추출 (더 정확한 패턴 우선)
+        # 1. "Published: 2024" 또는 "© 2024" 패턴
+        year_patterns = [
+            r"(?:published|received|accepted|copyright|©)[:\s]*(\d{4})",
+            r"(\d{4})\s*(?:Endocrine|Oxford|Elsevier|Springer|Wiley|Nature)",
+            r"(?:Volume|Vol\.?)\s*\d+.*?(\d{4})",
+            r",\s*(202[0-5]|201\d)\b",  # 최근 년도 우선
+        ]
+
+        for pattern in year_patterns:
+            year_match = re.search(pattern, text[:3000], re.IGNORECASE)
+            if year_match:
+                year = year_match.group(1) if year_match.lastindex else year_match.group()
+                # 합리적인 출판년도 범위 (2000-2030)
+                if year.isdigit() and 2000 <= int(year) <= 2030:
+                    metadata.year = year
+                    break
+
+        # 위 패턴으로 못 찾으면 2010년 이후 년도 중 첫 번째
+        if not metadata.year:
+            year_match = re.search(r"\b(20[1-2]\d)\b", text[:2000])
+            if year_match:
+                metadata.year = year_match.group()
 
         abstract_match = re.search(
             r"abstract[:\s]*\n?(.*?)(?=\n\s*(?:introduction|background|keywords|1\.|graphical))",

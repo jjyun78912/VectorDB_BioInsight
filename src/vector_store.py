@@ -203,18 +203,38 @@ class BioVectorStore:
         # Convert to SearchResult objects
         search_results = []
         if results["ids"] and results["ids"][0]:
+            # Get min/max distances for normalization
+            distances = results["distances"][0] if results["distances"] else []
+            max_distance = max(distances) if distances else 1.0
+            min_distance = min(distances) if distances else 0.0
+
             for i, doc_id in enumerate(results["ids"][0]):
                 distance = results["distances"][0][i] if results["distances"] else 0
+
                 # Convert L2 distance to intuitive percentage score (0-100%)
-                # L2 distance typically ranges 0-100 in 768-dim space
-                # Lower distance = higher relevance
-                relevance_score = max(0, min(100, (1 - distance / 100) * 100))
+                # Normalize based on actual distance range in results
+                # Using exponential decay: closer = higher score
+                # For PubMedBERT embeddings, typical distances are 0.5-2.0 for related content
+                if max_distance > min_distance:
+                    # Normalize to 0-1 range, then convert to percentage
+                    normalized = (max_distance - distance) / (max_distance - min_distance)
+                    relevance_score = normalized * 100
+                else:
+                    # All same distance, give high score
+                    relevance_score = 80.0
+
+                # Also use absolute distance for baseline relevance
+                # Lower distance = better (typical good match < 1.5)
+                abs_relevance = max(0, min(100, (1 - distance / 3.0) * 100))
+
+                # Blend normalized and absolute scores
+                final_score = (relevance_score * 0.6) + (abs_relevance * 0.4)
 
                 search_results.append(SearchResult(
                     content=results["documents"][0][i],
                     metadata=results["metadatas"][0][i] if results["metadatas"] else {},
                     distance=distance,
-                    relevance_score=relevance_score
+                    relevance_score=max(0, min(100, final_score))
                 ))
 
         return search_results

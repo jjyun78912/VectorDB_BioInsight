@@ -22,3 +22,8 @@ langchain-google-genai>=0.0.5
 python-dotenv>=1.0.0
 tqdm>=4.66.0
 pydantic>=2.0.0
+
+# Web API
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6

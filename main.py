@@ -426,6 +426,155 @@ def cmd_recommend(args):
     return 0
 
 
+def cmd_trend(args):
+    """Analyze research trends."""
+    from src.trend_analyzer import create_trend_analyzer
+
+    print(f"\n📊 Research Trend Analysis - {args.domain}")
+    print("=" * 70)
+
+    analyzer = create_trend_analyzer(disease_domain=args.domain)
+    report = analyzer.analyze()
+
+    print(report.format())
+    return 0
+
+
+def cmd_visualize(args):
+    """Generate visualizations."""
+    from src.visualizer import create_visualizer
+
+    print(f"\n📊 Generating Visualizations - {args.domain}")
+    print("=" * 70)
+
+    visualizer = create_visualizer(disease_domain=args.domain)
+    viz_data = visualizer.generate_all(output_dir=args.output)
+
+    print(f"\n✅ Visualizations saved to: {args.output}")
+    print("   Open index.html in a browser to view")
+    return 0
+
+
+def cmd_interpret(args):
+    """Generate LLM interpretation report."""
+    from src.interpreter import create_interpreter
+
+    print(f"\n🔬 Research Interpretation - {args.domain}")
+    print("=" * 70)
+
+    try:
+        interpreter = create_interpreter(disease_domain=args.domain)
+
+        if args.compare:
+            # Compare multiple papers
+            titles = [t.strip() for t in args.compare.split(",")]
+            print(f"Comparing {len(titles)} papers...")
+            result = interpreter.compare_papers(titles)
+            print(result)
+        else:
+            # Interpret single paper
+            if not args.title:
+                print("Error: --title is required")
+                return 1
+
+            print(f"Interpreting: {args.title}")
+            print("-" * 70)
+            report = interpreter.interpret_paper(args.title)
+            print(report.format())
+
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+
+    return 0
+
+
+def cmd_validate(args):
+    """Validate research findings."""
+    from src.validator import create_validator
+
+    print(f"\n✅ Research Validation - {args.domain}")
+    print("=" * 70)
+
+    validator = create_validator(disease_domain=args.domain)
+
+    if args.claim:
+        print(f"Validating claim: \"{args.claim}\"")
+        print("-" * 70)
+        result = validator.validate_claim(args.claim)
+        print(result.format())
+    elif args.title:
+        print(f"Validating paper consistency: {args.title}")
+        print("-" * 70)
+        result = validator.validate_paper_consistency(args.title)
+        print(result.format())
+    elif args.cross:
+        # Cross-validate all papers
+        from src.vector_store import create_vector_store
+        vs = create_vector_store(disease_domain=args.domain)
+        papers = vs.get_all_papers()
+        titles = [p["title"] for p in papers]
+
+        print(f"Cross-validating {len(titles)} papers...")
+        print("-" * 70)
+        results = validator.cross_validate_papers(titles)
+        for result in results:
+            print(f"\n📄 {result.item_validated[:50]}...")
+            print(f"   Confidence: {result.overall_confidence:.1f}%")
+    else:
+        print("Error: Specify --claim, --title, or --cross")
+        return 1
+
+    return 0
+
+
+def cmd_store(args):
+    """Manage research asset storage."""
+    from src.research_store import create_research_store
+
+    store = create_research_store(disease_domain=args.domain)
+
+    if args.action == "stats":
+        stats = store.get_statistics()
+        print(f"\n📦 Research Store Statistics - {args.domain}")
+        print("=" * 60)
+        for key, value in stats.items():
+            print(f"  {key}: {value}")
+
+    elif args.action == "export":
+        output = store.export_all()
+        print(f"✅ Exported to: {output}")
+
+    elif args.action == "history":
+        logs = store.get_qa_history()
+        print(f"\n📝 Q&A History ({len(logs)} entries)")
+        print("=" * 60)
+        for log in logs[:20]:
+            print(f"\n[{log.timestamp}]")
+            print(f"Q: {log.question[:80]}...")
+            print(f"A: {log.answer[:100]}...")
+
+    elif args.action == "papers":
+        papers = store.list_papers()
+        print(f"\n📚 Stored Papers ({len(papers)})")
+        print("=" * 60)
+        for p in papers:
+            flags = []
+            if p["has_summary"]:
+                flags.append("📝")
+            if p["has_interpretation"]:
+                flags.append("🔬")
+            if p["notes_count"] > 0:
+                flags.append(f"📌{p['notes_count']}")
+            print(f"  {' '.join(flags)} {p['title'][:50]}...")
+
+    else:
+        print("Unknown action. Use: stats, export, history, papers")
+        return 1
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="VectorDB BioInsight - Bio Paper Vector Database",
@@ -490,6 +639,33 @@ def main():
     recommend_parser.add_argument("--top-k", "-n", type=int, default=10, help="Number of recommendations")
     recommend_parser.add_argument("--min-year", "-y", type=int, help="Minimum publication year")
 
+    # Trend analysis command
+    trend_parser = subparsers.add_parser("trend", help="Analyze research trends")
+    trend_parser.add_argument("--domain", "-d", required=True, help="Disease domain")
+
+    # Visualize command
+    viz_parser = subparsers.add_parser("visualize", help="Generate visualizations")
+    viz_parser.add_argument("--domain", "-d", required=True, help="Disease domain")
+    viz_parser.add_argument("--output", "-o", default="./output/viz", help="Output directory")
+
+    # Interpret command
+    interpret_parser = subparsers.add_parser("interpret", help="LLM-based paper interpretation")
+    interpret_parser.add_argument("--domain", "-d", required=True, help="Disease domain")
+    interpret_parser.add_argument("--title", "-t", help="Paper title to interpret")
+    interpret_parser.add_argument("--compare", "-c", help="Compare papers (comma-separated titles)")
+
+    # Validate command
+    validate_parser = subparsers.add_parser("validate", help="Validate research findings")
+    validate_parser.add_argument("--domain", "-d", required=True, help="Disease domain")
+    validate_parser.add_argument("--claim", help="Validate a specific claim")
+    validate_parser.add_argument("--title", "-t", help="Validate paper consistency")
+    validate_parser.add_argument("--cross", action="store_true", help="Cross-validate all papers")
+
+    # Store command
+    store_parser = subparsers.add_parser("store", help="Manage research asset storage")
+    store_parser.add_argument("--domain", "-d", required=True, help="Disease domain")
+    store_parser.add_argument("action", choices=["stats", "export", "history", "papers"], help="Action to perform")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -506,6 +682,11 @@ def main():
         "chat": cmd_chat,
         "summarize": cmd_summarize,
         "recommend": cmd_recommend,
+        "trend": cmd_trend,
+        "visualize": cmd_visualize,
+        "interpret": cmd_interpret,
+        "validate": cmd_validate,
+        "store": cmd_store,
     }
 
     return commands[args.command](args)

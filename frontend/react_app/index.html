@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BioInsight AI Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Playfair Display', 'serif'],
+            },
+            colors: {
+              brand: {
+                DEFAULT: '#8B5CF6',
+                foreground: '#A78BFA',
+                light: '#EDE9FE',
+                dark: '#6D28D9',
+              },
+              surface: {
+                DEFAULT: '#FAFAF9',
+                muted: '#F5F3FF',
+              }
+            },
+            animation: {
+              'fade-in': 'fadeIn 1s ease-out forwards',
+              'slide-up': 'slideUp 0.8s ease-out forwards',
+              'appear': 'appear 0.6s ease-out forwards',
+              'appear-zoom': 'appearZoom 0.8s ease-out forwards',
+              'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
+              'float': 'float 6s ease-in-out infinite',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              appear: {
+                '0%': { opacity: '0', transform: 'translateY(16px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              appearZoom: {
+                '0%': { opacity: '0', transform: 'scale(0.95)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              pulseGlow: {
+                '0%, 100%': { opacity: '0.4' },
+                '50%': { opacity: '0.8' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0px)' },
+                '50%': { transform: 'translateY(-10px)' },
+              }
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      body {
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 50%, #e0e7ff 100%);
+        color: #1e1b4b;
+        overflow-x: hidden;
+      }
+
+      /* Monet-style Glass Morphism Classes */
+      .glass-1 {
+        background: rgba(255, 255, 255, 0.3);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+      .glass-2 {
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .glass-3 {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .glass-4 {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      .glass-5 {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+      }
+      .glass-dark {
+        background: rgba(139, 92, 246, 0.1);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      /* Glow Effects */
+      .glow-brand {
+        box-shadow: 0 0 40px -10px rgba(139, 92, 246, 0.5);
+      }
+      .glow-brand-lg {
+        box-shadow: 0 0 60px -15px rgba(139, 92, 246, 0.6);
+      }
+      .glow-white {
+        box-shadow: 0 0 40px -10px rgba(255, 255, 255, 0.8);
+      }
+
+      /* Text Gradient */
+      .text-gradient-brand {
+        background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 50%, #C4B5FD 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .text-gradient-hero {
+        background: linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #7c3aed 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      /* Radial Glow Background */
+      .bg-glow {
+        position: relative;
+      }
+      .bg-glow::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 60%;
+        height: 60%;
+        background: radial-gradient(ellipse at center, rgba(167, 139, 250, 0.3) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* Section Divider Line */
+      .line-b {
+        border-bottom: 1px solid rgba(139, 92, 246, 0.1);
+      }
+      .line-t {
+        border-top: 1px solid rgba(139, 92, 246, 0.1);
+      }
+
+      /* Fade Bottom Overlay */
+      .fade-bottom::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100px;
+        background: linear-gradient(to top, rgba(245, 243, 255, 0.9), transparent);
+        pointer-events: none;
+      }
+
+      /* Button Hover Effects */
+      .btn-glow {
+        transition: all 0.3s ease;
+      }
+      .btn-glow:hover {
+        box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.5);
+        transform: translateY(-2px);
+      }
+
+      /* Card Hover Animation */
+      .card-hover {
+        transition: all 0.3s ease;
+      }
+      .card-hover:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px -20px rgba(139, 92, 246, 0.3);
+      }
+
+      /* Custom scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #ede9fe;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #a78bfa;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #8b5cf6;
+      }
+
+      /* Animation Delays */
+      .delay-100 { animation-delay: 100ms; }
+      .delay-200 { animation-delay: 200ms; }
+      .delay-300 { animation-delay: 300ms; }
+      .delay-400 { animation-delay: 400ms; }
+      .delay-500 { animation-delay: 500ms; }
+      .delay-700 { animation-delay: 700ms; }
+      .delay-1000 { animation-delay: 1000ms; }
+    </style>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -9,7 +9,6 @@ Features:
 """
 from dataclasses import dataclass, field
 from typing import Optional
-import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -93,8 +92,6 @@ class BioRAGPipeline:
         api_key = api_key or GOOGLE_API_KEY
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not set. Add it to .env file.")
-
-        genai.configure(api_key=api_key)
 
         # Initialize LLM
         self.llm = ChatGoogleGenerativeAI(

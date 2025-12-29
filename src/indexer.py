@@ -94,6 +94,15 @@ class BioPaperIndexer:
 
         print(f"       → {len(chunks)} chunks created")
 
+        # If no chunks created, return early with error
+        if not chunks:
+            return {
+                "error": "No text content could be extracted from PDF. The file may be image-based or corrupted.",
+                "file": str(pdf_path),
+                "title": metadata.title,
+                "chunks": 0
+            }
+
         # Step 3 & 4: Embed and store (handled by vector_store)
         print("  [3/4] Generating embeddings...")
         print("  [4/4] Storing in VectorDB...")

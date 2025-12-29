@@ -30,8 +30,8 @@ EMBEDDING_MODEL = os.getenv(
 # - "NeuML/pubmedbert-base-embeddings"
 # - "pritamdeka/S-PubMedBert-MS-MARCO" (recommended for retrieval)
 
-# Gemini Model
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+# Gemini Model - .env의 GEMINI_TEXT_MODEL 사용
+GEMINI_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.0-flash")
 
 # Text Splitting Settings
 CHUNK_SIZE = 1000
