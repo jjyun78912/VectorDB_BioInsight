@@ -89,3 +89,8 @@ COLLECTION_NAME = "bio_papers"
 # Retrieval Settings
 TOP_K_RESULTS = 5
 SIMILARITY_THRESHOLD = 0.7
+
+# Hybrid Search Settings
+ENABLE_HYBRID_SEARCH = True  # Enable Dense + BM25 hybrid search
+DENSE_WEIGHT = 0.6  # Weight for dense (semantic) search (0-1)
+SPARSE_WEIGHT = 0.4  # Weight for sparse (BM25 keyword) search (0-1)

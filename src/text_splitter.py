@@ -15,8 +15,10 @@ from .pdf_parser import PaperSection, PaperMetadata
 
 # Patterns to filter out from chunks (non-scientific content)
 JUNK_PATTERNS = [
-    # Author contributions
+    # Author contributions - various formats
     r"(?:Author\s+)?Contributions?[:.].*?(?:Writing|Review|Editing|Conceptualization|Methodology|Validation|Investigation|Supervision|Data\s+curation)",
+    r"[A-Z]{1,3}[-–][A-Z]:\s*(?:Writing|Review|Conceptualization|Methodology|Investigation|Supervision)",  # e.g., "HN-C: Writing"
+    r"[A-Z][A-Za-z\-]+\s+[A-Z][A-Za-z\-]+:\s*(?:Writing|Review|Conceptualization|Validation)",  # e.g., "John Smith: Writing"
     # Funding statements
     r"(?:Funding|Financial\s+Support)[:.].*?(?:grant|funding|supported|funded)",
     # Conflicts of interest
@@ -25,6 +27,28 @@ JUNK_PATTERNS = [
     r"Acknowledgm?ents?[:.].*",
     # References list items
     r"^\d+\.\s+[A-Z][a-z]+\s+[A-Z]{1,2}[,.].*?(?:\d{4}|\(\d{4}\))",
+]
+
+# Sections that should be completely excluded from embedding
+EXCLUDE_SECTION_NAMES = [
+    "author contributions",
+    "author contribution",
+    "authors' contributions",
+    "acknowledgments",
+    "acknowledgements",
+    "competing interests",
+    "conflict of interest",
+    "conflicts of interest",
+    "funding",
+    "financial support",
+    "references",
+    "bibliography",
+    "abbreviations",
+    "supplementary material",
+    "supplementary information",
+    "data availability",
+    "ethical approval",
+    "ethics statement",
 ]
 
 
@@ -97,6 +121,16 @@ class BioPaperSplitter:
         chunk_index = 0
 
         for section in sections:
+            # Skip sections that are completely excluded
+            section_lower = section.name.lower().strip()
+            should_skip = False
+            for exclude_name in EXCLUDE_SECTION_NAMES:
+                if exclude_name in section_lower or section_lower in exclude_name:
+                    should_skip = True
+                    break
+            if should_skip:
+                continue
+
             section_chunks = self._split_section(
                 section=section,
                 paper_metadata=metadata,
@@ -106,16 +140,22 @@ class BioPaperSplitter:
             chunk_index += len(section_chunks)
 
         # Filter out empty chunks and junk content
-        chunks = [c for c in chunks if c.content.strip() and not self._is_junk_content(c.content)]
+        chunks = [c for c in chunks if c.content.strip() and not self._is_junk_content(c.content, c.metadata.get("section", ""))]
 
         return chunks
 
-    def _is_junk_content(self, text: str) -> bool:
+    def _is_junk_content(self, text: str, section_name: str = "") -> bool:
         """Check if chunk contains mostly non-scientific content."""
+        # Check if section name indicates excluded content
+        section_lower = section_name.lower().strip()
+        for exclude_name in EXCLUDE_SECTION_NAMES:
+            if exclude_name in section_lower or section_lower in exclude_name:
+                return True
+
         # Check for junk patterns
         for pattern in JUNK_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE | re.DOTALL):
-                # If pattern matches more than 50% of content, it's junk
+                # If pattern matches more than 30% of content, it's junk
                 match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
                 if match and len(match.group()) > len(text) * 0.3:
                     return True
@@ -123,9 +163,17 @@ class BioPaperSplitter:
         # Check if chunk is mostly author contribution style text
         contrib_keywords = ["writing", "editing", "review", "conceptualization",
                           "methodology", "validation", "investigation", "supervision",
-                          "data curation", "visualization", "funding acquisition"]
+                          "data curation", "visualization", "funding acquisition",
+                          "original draft", "formal analysis", "resources",
+                          "project administration", "writing–review"]
         keyword_count = sum(1 for kw in contrib_keywords if kw.lower() in text.lower())
-        if keyword_count >= 4:  # If 4+ contribution keywords, likely junk
+        if keyword_count >= 3:  # If 3+ contribution keywords, likely junk
+            return True
+
+        # Check for CRediT author contribution format: "XX-Y: Writing" patterns
+        credit_pattern = r"[A-Z]{1,4}[-–]?[A-Z]?:\s*(?:Writing|Review|Conceptualization|Methodology|Investigation|Supervision|Validation|Funding|Resources)"
+        credit_matches = re.findall(credit_pattern, text, re.IGNORECASE)
+        if len(credit_matches) >= 2:  # Multiple CRediT role assignments
             return True
 
         return False

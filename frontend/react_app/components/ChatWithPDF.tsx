@@ -3,14 +3,16 @@ import {
   Upload, FileText, Send, X, Sparkles, Loader2, Copy, Check,
   ChevronDown, Trash2, Plus, MessageSquare, BookOpen, Lightbulb
 } from 'lucide-react';
-import api from '../services/client';
+import api, { Source } from '../services/client';
+import { CitationRenderer, SourceCards, CitedSource } from './CitationRenderer';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  sources?: { paper_title: string; section: string; excerpt: string }[];
+  sources?: CitedSource[];
   timestamp: Date;
+  highlightedCitation?: number | null;  // Track which citation is being highlighted
 }
 
 interface UploadedPaper {
@@ -126,12 +128,15 @@ export const ChatWithPDF: React.FC<ChatWithPDFProps> = ({ isOpen, onClose }) => 
       // Use the Agent API with paper's session ID
       const response = await api.askAgent(selectedPaper.sessionId, messageText);
 
-      // Build sources with proper formatting
-      const sources = response.sources?.map(s => ({
+      // Build sources with citation indices for inline referencing
+      const sources: CitedSource[] = response.sources?.map((s: Source) => ({
+        citation_index: s.citation_index || 0,
         paper_title: s.paper_title,
         section: s.section,
         excerpt: s.excerpt,
-      }));
+        full_content: s.full_content,
+        relevance_score: s.relevance_score,
+      })) || [];
 
       const assistantMessage: Message = {
         id: `msg-${Date.now() + 1}`,
@@ -139,6 +144,7 @@ export const ChatWithPDF: React.FC<ChatWithPDFProps> = ({ isOpen, onClose }) => 
         content: response.answer,
         sources: sources,
         timestamp: new Date(),
+        highlightedCitation: null,
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (err) {
@@ -318,23 +324,46 @@ export const ChatWithPDF: React.FC<ChatWithPDFProps> = ({ isOpen, onClose }) => 
                       : 'glass-3 border border-purple-100/50 text-gray-800 rounded-tl-sm'
                   }`}
                 >
-                  <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                  {message.role === 'assistant' && message.sources && message.sources.length > 0 ? (
+                    // Use CitationRenderer for assistant messages with sources
+                    <CitationRenderer
+                      content={message.content}
+                      sources={message.sources}
+                      onSourceClick={(index) => {
+                        // Update highlighted citation for this message
+                        setMessages(prev => prev.map(m =>
+                          m.id === message.id
+                            ? { ...m, highlightedCitation: index }
+                            : m
+                        ));
+                        // Clear highlight after 2 seconds
+                        setTimeout(() => {
+                          setMessages(prev => prev.map(m =>
+                            m.id === message.id
+                              ? { ...m, highlightedCitation: null }
+                              : m
+                          ));
+                        }, 2000);
+                      }}
+                    />
+                  ) : (
+                    <p className="leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                  )}
                 </div>
 
-                {/* Sources */}
+                {/* Sources - Now using SourceCards component */}
                 {message.sources && message.sources.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
-                      <BookOpen className="w-3 h-3" />
-                      Sources
-                    </p>
-                    {message.sources.map((source, idx) => (
-                      <div key={idx} className="glass-2 rounded-lg p-3 border border-purple-100/50">
-                        <p className="text-xs font-medium text-purple-600 mb-1">{source.section}</p>
-                        <p className="text-sm text-gray-600 line-clamp-2">{source.excerpt}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <SourceCards
+                    sources={message.sources}
+                    highlightedIndex={message.highlightedCitation}
+                    onSourceClick={(index) => {
+                      setMessages(prev => prev.map(m =>
+                        m.id === message.id
+                          ? { ...m, highlightedCitation: index }
+                          : m
+                      ));
+                    }}
+                  />
                 )}
 
                 {/* Actions */}

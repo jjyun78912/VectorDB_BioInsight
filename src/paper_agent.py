@@ -29,6 +29,17 @@ class PaperSession:
 
 
 @dataclass
+class CitedSource:
+    """A source with citation index for inline referencing."""
+    citation_index: int  # [1], [2], etc.
+    paper_title: str
+    section: str
+    excerpt: str
+    full_content: str  # Full content for expanded view
+    relevance_score: float
+
+
+@dataclass
 class AgentResponse:
     """Response from the paper agent."""
     answer: str
@@ -124,15 +135,17 @@ class PaperAgent:
             for indicator in self.UNANSWERABLE_INDICATORS
         )
 
-        # Build sources
+        # Build sources with citation indices for inline referencing
         sources = [
             {
+                "citation_index": i + 1,  # 1-based index for [1], [2], etc.
                 "paper_title": r.metadata.get("paper_title", self.paper_title),
                 "section": r.metadata.get("section", "Unknown"),
                 "excerpt": r.content[:200] + "..." if len(r.content) > 200 else r.content,
+                "full_content": r.content,  # Full content for expanded view
                 "relevance_score": r.relevance_score
             }
-            for r in filtered_results[:top_k]
+            for i, r in enumerate(filtered_results[:top_k])
         ]
 
         return AgentResponse(
@@ -207,14 +220,16 @@ class PaperAgent:
         return matches >= 1 or len(question_terms) == 0
 
     def _build_context(self, results: list[SearchResult]) -> str:
-        """Build context string from search results."""
+        """Build context string from search results with numbered citations."""
         context_parts = []
 
         for i, r in enumerate(results, 1):
             section = r.metadata.get("section", "Unknown")
-            context_parts.append(f"[{i}] ({section}): {r.content}")
+            # Format: [citation_number] (Section Name): Content
+            # This helps LLM use correct citation numbers in response
+            context_parts.append(f"[Source {i}] Section: {section}\nContent: {r.content}")
 
-        return "\n\n".join(context_parts)
+        return "\n\n---\n\n".join(context_parts)
 
     def _generate_answer(self, question: str, context: str) -> tuple[str, float]:
         """Generate answer using LLM with confidence estimation."""
@@ -224,18 +239,24 @@ class PaperAgent:
             ("system", """You are a helpful research assistant analyzing a scientific paper.
 Answer the question based ONLY on the provided context from the paper.
 
-Rules:
-1. Only use information from the provided context
-2. If the context doesn't contain enough information to answer, say "I cannot find specific information about this in the paper"
-3. Cite sources using [1], [2], etc.
-4. Be concise but comprehensive
-5. Do NOT make up information not in the context"""),
-            ("human", """Context from paper:
+CRITICAL CITATION RULES:
+1. You MUST cite sources inline using [1], [2], [3] etc. to reference the numbered sources in the context
+2. Place citations IMMEDIATELY after the relevant statement, like: "The study found X [1]." or "According to the results [2], Y was observed."
+3. If multiple sources support a claim, use multiple citations: "This finding [1][2] suggests..."
+4. EVERY factual claim must have at least one citation
+5. Only use information from the provided context - do NOT make up information
+6. If the context doesn't contain enough information to answer, say "I cannot find specific information about this in the paper"
+7. Be concise but comprehensive
+
+Example format:
+"The researchers used a negative binomial model for RNA-seq analysis [1]. This approach accounts for overdispersion in count data [1][2]. The results showed significant differential expression in 500 genes [3]."
+"""),
+            ("human", """Context from paper (each source is numbered [Source N]):
 {context}
 
 Question: {question}
 
-Answer:""")
+Answer (remember to cite sources using [1], [2], etc.):""")
         ])
 
         chain = prompt | self.llm

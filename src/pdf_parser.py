@@ -113,6 +113,58 @@ class BioPaperParser:
             re.compile(r"^\s*Downloaded from", re.IGNORECASE),
         ]
 
+    def _is_garbled_line(self, line: str) -> bool:
+        """
+        Detect if a line contains garbled math formula text.
+        These come from PDFs with embedded TeX fonts that don't extract properly.
+        """
+        if len(line.strip()) < 10:
+            return False
+
+        # Count indicators of garbled text
+        garbled_score = 0
+        words = line.split()
+
+        for word in words:
+            word_lower = word.lower().strip('.,;:()[]{}')
+            if len(word_lower) < 2:
+                continue
+
+            # Check for nonsensical consonant-heavy words
+            vowels = sum(1 for c in word_lower if c in 'aeiou')
+            consonants = sum(1 for c in word_lower if c.isalpha() and c not in 'aeiou')
+
+            # Very low vowel ratio suggests garbled text
+            if len(word_lower) >= 4 and consonants > 0:
+                vowel_ratio = vowels / len(word_lower)
+                if vowel_ratio < 0.15:  # Less than 15% vowels
+                    garbled_score += 2
+
+            # Specific garbled patterns from TeX fonts
+            garbled_patterns = [
+                'lfs', 'pdb', 'bgk', 'hth', 'lfsr', 'pdbgk',
+                'jcj', 'clfs', 'fsrj', 'fsrg', 'sosrh',
+                'map of', '1/4 p', 'j2c'
+            ]
+            if any(p in word_lower for p in garbled_patterns):
+                garbled_score += 3
+
+            # Mixed case in middle of word (like "hTh")
+            if len(word) >= 3 and any(word[i].isupper() and word[i-1].islower() and word[i+1].islower()
+                                       for i in range(1, len(word)-1) if word[i].isalpha()):
+                garbled_score += 2
+
+        # If more than 30% of meaningful content is garbled, mark the line
+        if len(words) > 0 and garbled_score / max(len(words), 1) > 0.3:
+            return True
+
+        # Also check for high density of unusual character sequences
+        unusual_count = len(re.findall(r'[;:]\s*[a-z]\s*[;:]|1/4\s+[a-z]|[a-z]\s*<\s*[a-z]{2,}\s*>', line))
+        if unusual_count >= 2:
+            return True
+
+        return False
+
     def parse_pdf(self, pdf_path: str | Path) -> tuple[PaperMetadata, list[PaperSection]]:
         """Parse a PDF file and extract structured content."""
         pdf_path = Path(pdf_path)
@@ -279,14 +331,119 @@ class BioPaperParser:
         return full_text, text_blocks
 
     def _clean_text(self, text: str) -> str:
-        """Clean extracted text."""
+        """Clean extracted text and fix common encoding issues."""
+        # 1. Fix common PDF encoding issues for mathematical symbols
+        # These are ligatures and special characters that get mangled
+        encoding_fixes = {
+            # Ligatures
+            'ﬁ': 'fi',
+            'ﬂ': 'fl',
+            'ﬀ': 'ff',
+            'ﬃ': 'ffi',
+            'ﬄ': 'ffl',
+            # Common math symbols that get corrupted
+            '¼': '1/4',
+            '½': '1/2',
+            '¾': '3/4',
+            'þ': 'th',  # thorn character often misread
+            'ð': 'd',   # eth character
+            'Þ': 'Th',
+            'Ð': 'D',
+            # Greek letters that may appear garbled
+            'α': 'alpha',
+            'β': 'beta',
+            'γ': 'gamma',
+            'δ': 'delta',
+            'ε': 'epsilon',
+            'μ': 'mu',
+            'σ': 'sigma',
+            'π': 'pi',
+            'λ': 'lambda',
+            'Δ': 'Delta',
+            'Σ': 'Sigma',
+            # Common mathematical operators
+            '×': 'x',
+            '÷': '/',
+            '≤': '<=',
+            '≥': '>=',
+            '≠': '!=',
+            '±': '+/-',
+            '∞': 'infinity',
+            '√': 'sqrt',
+            '∑': 'sum',
+            '∏': 'product',
+            '∫': 'integral',
+            # Superscripts/subscripts
+            '²': '^2',
+            '³': '^3',
+            '¹': '^1',
+            '⁰': '^0',
+            '⁴': '^4',
+            '⁵': '^5',
+            '⁶': '^6',
+            '⁷': '^7',
+            '⁸': '^8',
+            '⁹': '^9',
+            '₀': '_0',
+            '₁': '_1',
+            '₂': '_2',
+            '₃': '_3',
+            '₄': '_4',
+            '₅': '_5',
+            '₆': '_6',
+            '₇': '_7',
+            '₈': '_8',
+            '₉': '_9',
+        }
+
+        for bad_char, replacement in encoding_fixes.items():
+            text = text.replace(bad_char, replacement)
+
+        # 2. Remove garbled math formula text (from TeX/LaTeX fonts)
+        # These appear when PDF uses custom math fonts (CMSY, CMMI, etc.)
+        # Pattern examples: "lfsosrh g 1/4 pdbgk", "hTh MAP of bgk"
+
+        # 2a. Remove sequences with nonsensical consonant clusters
+        # Real English rarely has patterns like "lfs", "pdb", "bgk", "hTh"
+        nonsense_patterns = [
+            r'\b[bcdfghjklmnpqrstvwxz]{3,}\b',  # 3+ consonants in a row
+            r'\blfs\w*\b',  # lfs... patterns
+            r'\bpdb\w*\b',  # pdb... patterns
+            r'\bbgk\w*\b',  # bgk... patterns
+            r'\bhTh\b',     # hTh
+            r'\blfsr\w*\b', # lfsr... patterns
+            r'\bMLE\w*\s+of\s+LFC\w*',  # MLEs of LFCs (garbled)
+            r'\bLFC\w*\s+for\s+gene\w*\s+with',  # LFCs for genes with
+        ]
+
+        for pattern in nonsense_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+
+        # 2b. Remove lines that look like garbled math formulas
+        # These often have unusual character distributions
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Skip lines that are mostly garbled (high ratio of unusual patterns)
+            if self._is_garbled_line(line):
+                cleaned_lines.append('[mathematical formula]')
+            else:
+                cleaned_lines.append(line)
+        text = '\n'.join(cleaned_lines)
+
+        # 3. Clean up multiple spaces and newlines
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r" {2,}", " ", text)
 
+        # 4. Apply exclude patterns
         for pattern in self.exclude_patterns:
             text = pattern.sub("", text)
 
+        # 5. Fix hyphenated words split across lines
         text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+
+        # 6. Remove null bytes and other control characters
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
 
         return text.strip()
 

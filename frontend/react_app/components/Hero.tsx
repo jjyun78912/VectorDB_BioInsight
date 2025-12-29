@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight } from 'lucide-react';
-import api, { SearchResult, ChatResponse } from '../services/client';
+import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database } from 'lucide-react';
+import api, { SearchResult, ChatResponse, CrawlerPaper } from '../services/client';
 
 interface PaperDetail {
   title: string;
@@ -8,6 +8,91 @@ interface PaperDetail {
   key_findings: string[];
   methodology?: string;
 }
+
+// Navigation modes after viewing paper detail
+type NextAction = 'chat' | 'similar' | null;
+
+// Search modes
+type SearchMode = 'local' | 'pubmed' | 'doi';
+
+// PubMed Search Results Component
+interface PubMedResultsProps {
+  papers: CrawlerPaper[];
+  onClose: () => void;
+  isLoading?: boolean;
+}
+
+const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading }) => (
+  <div className="absolute top-full left-0 right-0 mt-3 glass-4 rounded-2xl shadow-2xl border border-purple-200/50 max-h-[450px] overflow-y-auto z-50 animate-appear">
+    <div className="sticky top-0 glass-5 border-b border-purple-100/50 px-5 py-4 flex justify-between items-center">
+      <div className="flex items-center gap-2">
+        <Globe className="w-4 h-4 text-emerald-500" />
+        <span className="text-sm font-semibold text-gray-700">
+          {isLoading ? 'Searching PubMed...' : `${papers.length} papers from PubMed`}
+        </span>
+      </div>
+      <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
+        <X className="w-4 h-4 text-gray-500" />
+      </button>
+    </div>
+    {isLoading ? (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+        <p className="text-sm text-gray-500">Fetching from PubMed...</p>
+      </div>
+    ) : papers.length === 0 ? (
+      <div className="p-8 text-center text-gray-500">
+        <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+        <p>No papers found. Try a different search term.</p>
+      </div>
+    ) : (
+      papers.map((paper, idx) => (
+        <div
+          key={paper.id}
+          className="p-4 border-b border-purple-50/50 hover:bg-purple-50/50 transition-all cursor-pointer card-hover group"
+          style={{ animationDelay: `${idx * 50}ms` }}
+          onClick={() => {
+            const url = paper.url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
+            if (url) window.open(url, '_blank');
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-100/80 px-2.5 py-1 rounded-full">
+                {paper.source === 'pubmed' ? 'PubMed' : paper.source}
+              </span>
+              {paper.year > 0 && (
+                <span className="text-xs text-gray-500">{paper.year}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {paper.citation_count > 0 && (
+                <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                  {paper.citation_count} citations
+                </span>
+              )}
+              <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-purple-500 transition-all" />
+            </div>
+          </div>
+          <h4 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-2 group-hover:text-purple-700 transition-colors">
+            {paper.title}
+          </h4>
+          {paper.authors.length > 0 && (
+            <p className="text-xs text-gray-500 mb-1">
+              {paper.authors.slice(0, 3).join(', ')}{paper.authors.length > 3 && ' et al.'}
+            </p>
+          )}
+          {paper.abstract && (
+            <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{paper.abstract}</p>
+          )}
+          {paper.pmid && (
+            <p className="text-xs text-gray-400 mt-2">PMID: {paper.pmid}</p>
+          )}
+        </div>
+      ))
+    )}
+  </div>
+);
 
 interface SearchResultsProps {
   results: SearchResult[];
@@ -91,7 +176,7 @@ const ChatResult: React.FC<ChatResultProps> = ({ response, onClose }) => (
   </div>
 );
 
-// Paper Detail Modal
+// Paper Detail Modal with Q&A and Similar Papers
 interface PaperDetailModalProps {
   result: SearchResult;
   detail: PaperDetail | null;
@@ -99,7 +184,49 @@ interface PaperDetailModalProps {
   onClose: () => void;
 }
 
-const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ result, detail, isLoading, onClose }) => (
+const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ result, detail, isLoading, onClose }) => {
+  const [chatMode, setChatMode] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatAnswer, setChatAnswer] = useState<string | null>(null);
+  const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  const [similarPapers, setSimilarPapers] = useState<SearchResult[] | null>(null);
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
+
+  const handleAskQuestion = async () => {
+    if (!chatQuestion.trim()) return;
+    setIsAskingQuestion(true);
+    setChatAnswer(null);
+
+    try {
+      const response = await api.ask(chatQuestion);
+      setChatAnswer(response.answer);
+    } catch (err) {
+      setChatAnswer('Sorry, I could not process your question. Please try again.');
+    } finally {
+      setIsAskingQuestion(false);
+    }
+  };
+
+  const handleFindSimilar = async () => {
+    setIsLoadingSimilar(true);
+    setSimilarPapers(null);
+
+    try {
+      // Search for similar papers based on the paper title and key content
+      const searchQuery = detail?.key_findings?.[0] || result.paper_title;
+      const response = await api.search(searchQuery);
+      // Filter out the current paper
+      const filtered = response.results.filter(r => r.paper_title !== result.paper_title);
+      setSimilarPapers(filtered.slice(0, 5));
+    } catch (err) {
+      console.error('Failed to find similar papers:', err);
+      setSimilarPapers([]);
+    } finally {
+      setIsLoadingSimilar(false);
+    }
+  };
+
+  return (
   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
     {/* Backdrop */}
     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-appear"></div>
@@ -191,6 +318,72 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ result, detail, isL
                 </p>
               </div>
             )}
+
+            {/* Q&A Section */}
+            {chatMode && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Ask Questions About This Paper
+                </h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatQuestion}
+                    onChange={(e) => setChatQuestion(e.target.value)}
+                    placeholder="Ask a question about this paper..."
+                    className="flex-1 px-4 py-3 glass-3 border border-purple-200/50 rounded-xl text-sm focus:ring-2 focus:ring-purple-400/50"
+                    onKeyDown={(e) => e.key === 'Enter' && handleAskQuestion()}
+                    disabled={isAskingQuestion}
+                  />
+                  <button
+                    onClick={handleAskQuestion}
+                    disabled={isAskingQuestion || !chatQuestion.trim()}
+                    className="px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isAskingQuestion ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </button>
+                </div>
+                {chatAnswer && (
+                  <div className="glass-2 rounded-xl p-4 border border-blue-100/50 animate-appear">
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{chatAnswer}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Similar Papers Section */}
+            {similarPapers !== null && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5" />
+                  Similar Papers
+                </h3>
+                {isLoadingSimilar ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                  </div>
+                ) : similarPapers.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No similar papers found</p>
+                ) : (
+                  <div className="space-y-2">
+                    {similarPapers.map((paper, idx) => (
+                      <div key={idx} className="glass-2 rounded-xl p-3 border border-indigo-100/50 hover:bg-indigo-50/30 transition-colors cursor-pointer">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{paper.paper_title}</h4>
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{paper.content}</p>
+                          </div>
+                          <span className="text-xs font-medium text-indigo-600 bg-indigo-100/80 px-2 py-0.5 rounded-full flex-shrink-0">
+                            {paper.relevance_score.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
@@ -199,22 +392,62 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ result, detail, isL
         )}
       </div>
 
-      {/* Footer */}
-      <div className="sticky bottom-0 glass-5 border-t border-purple-100/50 px-6 py-4 flex justify-between items-center">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-purple-50/50 rounded-lg transition-colors"
-        >
-          Close
-        </button>
-        <button className="group px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-full text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-2 shadow-lg btn-glow">
-          View Full Paper
-          <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-        </button>
+      {/* Footer with Actions */}
+      <div className="sticky bottom-0 glass-5 border-t border-purple-100/50 px-6 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-purple-50/50 rounded-lg transition-colors"
+          >
+            Close
+          </button>
+
+          <div className="flex items-center gap-2">
+            {/* Toggle Q&A Mode */}
+            <button
+              onClick={() => {
+                setChatMode(!chatMode);
+                setSimilarPapers(null);
+              }}
+              className={`group px-4 py-2.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+                chatMode
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'glass-3 border border-purple-200/50 text-gray-700 hover:bg-purple-50/50'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Q&A
+            </button>
+
+            {/* Find Similar Papers */}
+            <button
+              onClick={() => {
+                handleFindSimilar();
+                setChatMode(false);
+              }}
+              disabled={isLoadingSimilar}
+              className={`group px-4 py-2.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${
+                similarPapers !== null
+                  ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                  : 'glass-3 border border-purple-200/50 text-gray-700 hover:bg-purple-50/50'
+              }`}
+            >
+              {isLoadingSimilar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
+              Similar Papers
+            </button>
+
+            {/* View Full Paper (primary action) */}
+            <button className="group px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-full text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-2 shadow-lg btn-glow">
+              View Full Paper
+              <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // Glow Component (monet-style)
 const Glow: React.FC<{ variant?: 'top' | 'center'; className?: string }> = ({ variant = 'top', className = '' }) => (
@@ -232,10 +465,20 @@ export const Hero: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Search mode state
+  const [searchMode, setSearchMode] = useState<SearchMode>('local');
+  const [pubmedResults, setPubmedResults] = useState<CrawlerPaper[] | null>(null);
+  const [doiResult, setDoiResult] = useState<CrawlerPaper | null>(null);
+
   // Paper detail modal state
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
   const [paperDetail, setPaperDetail] = useState<PaperDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Auto-detect DOI in query
+  const isDOI = (text: string): boolean => {
+    return /^10\.\d{4,}\//.test(text.trim()) || text.includes('doi.org/');
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,12 +488,25 @@ export const Hero: React.FC = () => {
     setError(null);
     setSearchResults(null);
     setChatResponse(null);
+    setPubmedResults(null);
+    setDoiResult(null);
 
     try {
-      if (query.trim().endsWith('?')) {
+      // Auto-detect DOI and switch mode
+      if (isDOI(query)) {
+        const paper = await api.fetchByDOI(query);
+        setDoiResult(paper);
+        setPubmedResults([paper]); // Show in results list
+      } else if (searchMode === 'pubmed') {
+        // Real-time PubMed search
+        const response = await api.searchPubMed(query, { limit: 10 });
+        setPubmedResults(response.papers);
+      } else if (query.trim().endsWith('?')) {
+        // Question mode - use RAG
         const response = await api.ask(query);
         setChatResponse(response);
       } else {
+        // Local vector DB search
         const response = await api.search(query);
         setSearchResults(response.results);
       }
@@ -286,6 +542,8 @@ export const Hero: React.FC = () => {
   const closeResults = () => {
     setSearchResults(null);
     setChatResponse(null);
+    setPubmedResults(null);
+    setDoiResult(null);
   };
 
   const handleSelectResult = async (result: SearchResult) => {
@@ -360,6 +618,46 @@ export const Hero: React.FC = () => {
           Search literature, analyze data, and interpret results — in one unified platform.
         </p>
 
+        {/* Search Mode Selector */}
+        <div className="animate-appear opacity-0 delay-250 flex items-center justify-center gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setSearchMode('local')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+              searchMode === 'local'
+                ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg'
+                : 'glass-2 border border-purple-200/50 text-gray-600 hover:bg-purple-50/50'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            Local DB
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchMode('pubmed')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+              searchMode === 'pubmed'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg'
+                : 'glass-2 border border-purple-200/50 text-gray-600 hover:bg-purple-50/50'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            PubMed Live
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchMode('doi')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+              searchMode === 'doi'
+                ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-lg'
+                : 'glass-2 border border-purple-200/50 text-gray-600 hover:bg-purple-50/50'
+            }`}
+          >
+            <Link2 className="w-4 h-4" />
+            DOI/URL
+          </button>
+        </div>
+
         {/* Search Input Container */}
         <div className="animate-appear opacity-0 delay-300 relative max-w-3xl mx-auto w-full">
           <form onSubmit={handleSearch} className="relative group">
@@ -367,6 +665,10 @@ export const Hero: React.FC = () => {
             <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none z-10">
               {isLoading ? (
                 <Loader2 className="h-6 w-6 text-purple-500 animate-spin" />
+              ) : searchMode === 'pubmed' ? (
+                <Globe className="h-6 w-6 text-emerald-400 group-focus-within:text-emerald-600 transition-colors" />
+              ) : searchMode === 'doi' ? (
+                <Link2 className="h-6 w-6 text-orange-400 group-focus-within:text-orange-600 transition-colors" />
               ) : (
                 <Search className="h-6 w-6 text-purple-400 group-focus-within:text-purple-600 transition-colors" />
               )}
@@ -375,8 +677,20 @@ export const Hero: React.FC = () => {
             {/* Input Field with Glass Effect */}
             <input
               type="text"
-              className="block w-full rounded-full border border-purple-200/50 py-5 pl-16 pr-40 text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-purple-400/50 focus:border-purple-300 text-lg shadow-xl glass-4 transition-all hover:shadow-2xl hover:border-purple-300 focus:glow-brand"
-              placeholder="Search genes, diseases, or ask a question..."
+              className={`block w-full rounded-full border py-5 pl-16 pr-40 text-gray-900 placeholder:text-gray-400 focus:ring-2 text-lg shadow-xl glass-4 transition-all hover:shadow-2xl ${
+                searchMode === 'pubmed'
+                  ? 'border-emerald-200/50 focus:ring-emerald-400/50 focus:border-emerald-300 hover:border-emerald-300'
+                  : searchMode === 'doi'
+                  ? 'border-orange-200/50 focus:ring-orange-400/50 focus:border-orange-300 hover:border-orange-300'
+                  : 'border-purple-200/50 focus:ring-purple-400/50 focus:border-purple-300 hover:border-purple-300 focus:glow-brand'
+              }`}
+              placeholder={
+                searchMode === 'pubmed'
+                  ? 'Search PubMed for papers...'
+                  : searchMode === 'doi'
+                  ? 'Enter DOI (e.g., 10.1038/s41586-023-...) or URL'
+                  : 'Search genes, diseases, or ask a question...'
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               disabled={isLoading}
@@ -436,6 +750,9 @@ export const Hero: React.FC = () => {
 
           {/* Chat Response */}
           {chatResponse && <ChatResult response={chatResponse} onClose={closeResults} />}
+
+          {/* PubMed Results */}
+          {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
         </div>
 
         {/* Subtle indicator text */}

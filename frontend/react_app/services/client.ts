@@ -21,10 +21,12 @@ export interface SearchResponse {
 }
 
 export interface Source {
+  citation_index: number;  // 1-based index for [1], [2], etc.
   paper_title: string;
   section: string;
   relevance_score: number;
   excerpt: string;
+  full_content?: string;  // Full content for expanded view
 }
 
 export interface ChatResponse {
@@ -54,6 +56,39 @@ export interface StatsResponse {
   total_chunks: number;
   embedding_model: string;
   chunks_by_section: Record<string, number>;
+}
+
+// ============== Web Crawler Types ==============
+
+export interface CrawlerPaper {
+  id: string;
+  source: string;
+  title: string;
+  authors: string[];
+  abstract: string;
+  journal: string;
+  year: number;
+  doi: string;
+  pmid: string;
+  pmcid: string;
+  url: string;
+  keywords: string[];
+  citation_count: number;
+  trend_score: number;
+  recency_score: number;
+  fetched_at: string;
+}
+
+export interface TrendingResponse {
+  category: string;
+  papers: CrawlerPaper[];
+  cached: boolean;
+}
+
+export interface CrawlerSearchResponse {
+  query: string;
+  total_results: number;
+  papers: CrawlerPaper[];
 }
 
 class BioInsightAPI {
@@ -254,6 +289,86 @@ class BioInsightAPI {
     if (!response.ok) {
       throw new Error(`Delete session failed: ${response.statusText}`);
     }
+  }
+
+  // ============== Web Crawler API ==============
+
+  /**
+   * Get trending papers from PubMed
+   */
+  async getTrendingPapers(
+    category: string = 'oncology',
+    limit: number = 10
+  ): Promise<TrendingResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/crawler/trending/${category}?limit=${limit}`
+    );
+    if (!response.ok) {
+      throw new Error(`Get trending failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get list of trending categories
+   */
+  async getTrendingCategories(): Promise<{ categories: string[] }> {
+    const response = await fetch(`${this.baseUrl}/crawler/categories`);
+    if (!response.ok) {
+      throw new Error(`Get categories failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Search PubMed in real-time
+   */
+  async searchPubMed(
+    query: string,
+    options?: { limit?: number; sort?: string; minYear?: number }
+  ): Promise<CrawlerSearchResponse> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: (options?.limit || 10).toString(),
+      sort: options?.sort || 'relevance',
+      ...(options?.minYear && { min_year: options.minYear.toString() }),
+    });
+
+    const response = await fetch(`${this.baseUrl}/crawler/search?${params}`);
+    if (!response.ok) {
+      throw new Error(`PubMed search failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch paper by DOI
+   */
+  async fetchByDOI(doi: string): Promise<CrawlerPaper> {
+    const response = await fetch(`${this.baseUrl}/crawler/fetch/doi`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doi }),
+    });
+    if (!response.ok) {
+      throw new Error(`DOI fetch failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch paper by URL (DOI, PubMed, or PMC URL)
+   */
+  async fetchByURL(url: string): Promise<CrawlerPaper> {
+    const response = await fetch(`${this.baseUrl}/crawler/fetch/url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!response.ok) {
+      throw new Error(`URL fetch failed: ${response.statusText}`);
+    }
+    return response.json();
   }
 }
 

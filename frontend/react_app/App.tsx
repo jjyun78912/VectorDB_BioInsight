@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { FeatureSuite } from './components/FeatureSuite';
+import { TrendingPapers } from './components/TrendingPapers';
 import { CtaSection } from './components/CtaSection';
 import { Footer } from './components/Footer';
 import { KnowledgeGraph } from './components/KnowledgeGraph';
@@ -24,6 +25,7 @@ const App: React.FC = () => {
       <Navbar />
       <main>
         <Hero />
+        <TrendingPapers />
         <FeatureSuite />
 
         {/* Quick Access Tools Section */}

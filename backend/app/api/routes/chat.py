@@ -228,11 +228,13 @@ class ChatRequest(BaseModel):
 
 
 class Source(BaseModel):
-    """Source reference model."""
+    """Source reference model with citation index for inline referencing."""
+    citation_index: int = 0  # 1-based index for [1], [2], etc.
     paper_title: str
     section: str
     relevance_score: float
     excerpt: str
+    full_content: Optional[str] = None  # Full content for expanded view
     pmid: Optional[str] = None
 
 

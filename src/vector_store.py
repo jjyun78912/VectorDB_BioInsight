@@ -1,10 +1,11 @@
 """
-ChromaDB Vector Store for Bio Papers.
+ChromaDB Vector Store for Bio Papers with Hybrid Search.
 
 Features:
 - Persistent storage for paper embeddings
 - Rich metadata support (section, DOI, keywords, etc.)
 - Disease-domain specific collections
+- Hybrid search (Dense + Sparse BM25)
 - Similarity search with metadata filtering
 """
 from pathlib import Path
@@ -15,7 +16,7 @@ from chromadb.config import Settings
 from tqdm import tqdm
 
 from .config import CHROMA_DIR, COLLECTION_NAME, TOP_K_RESULTS, SIMILARITY_THRESHOLD
-from .embeddings import PubMedBertEmbedder, get_embedder
+from .embeddings import PubMedBertEmbedder, get_embedder, BM25Index, HybridSearcher
 from .text_splitter import TextChunk
 
 
@@ -30,13 +31,14 @@ class SearchResult:
 
 class BioVectorStore:
     """
-    ChromaDB-based vector store for biomedical papers.
+    ChromaDB-based vector store for biomedical papers with Hybrid Search.
 
     Supports:
     - Multiple disease-specific collections
     - Rich metadata filtering
     - Persistent storage
     - Batch operations
+    - Hybrid search (Dense PubMedBERT + Sparse BM25)
     """
 
     def __init__(
@@ -44,7 +46,10 @@ class BioVectorStore:
         collection_name: str = COLLECTION_NAME,
         persist_directory: str | Path = CHROMA_DIR,
         embedder: PubMedBertEmbedder | None = None,
-        disease_domain: str | None = None
+        disease_domain: str | None = None,
+        enable_hybrid: bool = True,
+        dense_weight: float = 0.6,
+        sparse_weight: float = 0.4
     ):
         """
         Initialize the vector store.
@@ -54,6 +59,9 @@ class BioVectorStore:
             persist_directory: Directory for persistent storage
             embedder: Embedding model (uses default PubMedBERT if None)
             disease_domain: Optional disease domain for collection naming
+            enable_hybrid: Enable hybrid search (Dense + BM25)
+            dense_weight: Weight for dense search results (0-1)
+            sparse_weight: Weight for sparse/BM25 results (0-1)
         """
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(parents=True, exist_ok=True)
@@ -65,6 +73,17 @@ class BioVectorStore:
             collection_name = f"{collection_name}_{disease_domain.lower().replace(' ', '_')}"
         self.collection_name = collection_name
         self.disease_domain = disease_domain
+
+        # Hybrid search settings
+        self.enable_hybrid = enable_hybrid
+        self.dense_weight = dense_weight
+        self.sparse_weight = sparse_weight
+
+        # Initialize BM25 index for hybrid search
+        self._bm25_index: Optional[BM25Index] = None
+        if enable_hybrid:
+            self._bm25_index = BM25Index(collection_name)
+            self._bm25_index.load()  # Try to load existing index
 
         # Initialize ChromaDB client with persistence
         self._client = chromadb.PersistentClient(
@@ -83,6 +102,7 @@ class BioVectorStore:
                 "disease_domain": disease_domain or "general",
                 "embedding_model": self.embedder.model_name,
                 "embedding_dimension": self.embedder.embedding_dimension,
+                "hybrid_enabled": str(enable_hybrid),
             }
         )
 
@@ -117,6 +137,9 @@ class BioVectorStore:
             return 0
 
         total_added = 0
+        all_documents = []
+        all_ids = []
+
         iterator = range(0, len(chunks), batch_size)
         if show_progress:
             iterator = tqdm(iterator, desc="Adding to VectorDB")
@@ -140,9 +163,33 @@ class BioVectorStore:
                 metadatas=metadatas
             )
 
+            # Collect for BM25 index
+            all_documents.extend(documents)
+            all_ids.extend(ids)
+
             total_added += len(batch)
 
+        # Build/update BM25 index for hybrid search
+        if self.enable_hybrid and self._bm25_index and all_documents:
+            self._rebuild_bm25_index()
+
         return total_added
+
+    def _rebuild_bm25_index(self):
+        """Rebuild BM25 index from all documents in collection."""
+        if not self._bm25_index:
+            return
+
+        # Get all documents from ChromaDB
+        results = self._collection.get(include=["documents"], limit=50000)
+
+        if results["ids"] and results["documents"]:
+            self._bm25_index.build_index(
+                documents=results["documents"],
+                doc_ids=results["ids"]
+            )
+            self._bm25_index.save()
+            print(f"Rebuilt BM25 index with {len(results['ids'])} documents")
 
     def _prepare_metadata(self, metadata: dict) -> dict:
         """
@@ -168,10 +215,11 @@ class BioVectorStore:
         top_k: int = TOP_K_RESULTS,
         where: dict | None = None,
         where_document: dict | None = None,
-        include_embeddings: bool = False
+        include_embeddings: bool = False,
+        use_hybrid: bool = True
     ) -> list[SearchResult]:
         """
-        Search for similar documents.
+        Search for similar documents using hybrid search (Dense + BM25).
 
         Args:
             query: Search query text
@@ -179,10 +227,27 @@ class BioVectorStore:
             where: Metadata filter (e.g., {"section": "Methods"})
             where_document: Document content filter
             include_embeddings: Whether to include embeddings in results
+            use_hybrid: Use hybrid search if enabled (default True)
 
         Returns:
             List of SearchResult objects
         """
+        # Use hybrid search if enabled and no filters
+        if use_hybrid and self.enable_hybrid and self._bm25_index and where is None:
+            return self._hybrid_search(query, top_k)
+
+        # Fall back to dense-only search
+        return self._dense_search(query, top_k, where, where_document, include_embeddings)
+
+    def _dense_search(
+        self,
+        query: str,
+        top_k: int,
+        where: dict | None = None,
+        where_document: dict | None = None,
+        include_embeddings: bool = False
+    ) -> list[SearchResult]:
+        """Dense (embedding-based) search only."""
         # Generate query embedding
         query_embedding = self.embedder.embed_query(query)
 
@@ -201,6 +266,98 @@ class BioVectorStore:
         )
 
         # Convert to SearchResult objects
+        return self._process_dense_results(results)
+
+    def _hybrid_search(self, query: str, top_k: int) -> list[SearchResult]:
+        """
+        Hybrid search combining Dense (ChromaDB) and Sparse (BM25) results.
+        Uses Reciprocal Rank Fusion (RRF) to combine rankings.
+        """
+        # 1. Dense search (get more results for fusion)
+        query_embedding = self.embedder.embed_query(query)
+        dense_results = self._collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k * 2,
+            include=["documents", "metadatas", "distances"]
+        )
+
+        # 2. Sparse BM25 search
+        sparse_results = self._bm25_index.search(query, top_k=top_k * 2)
+
+        # 3. Fuse results using RRF
+        rrf_k = 60  # RRF parameter
+
+        # Build dense rankings: doc_id -> (rank, distance, content, metadata)
+        dense_data = {}
+        if dense_results["ids"] and dense_results["ids"][0]:
+            for rank, doc_id in enumerate(dense_results["ids"][0]):
+                dense_data[doc_id] = {
+                    "rank": rank,
+                    "distance": dense_results["distances"][0][rank],
+                    "content": dense_results["documents"][0][rank],
+                    "metadata": dense_results["metadatas"][0][rank] if dense_results["metadatas"] else {}
+                }
+
+        # Build sparse rankings: doc_id -> rank
+        sparse_ranks = {doc_id: rank for rank, (doc_id, _) in enumerate(sparse_results)}
+
+        # Calculate RRF scores
+        rrf_scores = {}
+        all_doc_ids = set(dense_data.keys()) | set(sparse_ranks.keys())
+
+        for doc_id in all_doc_ids:
+            score = 0.0
+
+            # Dense contribution
+            if doc_id in dense_data:
+                rank = dense_data[doc_id]["rank"]
+                score += self.dense_weight / (rrf_k + rank + 1)
+
+            # Sparse contribution
+            if doc_id in sparse_ranks:
+                rank = sparse_ranks[doc_id]
+                score += self.sparse_weight / (rrf_k + rank + 1)
+
+            rrf_scores[doc_id] = score
+
+        # Sort by RRF score
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:top_k]
+
+        # Build final results
+        search_results = []
+        max_rrf = max(rrf_scores.values()) if rrf_scores else 1.0
+
+        for doc_id in sorted_ids:
+            # Get document data
+            if doc_id in dense_data:
+                data = dense_data[doc_id]
+                content = data["content"]
+                metadata = data["metadata"]
+                distance = data["distance"]
+            else:
+                # Need to fetch from ChromaDB
+                fetch_result = self._collection.get(ids=[doc_id], include=["documents", "metadatas"])
+                if fetch_result["documents"]:
+                    content = fetch_result["documents"][0]
+                    metadata = fetch_result["metadatas"][0] if fetch_result["metadatas"] else {}
+                    distance = 1.5  # Default distance for BM25-only matches
+                else:
+                    continue
+
+            # Convert RRF score to percentage (0-100)
+            relevance_score = (rrf_scores[doc_id] / max_rrf) * 100 if max_rrf > 0 else 50.0
+
+            search_results.append(SearchResult(
+                content=content,
+                metadata=metadata,
+                distance=distance,
+                relevance_score=max(0, min(100, relevance_score))
+            ))
+
+        return search_results
+
+    def _process_dense_results(self, results: dict) -> list[SearchResult]:
+        """Process ChromaDB dense search results into SearchResult objects."""
         search_results = []
         if results["ids"] and results["ids"][0]:
             # Get min/max distances for normalization
@@ -212,22 +369,13 @@ class BioVectorStore:
                 distance = results["distances"][0][i] if results["distances"] else 0
 
                 # Convert L2 distance to intuitive percentage score (0-100%)
-                # Normalize based on actual distance range in results
-                # Using exponential decay: closer = higher score
-                # For PubMedBERT embeddings, typical distances are 0.5-2.0 for related content
                 if max_distance > min_distance:
-                    # Normalize to 0-1 range, then convert to percentage
                     normalized = (max_distance - distance) / (max_distance - min_distance)
                     relevance_score = normalized * 100
                 else:
-                    # All same distance, give high score
                     relevance_score = 80.0
 
-                # Also use absolute distance for baseline relevance
-                # Lower distance = better (typical good match < 1.5)
                 abs_relevance = max(0, min(100, (1 - distance / 3.0) * 100))
-
-                # Blend normalized and absolute scores
                 final_score = (relevance_score * 0.6) + (abs_relevance * 0.4)
 
                 search_results.append(SearchResult(
