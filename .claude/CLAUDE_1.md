@@ -16,7 +16,8 @@ BioInsight AI is an AI-powered integrated research platform for bio/healthcare r
 
 ### Frontend
 - **MVP**: Streamlit
-- **Production**: React + Tailwind CSS
+- **Production**: React + Vite + Tailwind CSS ✅ IMPLEMENTED
+- **3D Visualization**: react-force-graph-3d (Galaxy View)
 
 ### Database
 - **Relational**: PostgreSQL (analysis results, user data)
@@ -25,8 +26,9 @@ BioInsight AI is an AI-powered integrated research platform for bio/healthcare r
 
 ### AI/ML
 - **Embeddings**: PubMedBERT, BioBERT
-- **LLM**: GPT-4o, Claude, Gemini (via API)
+- **LLM**: Gemini 2.0 Flash (Primary), GPT-4o, Claude (via API)
 - **RAG Framework**: LangChain
+- **Real-time APIs**: PubMed E-utilities, CrossRef, Semantic Scholar
 
 ### Infrastructure
 - **Cloud**: AWS / GCP
@@ -38,50 +40,49 @@ BioInsight AI is an AI-powered integrated research platform for bio/healthcare r
 ## Project Structure
 
 ```
-bioinsight-ai/
+VectorDB_BioInsight/
 ├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI entry point
-│   │   ├── api/
-│   │   │   ├── routes/
-│   │   │   │   ├── paper.py     # Paper analysis endpoints
-│   │   │   │   ├── rnaseq.py    # RNA-seq analysis endpoints
-│   │   │   │   ├── ml.py        # ML prediction endpoints
-│   │   │   │   └── assistant.py # AI assistant endpoints
-│   │   │   └── deps.py          # Dependencies
-│   │   ├── core/
-│   │   │   ├── config.py        # Configuration
-│   │   │   └── security.py      # Auth & security
-│   │   ├── services/
-│   │   │   ├── paper_service.py
-│   │   │   ├── rnaseq_service.py
-│   │   │   ├── ml_service.py
-│   │   │   └── assistant_service.py
-│   │   ├── models/              # Pydantic models
-│   │   └── db/                  # Database models
-│   ├── r_scripts/               # DESeq2 R scripts
-│   ├── tests/
-│   └── requirements.txt
+│   └── app/
+│       ├── main.py                    # FastAPI entry point
+│       └── api/routes/
+│           ├── paper.py               # Paper analysis endpoints
+│           ├── search.py              # Vector search endpoints
+│           ├── chat.py                # AI chat endpoints (Gemini)
+│           ├── crawler.py             # Web crawler endpoints
+│           └── graph.py               # Knowledge graph endpoints
 ├── frontend/
-│   ├── streamlit_app/           # MVP
-│   │   └── app.py
-│   └── react_app/               # Production
-│       ├── src/
+│   └── react_app/                     # Production React app ✅
+│       ├── App.tsx                    # Main app component
+│       ├── components/
+│       │   ├── Hero.tsx               # Search + PubMedResults modal
+│       │   ├── KnowledgeGraph.tsx     # 3D Galaxy visualization
+│       │   ├── TrendingPapers.tsx     # Trending papers section
+│       │   └── Glow.tsx               # UI effects
+│       ├── services/
+│       │   └── client.ts              # API client
 │       └── package.json
-├── ml/
-│   ├── embeddings/              # Embedding models
-│   ├── classifiers/             # ML classifiers
-│   └── utils/
-├── docker/
-│   ├── Dockerfile.backend
-│   ├── Dockerfile.frontend
-│   └── docker-compose.yml
+├── src/                               # Core Python modules ✅
+│   ├── config.py                      # Configuration (API keys)
+│   ├── pdf_parser.py                  # PDF text extraction
+│   ├── text_splitter.py               # Bio-aware text chunking
+│   ├── embeddings.py                  # PubMedBERT embeddings
+│   ├── vector_store.py                # ChromaDB operations
+│   ├── indexer.py                     # Paper indexing
+│   ├── search.py                      # Semantic search
+│   └── web_crawler_agent.py           # PubMed/CrossRef crawler ✅
+├── data/
+│   └── papers/                        # Disease domain folders
+│       └── {domain}/                  # JSON paper files
+├── chroma_db/                         # Vector database storage
 ├── docs/
 │   ├── PRD.md
 │   └── API.md
-├── .env.example
-├── README.md
-└── CLAUDE.md
+├── .claude/
+│   ├── CLAUDE_1.md                    # This file
+│   └── PRD_1.md
+├── main.py                            # CLI entry point
+├── requirements.txt
+└── .env                               # API keys (GEMINI_API_KEY, etc.)
 ```
 
 ---
@@ -146,18 +147,31 @@ test: add unit tests for ML service
 
 RESTful API conventions:
 - Use plural nouns for resources
-- Version API endpoints (`/api/v1/`)
 - Return appropriate HTTP status codes
 - Include pagination for list endpoints
 
-```
-GET    /api/v1/papers           # List papers
-POST   /api/v1/papers           # Upload paper
-GET    /api/v1/papers/{id}      # Get paper details
-DELETE /api/v1/papers/{id}      # Delete paper
+**Current API Endpoints**:
 
-POST   /api/v1/rnaseq/analyze   # Start analysis
-GET    /api/v1/rnaseq/{id}      # Get analysis result
+```
+# Search & Papers
+GET    /api/search?query=...              # Vector search
+GET    /api/search/papers?query=...       # Paper-level search
+GET    /api/search/similar/{pmid}         # Similar papers (local DB)
+
+# Crawler (Real-time)
+GET    /api/crawler/search?q=...          # PubMed live search
+GET    /api/crawler/trending/{category}   # Trending papers
+GET    /api/crawler/similar/{pmid}        # Similar papers (PubMed elink)
+POST   /api/crawler/fetch/doi             # Fetch by DOI
+POST   /api/crawler/fetch/url             # Fetch by URL
+
+# Chat (Gemini AI)
+POST   /api/chat/ask-abstract             # Q&A on paper abstract
+POST   /api/chat/summarize-abstract       # Summarize abstract
+POST   /api/chat/analyze                  # Analyze paper
+
+# Graph
+GET    /api/graph/                        # Knowledge graph data
 ```
 
 ---
@@ -267,6 +281,59 @@ results = searcher.search_methods("RNA extraction protocol")
 - Papers: 5
 - Chunks: 521
 - Sections: 8 types (Methods, Background, Conclusion, Abstract, Results, Discussion, Patients, Treatment)
+
+### 1.5. Web Crawler Agent ✅ IMPLEMENTED (2024-12-29)
+
+**Purpose**: Real-time paper fetching from PubMed, CrossRef, Semantic Scholar
+
+**Location**: `src/web_crawler_agent.py`, `backend/app/api/routes/crawler.py`
+
+**Key Features**:
+
+| Feature | Endpoint | Description |
+|---------|----------|-------------|
+| PubMed Search | `GET /api/crawler/search?q=...` | Real-time hybrid search (latest + high-impact) |
+| Trending Papers | `GET /api/crawler/trending/{category}` | 8 categories, major journals filter |
+| Similar Papers | `GET /api/crawler/similar/{pmid}` | PubMed elink API for related articles |
+| DOI Fetch | `POST /api/crawler/fetch/doi` | CrossRef + Semantic Scholar enrichment |
+| URL Import | `POST /api/crawler/fetch/url` | Supports DOI, PubMed, PMC URLs |
+
+**Trending Categories**:
+- oncology, immunotherapy, gene_therapy, neurology
+- infectious_disease, ai_medicine, genomics, drug_discovery
+
+**Major Journals Filter** (High-Impact):
+- Nature, Science, Cell, NEJM, Lancet, JAMA
+- Nature Medicine, Nature Genetics, Cell Metabolism
+- PNAS, JCO, Blood, Gut, etc.
+
+### 1.6. React Frontend ✅ IMPLEMENTED (2024-12-29)
+
+**Location**: `frontend/react_app/`
+
+**Key Components**:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| Hero | `components/Hero.tsx` | Main search interface with 3 modes |
+| PubMedResults | `components/Hero.tsx` | Split-view modal with paper list + detail |
+| KnowledgeGraph | `components/KnowledgeGraph.tsx` | 3D Galaxy visualization |
+| TrendingPapers | `components/TrendingPapers.tsx` | Real-time trending papers |
+
+**Search Modes**:
+1. **Local DB** - Search indexed papers in ChromaDB
+2. **PubMed Live** - Real-time PubMed search with hybrid ranking
+3. **DOI/URL** - Import specific paper by identifier
+
+**Galaxy Visualization**:
+- 3-layer graph: Source Paper → Similar Papers (15+) → Keywords (20+)
+- Color-coded by similarity score (green→yellow→orange→red)
+- Interactive 3D navigation with zoom-to-node
+
+**AI Chat Features**:
+- Ask questions about paper abstract
+- Summarize paper content
+- Perplexity-style inline citations
 
 ### 2. RNA-seq Analysis Module
 
