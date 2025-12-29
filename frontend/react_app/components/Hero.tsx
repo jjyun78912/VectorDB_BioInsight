@@ -23,74 +23,95 @@ interface PubMedResultsProps {
 }
 
 const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading }) => (
-  <div className="absolute top-full left-0 right-0 mt-3 glass-4 rounded-2xl shadow-2xl border border-purple-200/50 max-h-[450px] overflow-y-auto z-50 animate-appear">
-    <div className="sticky top-0 glass-5 border-b border-purple-100/50 px-5 py-4 flex justify-between items-center">
-      <div className="flex items-center gap-2">
-        <Globe className="w-4 h-4 text-emerald-500" />
-        <span className="text-sm font-semibold text-gray-700">
-          {isLoading ? 'Searching PubMed...' : `${papers.length} papers from PubMed`}
-        </span>
-      </div>
-      <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
-        <X className="w-4 h-4 text-gray-500" />
-      </button>
-    </div>
-    {isLoading ? (
-      <div className="flex flex-col items-center justify-center py-12 gap-3">
-        <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
-        <p className="text-sm text-gray-500">Fetching from PubMed...</p>
-      </div>
-    ) : papers.length === 0 ? (
-      <div className="p-8 text-center text-gray-500">
-        <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
-        <p>No papers found. Try a different search term.</p>
-      </div>
-    ) : (
-      papers.map((paper, idx) => (
-        <div
-          key={paper.id}
-          className="p-4 border-b border-purple-50/50 hover:bg-purple-50/50 transition-all cursor-pointer card-hover group"
-          style={{ animationDelay: `${idx * 50}ms` }}
-          onClick={() => {
-            const url = paper.url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
-            if (url) window.open(url, '_blank');
-          }}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-emerald-600 bg-emerald-100/80 px-2.5 py-1 rounded-full">
-                {paper.source === 'pubmed' ? 'PubMed' : paper.source}
-              </span>
-              {paper.year > 0 && (
-                <span className="text-xs text-gray-500">{paper.year}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {paper.citation_count > 0 && (
-                <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
-                  {paper.citation_count} citations
-                </span>
-              )}
-              <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-purple-500 transition-all" />
-            </div>
-          </div>
-          <h4 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-2 group-hover:text-purple-700 transition-colors">
-            {paper.title}
-          </h4>
-          {paper.authors.length > 0 && (
-            <p className="text-xs text-gray-500 mb-1">
-              {paper.authors.slice(0, 3).join(', ')}{paper.authors.length > 3 && ' et al.'}
-            </p>
-          )}
-          {paper.abstract && (
-            <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{paper.abstract}</p>
-          )}
-          {paper.pmid && (
-            <p className="text-xs text-gray-400 mt-2">PMID: {paper.pmid}</p>
-          )}
+  <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 pb-8" onClick={onClose}>
+    <div
+      className="w-full max-w-3xl glass-4 rounded-2xl shadow-2xl border border-purple-200/50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col animate-appear"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Header - Fixed */}
+      <div className="flex-shrink-0 glass-5 border-b border-purple-100/50 px-5 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Globe className="w-4 h-4 text-emerald-500" />
+          <span className="text-sm font-semibold text-gray-700">
+            {isLoading ? 'Searching PubMed...' : `${papers.length} papers from PubMed`}
+          </span>
+          <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            Latest + High-Impact
+          </span>
         </div>
-      ))
-    )}
+        <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
+          <X className="w-4 h-4 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+            <p className="text-sm text-gray-500">Fetching from PubMed...</p>
+          </div>
+        ) : papers.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+            <p>No papers found. Try a different search term.</p>
+          </div>
+        ) : (
+          <>
+            {papers.map((paper, idx) => (
+              <div
+                key={paper.id}
+                className="p-4 border-b border-purple-50/50 hover:bg-purple-50/50 transition-all cursor-pointer group"
+                style={{ animationDelay: `${idx * 50}ms` }}
+                onClick={() => {
+                  const url = paper.url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
+                  if (url) window.open(url, '_blank');
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-100/80 px-2.5 py-1 rounded-full">
+                      {paper.source === 'pubmed' ? 'PubMed' : paper.source}
+                    </span>
+                    {paper.year > 0 && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${paper.year >= 2024 ? 'text-orange-600 bg-orange-50' : 'text-gray-500'}`}>
+                        {paper.year}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {paper.citation_count > 0 && (
+                      <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                        {paper.citation_count} citations
+                      </span>
+                    )}
+                    <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-purple-500 transition-all" />
+                  </div>
+                </div>
+                <h4 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-2 group-hover:text-purple-700 transition-colors">
+                  {paper.title}
+                </h4>
+                {paper.authors.length > 0 && (
+                  <p className="text-xs text-gray-500 mb-1">
+                    {paper.authors.slice(0, 3).join(', ')}{paper.authors.length > 3 && ' et al.'}
+                  </p>
+                )}
+                {paper.abstract && (
+                  <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{paper.abstract}</p>
+                )}
+                {paper.pmid && (
+                  <p className="text-xs text-gray-400 mt-2">PMID: {paper.pmid}</p>
+                )}
+              </div>
+            ))}
+            {/* Bottom padding */}
+            <div className="h-6" />
+          </>
+        )}
+      </div>
+    </div>
+    {/* Backdrop */}
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm -z-10" />
   </div>
 );
 
@@ -594,7 +615,7 @@ export const Hero: React.FC = () => {
       <Glow variant="center" className="animate-pulse-glow" />
 
       {/* Hero Content */}
-      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center pt-32 pb-24">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center pt-16 pb-48">
         {/* Badge */}
         <div className="animate-appear opacity-0 mb-8">
           <span className="inline-flex items-center gap-2 px-4 py-2 glass-3 rounded-full border border-purple-200/50 text-sm font-medium text-gray-700 glow-white">
@@ -755,12 +776,14 @@ export const Hero: React.FC = () => {
           {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
         </div>
 
-        {/* Subtle indicator text */}
-        <p className="animate-appear opacity-0 delay-500 mt-10 text-sm text-gray-500 flex items-center justify-center gap-2">
-          <span className="w-8 h-px bg-purple-300/50"></span>
-          Try: "BRCA1 mutations" or "What causes drug resistance in cancer?"
-          <span className="w-8 h-px bg-purple-300/50"></span>
-        </p>
+        {/* Subtle indicator text - hide when results are shown */}
+        {!searchResults && !chatResponse && !pubmedResults && (
+          <p className="animate-appear opacity-0 delay-500 mt-10 text-sm text-gray-500 flex items-center justify-center gap-2">
+            <span className="w-8 h-px bg-purple-300/50"></span>
+            Try: "BRCA1 mutations" or "What causes drug resistance in cancer?"
+            <span className="w-8 h-px bg-purple-300/50"></span>
+          </p>
+        )}
       </div>
 
       {/* Bottom Glow */}

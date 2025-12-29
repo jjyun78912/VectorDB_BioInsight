@@ -350,6 +350,102 @@ class WebCrawlerAgent:
 
             return papers
 
+    async def search_pubmed_hybrid(
+        self,
+        query: str,
+        max_results: int = 10
+    ) -> List[FetchedPaper]:
+        """
+        Search PubMed with HYBRID approach (latest + high-impact).
+
+        Combines:
+        - 50% latest papers (sorted by pub_date, Title-focused search)
+        - 50% high-impact papers (sorted by relevance)
+
+        Args:
+            query: Search query
+            max_results: Total number of results to return
+
+        Returns:
+            List of FetchedPaper objects, mixed latest + high-impact
+        """
+        half_results = max(3, max_results // 2)
+
+        # Add [Title] qualifier for more relevant results in latest search
+        title_query = f"{query}[Title]"
+
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            # 1. Get LATEST papers (Title-focused, sorted by date)
+            await self._rate_limit("pubmed")
+            latest_pmids = await self._search_pubmed_ids(
+                session, title_query, half_results + 3, "pub_date", "2024/01/01", None
+            )
+
+            # If not enough Title results, also search Title/Abstract
+            if len(latest_pmids) < half_results:
+                await self._rate_limit("pubmed")
+                tiab_query = f"{query}[Title/Abstract]"
+                extra_pmids = await self._search_pubmed_ids(
+                    session, tiab_query, half_results + 3, "pub_date", "2024/01/01", None
+                )
+                for pmid in extra_pmids:
+                    if pmid not in latest_pmids:
+                        latest_pmids.append(pmid)
+
+            # 2. Get HIGH-IMPACT papers (sorted by relevance)
+            await self._rate_limit("pubmed")
+            impact_pmids = await self._search_pubmed_ids(
+                session, query, half_results + 3, "relevance", "2020/01/01", None
+            )
+
+            # Combine and deduplicate
+            seen = set()
+            combined_pmids = []
+
+            # Add latest first (priority)
+            for pmid in latest_pmids:
+                if pmid not in seen:
+                    seen.add(pmid)
+                    combined_pmids.append(pmid)
+
+            # Add high-impact
+            for pmid in impact_pmids:
+                if pmid not in seen:
+                    seen.add(pmid)
+                    combined_pmids.append(pmid)
+
+            if not combined_pmids:
+                return []
+
+            # Fetch details
+            await self._rate_limit("pubmed")
+            papers = await self._fetch_pubmed_details(session, combined_pmids[:max_results + 4])
+
+            # Filter: ensure query terms appear in title (case-insensitive)
+            query_terms = query.lower().split()
+            filtered_papers = []
+            for paper in papers:
+                title_lower = paper.title.lower()
+                # At least one query term should be in title
+                if any(term in title_lower for term in query_terms):
+                    filtered_papers.append(paper)
+                elif len(filtered_papers) < max_results:
+                    # Include some that match in abstract if we don't have enough
+                    if paper.abstract and any(term in paper.abstract.lower() for term in query_terms):
+                        paper.trend_score -= 10  # Lower priority
+                        filtered_papers.append(paper)
+
+            # Boost latest papers
+            latest_set = set(latest_pmids)
+            for paper in filtered_papers:
+                if paper.pmid in latest_set:
+                    paper.trend_score += 20
+
+            # Sort by (year, trend_score)
+            filtered_papers.sort(key=lambda p: (p.year, p.trend_score), reverse=True)
+
+            return filtered_papers[:max_results]
+
     async def _search_pubmed_ids(
         self,
         session: aiohttp.ClientSession,
@@ -506,10 +602,9 @@ class WebCrawlerAgent:
         """
         Get trending papers from PubMed.
 
-        Uses a combination of:
-        - Recent high-impact publications
-        - Most cited recent papers
-        - Papers with high altmetric scores (via Europe PMC)
+        Uses a HYBRID approach:
+        - 50% Latest papers (sorted by date, 2025 priority)
+        - 50% High-impact papers (sorted by relevance/citations)
 
         Args:
             category: Topic category (see TRENDING_CATEGORIES)
@@ -517,7 +612,7 @@ class WebCrawlerAgent:
             use_cache: Whether to use cached results
 
         Returns:
-            List of trending FetchedPaper objects, sorted by trend_score
+            List of trending FetchedPaper objects, mixed latest + high-impact
         """
         cache_key = f"{category}_{max_results}"
 
@@ -530,18 +625,47 @@ class WebCrawlerAgent:
         query = TRENDING_CATEGORIES.get(category, TRENDING_CATEGORIES["oncology"])
 
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            # Get recent papers from PubMed
+            # Strategy: Fetch BOTH latest and high-impact papers
+            half_results = max(3, max_results // 2)
+
+            # 1. Get LATEST papers (sorted by date) - 2025 priority
             await self._rate_limit("pubmed")
-            papers = await self.search_pubmed(
+            latest_papers = await self.search_pubmed(
                 query=query,
-                max_results=max_results * 2,  # Fetch more, then filter
-                sort="relevance",
+                max_results=half_results + 2,
+                sort="pub_date",  # Sort by publication date (newest first)
+                min_date="2024/06/01"  # Recent 6 months to get 2025 papers
+            )
+
+            # 2. Get HIGH-IMPACT papers (sorted by relevance)
+            await self._rate_limit("pubmed")
+            impact_papers = await self.search_pubmed(
+                query=query,
+                max_results=half_results + 2,
+                sort="relevance",  # Sort by relevance (high-cited)
                 min_date="2024/01/01"
             )
 
+            # Combine and deduplicate by PMID
+            seen_pmids = set()
+            all_papers = []
+
+            # Add latest papers first (priority)
+            for paper in latest_papers:
+                if paper.pmid and paper.pmid not in seen_pmids:
+                    seen_pmids.add(paper.pmid)
+                    paper.trend_score += 20  # Boost for being latest
+                    all_papers.append(paper)
+
+            # Add high-impact papers
+            for paper in impact_papers:
+                if paper.pmid and paper.pmid not in seen_pmids:
+                    seen_pmids.add(paper.pmid)
+                    all_papers.append(paper)
+
             # Try to enrich with citation data from Semantic Scholar
             enriched_papers = []
-            for paper in papers[:max_results]:
+            for paper in all_papers[:max_results + 2]:
                 if paper.doi:
                     try:
                         await self._rate_limit("semantic_scholar")
@@ -550,8 +674,8 @@ class WebCrawlerAgent:
                         pass
                 enriched_papers.append(paper)
 
-            # Sort by trend score
-            enriched_papers.sort(key=lambda p: p.trend_score, reverse=True)
+            # Sort by combined score (trend_score already includes recency)
+            enriched_papers.sort(key=lambda p: (p.year, p.trend_score), reverse=True)
             result = enriched_papers[:max_results]
 
             # Cache results

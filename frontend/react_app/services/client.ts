@@ -321,16 +321,16 @@ class BioInsightAPI {
   }
 
   /**
-   * Search PubMed in real-time
+   * Search PubMed in real-time (uses hybrid search by default)
    */
   async searchPubMed(
     query: string,
-    options?: { limit?: number; sort?: string; minYear?: number }
+    options?: { limit?: number; hybrid?: boolean; minYear?: number }
   ): Promise<CrawlerSearchResponse> {
     const params = new URLSearchParams({
       q: query,
       limit: (options?.limit || 10).toString(),
-      sort: options?.sort || 'relevance',
+      hybrid: (options?.hybrid !== false).toString(), // default true
       ...(options?.minYear && { min_year: options.minYear.toString() }),
     });
 

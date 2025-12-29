@@ -95,9 +95,9 @@ export const TrendingPapers: React.FC = () => {
   };
 
   return (
-    <section className="relative py-16 overflow-hidden">
+    <section className="relative py-16 pb-24">
       {/* Background */}
-      <div className="absolute top-0 left-0 right-0 h-full bg-gradient-to-b from-transparent via-orange-50/30 to-transparent pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-full bg-gradient-to-b from-transparent via-orange-50/30 to-transparent pointer-events-none overflow-hidden" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         {/* Header */}
@@ -278,7 +278,7 @@ export const TrendingPapers: React.FC = () => {
         )}
 
         {/* Footer */}
-        <div className="text-center mt-8">
+        <div className="text-center mt-8 pb-8">
           <p className="text-sm text-gray-500">
             Data sourced from PubMed E-utilities & Semantic Scholar APIs
           </p>
