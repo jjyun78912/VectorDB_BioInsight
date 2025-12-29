@@ -11,6 +11,9 @@ export interface SearchResult {
   paper_title: string;
   section: string;
   parent_section?: string;
+  pmid?: string;
+  year?: string;
+  doi?: string;
 }
 
 export interface SearchResponse {
@@ -367,6 +370,47 @@ class BioInsightAPI {
     });
     if (!response.ok) {
       throw new Error(`URL fetch failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // ============== Abstract-based AI API ==============
+
+  /**
+   * Summarize a paper from its abstract (for PubMed papers not in local DB)
+   */
+  async summarizeAbstract(title: string, abstract: string): Promise<{
+    title: string;
+    summary: string;
+    key_points: string[];
+  }> {
+    const response = await fetch(`${this.baseUrl}/chat/summarize-abstract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, abstract }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Summarize failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Ask a question about a paper based on its abstract
+   */
+  async askAbstract(title: string, abstract: string, question: string): Promise<{
+    question: string;
+    answer: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/chat/ask-abstract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, abstract, question }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ask failed: ${response.statusText}`);
     }
     return response.json();
   }

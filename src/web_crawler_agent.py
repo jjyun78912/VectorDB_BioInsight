@@ -47,7 +47,64 @@ PMC_OA_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
 EUROPE_PMC_API = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 
 
-# Trending topic categories for PubMed
+# Major journals for high-impact papers
+MAJOR_JOURNALS = [
+    # Top tier general science
+    "Nature",
+    "Science",
+    "Cell",
+    "New England Journal of Medicine",
+    "The Lancet",
+    "JAMA",
+    "BMJ",
+    # Nature family
+    "Nature Medicine",
+    "Nature Genetics",
+    "Nature Biotechnology",
+    "Nature Communications",
+    "Nature Cancer",
+    "Nature Immunology",
+    "Nature Cell Biology",
+    "Nature Methods",
+    "Nature Reviews Cancer",
+    "Nature Reviews Drug Discovery",
+    "Nature Reviews Genetics",
+    # Cell family
+    "Cell Metabolism",
+    "Cell Reports",
+    "Cell Stem Cell",
+    "Molecular Cell",
+    "Cancer Cell",
+    "Immunity",
+    # Other high-impact
+    "PNAS",
+    "Science Translational Medicine",
+    "Journal of Clinical Oncology",
+    "Journal of Clinical Investigation",
+    "Lancet Oncology",
+    "JAMA Oncology",
+    "Annals of Oncology",
+    "Blood",
+    "Gastroenterology",
+    "Gut",
+    "Hepatology",
+    "Circulation",
+    "European Heart Journal",
+    "Diabetes",
+    "eLife",
+    "EMBO Journal",
+    "Genome Research",
+    "Genome Biology",
+    "Nucleic Acids Research",
+    "Cancer Research",
+    "Clinical Cancer Research",
+    "Cancer Discovery",
+]
+
+# Build journal filter for PubMed
+MAJOR_JOURNAL_FILTER = " OR ".join([f'"{j}"[Journal]' for j in MAJOR_JOURNALS])
+
+# Trending topic categories for PubMed (with major journal filter option)
 TRENDING_CATEGORIES = {
     "oncology": "(cancer[Title] OR tumor[Title] OR oncology[Title]) AND (2024[pdat] OR 2025[pdat])",
     "immunotherapy": "(immunotherapy[Title] OR CAR-T[Title] OR checkpoint inhibitor[Title]) AND (2024[pdat] OR 2025[pdat])",
@@ -597,7 +654,8 @@ class WebCrawlerAgent:
         self,
         category: str = "oncology",
         max_results: int = 10,
-        use_cache: bool = True
+        use_cache: bool = True,
+        major_journals_only: bool = True
     ) -> List[FetchedPaper]:
         """
         Get trending papers from PubMed.
@@ -610,11 +668,12 @@ class WebCrawlerAgent:
             category: Topic category (see TRENDING_CATEGORIES)
             max_results: Number of papers to return
             use_cache: Whether to use cached results
+            major_journals_only: Filter to major journals only (Nature, Cell, Science, NEJM, Lancet, etc.)
 
         Returns:
             List of trending FetchedPaper objects, mixed latest + high-impact
         """
-        cache_key = f"{category}_{max_results}"
+        cache_key = f"{category}_{max_results}_{'major' if major_journals_only else 'all'}"
 
         # Check cache
         if use_cache and cache_key in self._trending_cache:
@@ -623,6 +682,10 @@ class WebCrawlerAgent:
                 return cached_data
 
         query = TRENDING_CATEGORIES.get(category, TRENDING_CATEGORIES["oncology"])
+
+        # Add major journal filter if requested
+        if major_journals_only:
+            query = f"({query}) AND ({MAJOR_JOURNAL_FILTER})"
 
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             # Strategy: Fetch BOTH latest and high-impact papers

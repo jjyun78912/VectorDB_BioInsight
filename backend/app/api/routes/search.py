@@ -58,17 +58,36 @@ class SimilarPaper(BaseModel):
     """Similar paper model."""
     pmid: str
     title: str
-    abstract: str
+    abstract: str = ""
     similarity_score: float
     common_keywords: List[str] = []
     year: Optional[str] = None
+    doi: Optional[str] = None
+    keywords: str = ""
+
+
+class PaperCoordinate(BaseModel):
+    """Paper coordinate for visualization."""
+    pmid: str
+    title: str
+    x: float
+    y: float
+    similarity_score: float
+
+
+class VisualizationData(BaseModel):
+    """Visualization data for galaxy view."""
+    source: Dict
+    papers: List[PaperCoordinate]
 
 
 class SimilarPapersResponse(BaseModel):
     """Similar papers response."""
     source_paper: str
+    source_pmid: str
     similar_papers: List[SimilarPaper]
     total: int
+    visualization: Optional[VisualizationData] = None
 
 
 # Available disease domains
@@ -246,88 +265,170 @@ async def search_papers(
 async def find_similar_papers(
     pmid: str,
     domain: str = Query("pancreatic_cancer", description="Disease domain"),
-    top_k: int = Query(5, ge=1, le=20, description="Number of similar papers")
+    top_k: int = Query(5, ge=1, le=20, description="Number of similar papers"),
+    include_visualization: bool = Query(True, description="Include 2D coordinates for visualization")
 ):
     """
     Find papers similar to a given paper.
-    Uses abstract embedding similarity.
+    Uses embedding similarity from vector store with t-SNE visualization coordinates.
     """
     try:
         from src.vector_store import create_vector_store
         from src.config import PAPERS_DIR
-        from src.embeddings import get_embedder
-        import numpy as np
 
-        papers_dir = PAPERS_DIR / domain
-        source_file = papers_dir / f"{pmid}.json"
+        # First try vector store (faster, uses indexed embeddings)
+        vector_store = create_vector_store(disease_domain=domain)
 
-        if not source_file.exists():
-            raise HTTPException(status_code=404, detail=f"Paper {pmid} not found")
+        if vector_store.count > 0:
+            result = vector_store.find_similar_papers(
+                source_pmid=pmid,
+                top_k=top_k,
+                include_coordinates=include_visualization
+            )
 
-        with open(source_file, 'r', encoding='utf-8') as f:
-            source_paper = json.load(f)
+            if "error" not in result:
+                # Get source paper title from JSON
+                papers_dir = PAPERS_DIR / domain
+                source_file = papers_dir / f"{pmid}.json"
+                source_title = pmid
+                source_keywords = set()
 
-        source_abstract = source_paper.get("abstract", "")
-        source_keywords = set(source_paper.get("keywords", []))
+                if source_file.exists():
+                    try:
+                        with open(source_file, 'r', encoding='utf-8') as f:
+                            source_paper = json.load(f)
+                            source_title = source_paper.get("title", pmid)
+                            source_keywords = set(source_paper.get("keywords", []))
+                    except:
+                        pass
 
-        if not source_abstract:
-            raise HTTPException(status_code=400, detail="Source paper has no abstract")
+                # Enrich similar papers with abstracts from JSON files
+                enriched_papers = []
+                for paper in result.get("similar_papers", []):
+                    paper_file = papers_dir / f"{paper['pmid']}.json"
+                    abstract = ""
+                    common_keywords = []
 
-        # Get embeddings
-        embedder = get_embedder()
-        source_embedding = np.array(embedder.embed_text(source_abstract))
+                    if paper_file.exists():
+                        try:
+                            with open(paper_file, 'r', encoding='utf-8') as f:
+                                paper_data = json.load(f)
+                                abstract = paper_data.get("abstract", "")[:300]
+                                other_keywords = set(paper_data.get("keywords", []))
+                                common_keywords = list(source_keywords & other_keywords)[:5]
+                        except:
+                            pass
 
-        # Compare with all other papers
-        similar_papers = []
+                    enriched_papers.append(SimilarPaper(
+                        pmid=paper["pmid"],
+                        title=paper["title"],
+                        abstract=abstract,
+                        similarity_score=paper["similarity_score"],
+                        common_keywords=common_keywords,
+                        year=paper.get("year"),
+                        doi=paper.get("doi"),
+                        keywords=paper.get("keywords", "")
+                    ))
 
-        for json_file in papers_dir.glob("*.json"):
-            if json_file.name.startswith("_") or json_file.stem == pmid:
-                continue
+                # Build visualization data
+                visualization = None
+                if include_visualization and "visualization" in result:
+                    vis_data = result["visualization"]
+                    visualization = VisualizationData(
+                        source=vis_data["source"],
+                        papers=[PaperCoordinate(**p) for p in vis_data["papers"]]
+                    )
 
-            try:
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    other_paper = json.load(f)
-
-                other_abstract = other_paper.get("abstract", "")
-                if not other_abstract:
-                    continue
-
-                # Calculate similarity
-                other_embedding = np.array(embedder.embed_text(other_abstract))
-                similarity = np.dot(source_embedding, other_embedding) / (
-                    np.linalg.norm(source_embedding) * np.linalg.norm(other_embedding)
+                return SimilarPapersResponse(
+                    source_paper=source_title,
+                    source_pmid=pmid,
+                    similar_papers=enriched_papers,
+                    total=len(enriched_papers),
+                    visualization=visualization
                 )
 
-                # Find common keywords
-                other_keywords = set(other_paper.get("keywords", []))
-                common = list(source_keywords & other_keywords)
-
-                similar_papers.append({
-                    "pmid": other_paper.get("pmid", json_file.stem),
-                    "title": other_paper.get("title", "Unknown"),
-                    "abstract": other_abstract[:300],
-                    "similarity_score": float(similarity) * 100,
-                    "common_keywords": common[:5],
-                    "year": other_paper.get("year")
-                })
-
-            except Exception:
-                continue
-
-        # Sort by similarity
-        similar_papers.sort(key=lambda x: x["similarity_score"], reverse=True)
-        top_similar = similar_papers[:top_k]
-
-        return SimilarPapersResponse(
-            source_paper=source_paper.get("title", pmid),
-            similar_papers=[SimilarPaper(**p) for p in top_similar],
-            total=len(top_similar)
-        )
+        # Fallback: JSON file-based comparison (for papers not in vector store)
+        return await _fallback_similar_papers(pmid, domain, top_k)
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _fallback_similar_papers(pmid: str, domain: str, top_k: int) -> SimilarPapersResponse:
+    """Fallback method using JSON files and live embedding calculation."""
+    from src.config import PAPERS_DIR
+    from src.embeddings import get_embedder
+    import numpy as np
+
+    papers_dir = PAPERS_DIR / domain
+    source_file = papers_dir / f"{pmid}.json"
+
+    if not source_file.exists():
+        raise HTTPException(status_code=404, detail=f"Paper {pmid} not found")
+
+    with open(source_file, 'r', encoding='utf-8') as f:
+        source_paper = json.load(f)
+
+    source_abstract = source_paper.get("abstract", "")
+    source_keywords = set(source_paper.get("keywords", []))
+
+    if not source_abstract:
+        raise HTTPException(status_code=400, detail="Source paper has no abstract")
+
+    # Get embeddings
+    embedder = get_embedder()
+    source_embedding = np.array(embedder.embed_text(source_abstract))
+
+    # Compare with all other papers
+    similar_papers = []
+
+    for json_file in papers_dir.glob("*.json"):
+        if json_file.name.startswith("_") or json_file.stem == pmid:
+            continue
+
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                other_paper = json.load(f)
+
+            other_abstract = other_paper.get("abstract", "")
+            if not other_abstract:
+                continue
+
+            # Calculate similarity
+            other_embedding = np.array(embedder.embed_text(other_abstract))
+            similarity = np.dot(source_embedding, other_embedding) / (
+                np.linalg.norm(source_embedding) * np.linalg.norm(other_embedding)
+            )
+
+            # Find common keywords
+            other_keywords = set(other_paper.get("keywords", []))
+            common = list(source_keywords & other_keywords)
+
+            similar_papers.append({
+                "pmid": other_paper.get("pmid", json_file.stem),
+                "title": other_paper.get("title", "Unknown"),
+                "abstract": other_abstract[:300],
+                "similarity_score": float(similarity) * 100,
+                "common_keywords": common[:5],
+                "year": other_paper.get("year")
+            })
+
+        except Exception:
+            continue
+
+    # Sort by similarity
+    similar_papers.sort(key=lambda x: x["similarity_score"], reverse=True)
+    top_similar = similar_papers[:top_k]
+
+    return SimilarPapersResponse(
+        source_paper=source_paper.get("title", pmid),
+        source_pmid=pmid,
+        similar_papers=[SimilarPaper(**p) for p in top_similar],
+        total=len(top_similar),
+        visualization=None
+    )
 
 
 @router.get("/papers/all")

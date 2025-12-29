@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from src.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES
+from src.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES, MAJOR_JOURNALS
 
 # Try to import Playwright crawler (optional dependency)
 try:
@@ -240,10 +240,14 @@ async def search_pubmed_get(
 async def get_trending(
     category: str,
     limit: int = Query(default=10, ge=1, le=20, description="Number of papers"),
-    no_cache: bool = Query(default=False, description="Bypass cache")
+    no_cache: bool = Query(default=False, description="Bypass cache"),
+    major_only: bool = Query(default=True, description="Filter to major journals only (Nature, Cell, Science, NEJM, Lancet, etc.)")
 ):
     """
     Get trending papers for a category.
+
+    By default, filters to major journals only (Nature, Cell, Science, NEJM, Lancet, JAMA, etc.)
+    Set major_only=false to include all journals.
 
     Available categories:
     - oncology
@@ -265,7 +269,8 @@ async def get_trending(
         papers = await crawler_agent.get_trending_papers(
             category=category,
             max_results=limit,
-            use_cache=not no_cache
+            use_cache=not no_cache,
+            major_journals_only=major_only
         )
 
         # Check if results were from cache
@@ -294,6 +299,16 @@ async def get_trending_default(
 async def list_categories():
     """Get list of available trending paper categories."""
     return CategoriesResponse(categories=list(TRENDING_CATEGORIES.keys()))
+
+
+@router.get("/major-journals", summary="List major journals")
+async def list_major_journals():
+    """Get list of major journals used for filtering trending papers."""
+    return {
+        "journals": MAJOR_JOURNALS,
+        "count": len(MAJOR_JOURNALS),
+        "description": "High-impact journals including Nature, Cell, Science, NEJM, Lancet, and related publications."
+    }
 
 
 @router.post("/batch/doi", response_model=BatchResponse, summary="Batch fetch by DOIs")

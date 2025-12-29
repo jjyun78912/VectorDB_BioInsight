@@ -456,6 +456,191 @@ Please provide the structured analysis.""")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class AbstractSummaryRequest(BaseModel):
+    """Request to summarize abstract directly."""
+    title: str
+    abstract: str
+
+
+class AbstractSummaryResponse(BaseModel):
+    """Abstract summary response."""
+    title: str
+    summary: str
+    key_points: List[str]
+
+
+@router.post("/summarize-abstract", response_model=AbstractSummaryResponse)
+async def summarize_abstract(request: AbstractSummaryRequest):
+    """
+    Generate a summary from paper title and abstract directly.
+    Used for PubMed papers that aren't in local DB.
+    """
+    try:
+        from src.config import GOOGLE_API_KEY
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.prompts import ChatPromptTemplate
+
+        if not request.abstract:
+            return AbstractSummaryResponse(
+                title=request.title,
+                summary="No abstract available for summarization.",
+                key_points=[]
+            )
+
+        if not GOOGLE_API_KEY:
+            # Return truncated abstract if no API key
+            return AbstractSummaryResponse(
+                title=request.title,
+                summary=request.abstract[:500],
+                key_points=[]
+            )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.3
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a biomedical research expert. Summarize the following paper abstract in 2-3 clear sentences that capture the main purpose, methodology, and findings.
+
+Then list 3-4 key points as bullet points.
+
+Format your response as:
+SUMMARY: [your 2-3 sentence summary]
+
+KEY POINTS:
+- Point 1
+- Point 2
+- Point 3"""),
+            ("human", """Paper Title: {title}
+
+Abstract: {abstract}""")
+        ])
+
+        chain = prompt | llm
+        result = chain.invoke({
+            "title": request.title,
+            "abstract": request.abstract
+        })
+
+        response_text = result.content
+
+        # Parse response
+        summary = ""
+        key_points = []
+
+        lines = response_text.split("\n")
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.upper().startswith("SUMMARY:"):
+                current_section = "summary"
+                summary = line[8:].strip()
+            elif "KEY POINT" in line.upper() or line.upper().startswith("KEY POINTS"):
+                current_section = "points"
+            elif current_section == "summary" and not line.startswith("-"):
+                summary += " " + line
+            elif current_section == "points" and line.startswith(("-", "*", "•")):
+                point = line.lstrip("-*• ").strip()
+                if point:
+                    key_points.append(point)
+
+        # Fallback
+        if not summary:
+            summary = response_text[:400]
+
+        return AbstractSummaryResponse(
+            title=request.title,
+            summary=summary.strip(),
+            key_points=key_points[:4]
+        )
+
+    except Exception as e:
+        return AbstractSummaryResponse(
+            title=request.title,
+            summary=f"Error generating summary: {str(e)[:100]}",
+            key_points=[]
+        )
+
+
+class AbstractQARequest(BaseModel):
+    """Request to ask question about abstract."""
+    title: str
+    abstract: str
+    question: str
+
+
+class AbstractQAResponse(BaseModel):
+    """Response to abstract Q&A."""
+    question: str
+    answer: str
+
+
+@router.post("/ask-abstract", response_model=AbstractQAResponse)
+async def ask_about_abstract(request: AbstractQARequest):
+    """
+    Answer questions about a paper based on its abstract.
+    Used for PubMed papers that aren't in local DB.
+    """
+    try:
+        from src.config import GOOGLE_API_KEY
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.prompts import ChatPromptTemplate
+
+        if not request.abstract:
+            return AbstractQAResponse(
+                question=request.question,
+                answer="No abstract available to answer questions."
+            )
+
+        if not GOOGLE_API_KEY:
+            return AbstractQAResponse(
+                question=request.question,
+                answer="API key not configured. Unable to answer questions."
+            )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.3
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a biomedical research expert. Answer the user's question based ONLY on the provided paper abstract.
+
+If the abstract doesn't contain enough information to answer the question, say so clearly.
+Keep your answer concise (2-4 sentences) and scientifically accurate."""),
+            ("human", """Paper Title: {title}
+
+Abstract: {abstract}
+
+Question: {question}""")
+        ])
+
+        chain = prompt | llm
+        result = chain.invoke({
+            "title": request.title,
+            "abstract": request.abstract,
+            "question": request.question
+        })
+
+        return AbstractQAResponse(
+            question=request.question,
+            answer=result.content.strip()
+        )
+
+    except Exception as e:
+        return AbstractQAResponse(
+            question=request.question,
+            answer=f"Error: {str(e)[:100]}"
+        )
+
+
 class AnalyzeRequest(BaseModel):
     """Paper analysis request."""
     pmid: str

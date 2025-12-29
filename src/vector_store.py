@@ -475,6 +475,171 @@ class BioVectorStore:
         )
 
 
+    def get_paper_embeddings(self, pmid: str) -> Optional[list[float]]:
+        """
+        Get the average embedding for a paper by PMID.
+
+        Args:
+            pmid: Paper PMID
+
+        Returns:
+            Average embedding vector or None if not found
+        """
+        import numpy as np
+
+        # Get all chunks for this paper
+        results = self._collection.get(
+            where={"pmid": pmid},
+            include=["embeddings"]
+        )
+
+        if not results["ids"] or len(results["ids"]) == 0:
+            return None
+
+        if results["embeddings"] is None or len(results["embeddings"]) == 0:
+            return None
+
+        # Average all chunk embeddings
+        embeddings = np.array(results["embeddings"])
+        avg_embedding = np.mean(embeddings, axis=0)
+
+        return avg_embedding.tolist()
+
+    def find_similar_papers(
+        self,
+        source_pmid: str,
+        top_k: int = 5,
+        include_coordinates: bool = True
+    ) -> dict:
+        """
+        Find papers similar to a given paper using embedding similarity.
+        Returns similarity scores and optional 2D coordinates for visualization.
+
+        Args:
+            source_pmid: PMID of the source paper
+            top_k: Number of similar papers to return
+            include_coordinates: Whether to include 2D visualization coordinates
+
+        Returns:
+            Dict with source paper info, similar papers, and optional coordinates
+        """
+        import numpy as np
+
+        # Get source paper embedding
+        source_embedding = self.get_paper_embeddings(source_pmid)
+        if source_embedding is None:
+            return {"error": f"Paper {source_pmid} not found in vector store"}
+
+        source_embedding = np.array(source_embedding)
+
+        # Get all unique papers in the collection
+        all_results = self._collection.get(
+            include=["metadatas", "embeddings"],
+            limit=10000
+        )
+
+        # Aggregate embeddings by paper
+        paper_embeddings = {}
+        paper_metadata = {}
+
+        for i, metadata in enumerate(all_results["metadatas"]):
+            pmid = metadata.get("pmid", "")
+            if not pmid or pmid == source_pmid:
+                continue
+
+            if pmid not in paper_embeddings:
+                paper_embeddings[pmid] = []
+                paper_metadata[pmid] = {
+                    "pmid": pmid,
+                    "title": metadata.get("paper_title", "Unknown"),
+                    "year": metadata.get("year"),
+                    "doi": metadata.get("doi"),
+                    "keywords": metadata.get("keywords", "")
+                }
+
+            if all_results["embeddings"] is not None and len(all_results["embeddings"]) > i:
+                paper_embeddings[pmid].append(all_results["embeddings"][i])
+
+        # Calculate average embeddings and similarities
+        similarities = []
+        all_embeddings = [source_embedding]  # Start with source for coordinates
+        all_pmids = [source_pmid]
+
+        for pmid, embeddings in paper_embeddings.items():
+            avg_emb = np.mean(embeddings, axis=0)
+            all_embeddings.append(avg_emb)
+            all_pmids.append(pmid)
+
+            # Cosine similarity
+            similarity = np.dot(source_embedding, avg_emb) / (
+                np.linalg.norm(source_embedding) * np.linalg.norm(avg_emb)
+            )
+
+            similarities.append({
+                **paper_metadata[pmid],
+                "similarity_score": float(similarity) * 100,
+                "embedding": avg_emb.tolist() if include_coordinates else None
+            })
+
+        # Sort by similarity
+        similarities.sort(key=lambda x: x["similarity_score"], reverse=True)
+        top_similar = similarities[:top_k]
+
+        result = {
+            "source_pmid": source_pmid,
+            "similar_papers": top_similar,
+            "total": len(top_similar)
+        }
+
+        # Add 2D coordinates for visualization using t-SNE
+        if include_coordinates and len(all_embeddings) > 2:
+            try:
+                from sklearn.manifold import TSNE
+
+                embeddings_array = np.array(all_embeddings)
+
+                # Use t-SNE for 2D projection
+                perplexity = min(30, len(all_embeddings) - 1)
+                tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+                coords_2d = tsne.fit_transform(embeddings_array)
+
+                # Normalize coordinates to [-1, 1] range for visualization
+                coords_2d = (coords_2d - coords_2d.mean(axis=0)) / (coords_2d.std(axis=0) + 1e-8)
+
+                # Source paper is at index 0
+                result["visualization"] = {
+                    "source": {
+                        "pmid": source_pmid,
+                        "x": float(coords_2d[0][0]),
+                        "y": float(coords_2d[0][1])
+                    },
+                    "papers": []
+                }
+
+                # Add coordinates for similar papers
+                for i, paper in enumerate(top_similar):
+                    paper_idx = all_pmids.index(paper["pmid"])
+                    result["visualization"]["papers"].append({
+                        "pmid": paper["pmid"],
+                        "title": paper["title"],
+                        "x": float(coords_2d[paper_idx][0]),
+                        "y": float(coords_2d[paper_idx][1]),
+                        "similarity_score": paper["similarity_score"]
+                    })
+
+            except ImportError:
+                # sklearn not available, skip coordinates
+                pass
+            except Exception as e:
+                print(f"Error calculating coordinates: {e}")
+
+        # Clean up embeddings from response
+        for paper in result["similar_papers"]:
+            paper.pop("embedding", None)
+
+        return result
+
+
 def create_vector_store(
     disease_domain: str | None = None,
     collection_name: str = COLLECTION_NAME
