@@ -23,13 +23,18 @@ interface PubMedResultsProps {
 }
 
 const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading }) => (
-  <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 px-4 pb-8" onClick={onClose}>
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    {/* Backdrop */}
+    <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+
+    {/* Modal */}
     <div
-      className="w-full max-w-3xl glass-4 rounded-2xl shadow-2xl border border-purple-200/50 max-h-[calc(100vh-8rem)] overflow-hidden flex flex-col animate-appear"
+      className="relative w-full max-w-3xl bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-200/50 flex flex-col animate-appear"
+      style={{ maxHeight: 'calc(100vh - 2rem)' }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header - Fixed */}
-      <div className="flex-shrink-0 glass-5 border-b border-purple-100/50 px-5 py-4 flex justify-between items-center">
+      <div className="flex-shrink-0 bg-white/80 backdrop-blur border-b border-purple-100/50 px-5 py-4 flex justify-between items-center rounded-t-2xl">
         <div className="flex items-center gap-2">
           <Globe className="w-4 h-4 text-emerald-500" />
           <span className="text-sm font-semibold text-gray-700">
@@ -45,7 +50,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
       </div>
 
       {/* Content - Scrollable */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
@@ -57,12 +62,11 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
             <p>No papers found. Try a different search term.</p>
           </div>
         ) : (
-          <>
+          <div className="divide-y divide-purple-50/50">
             {papers.map((paper, idx) => (
               <div
                 key={paper.id}
-                className="p-4 border-b border-purple-50/50 hover:bg-purple-50/50 transition-all cursor-pointer group"
-                style={{ animationDelay: `${idx * 50}ms` }}
+                className="p-4 hover:bg-purple-50/50 transition-all cursor-pointer group"
                 onClick={() => {
                   const url = paper.url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
                   if (url) window.open(url, '_blank');
@@ -104,14 +108,17 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                 )}
               </div>
             ))}
-            {/* Bottom padding */}
-            <div className="h-6" />
-          </>
+          </div>
         )}
       </div>
+
+      {/* Footer - Shows scroll hint if needed */}
+      {papers.length > 5 && (
+        <div className="flex-shrink-0 bg-gradient-to-t from-white via-white to-transparent px-5 py-3 text-center border-t border-purple-100/50 rounded-b-2xl">
+          <p className="text-xs text-gray-400">Scroll to see all {papers.length} papers</p>
+        </div>
+      )}
     </div>
-    {/* Backdrop */}
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm -z-10" />
   </div>
 );
 
