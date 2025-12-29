@@ -835,6 +835,110 @@ class WebCrawlerAgent:
 
         return results
 
+    async def find_similar_papers(self, pmid: str, max_results: int = 10) -> List[FetchedPaper]:
+        """
+        Find similar papers using PubMed's Related Articles feature (elink).
+
+        Args:
+            pmid: Source paper PMID
+            max_results: Maximum number of similar papers to return
+
+        Returns:
+            List of similar FetchedPaper objects
+        """
+        ELINK_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi"
+
+        async with aiohttp.ClientSession() as session:
+            await self._rate_limit("pubmed")
+
+            # Step 1: Get related PMIDs using elink
+            params = {
+                "dbfrom": "pubmed",
+                "db": "pubmed",
+                "id": pmid,
+                "cmd": "neighbor_score",  # Get related articles with scores
+                "retmode": "json",
+            }
+            # Only add api_key if it exists
+            if self.ncbi_api_key:
+                params["api_key"] = self.ncbi_api_key
+
+            try:
+                data = await self._fetch_json(session, ELINK_URL, params)
+
+                # Parse related PMIDs from response
+                related_pmids = []
+
+                if "linksets" in data:
+                    for linkset in data["linksets"]:
+                        if "linksetdbs" in linkset:
+                            for linksetdb in linkset["linksetdbs"]:
+                                if linksetdb.get("linkname") == "pubmed_pubmed":
+                                    links = linksetdb.get("links", [])
+                                    # links are dicts with {"id": "...", "score": ...}
+                                    # Extract PMIDs as strings
+                                    related_pmids = [
+                                        str(link["id"]) if isinstance(link, dict) else str(link)
+                                        for link in links[:max_results]
+                                    ]
+                                    break
+
+                if not related_pmids:
+                    # Fallback: try simple related query
+                    return await self._fallback_similar_search(session, pmid, max_results)
+
+                # Step 2: Fetch details for related papers
+                papers = await self._fetch_pubmed_details(session, related_pmids)
+
+                # Calculate similarity score based on position (higher = more similar)
+                for i, paper in enumerate(papers):
+                    # Score from 95 (most similar) down to 50
+                    paper.trend_score = max(50, 95 - (i * 5))
+
+                return papers
+
+            except Exception as e:
+                print(f"Error finding similar papers: {e}")
+                # Fallback to keyword search
+                return await self._fallback_similar_search(session, pmid, max_results)
+
+    async def _fallback_similar_search(
+        self,
+        session: aiohttp.ClientSession,
+        pmid: str,
+        max_results: int
+    ) -> List[FetchedPaper]:
+        """Fallback: search by title keywords if elink fails."""
+        try:
+            # First get the source paper
+            source_papers = await self._fetch_pubmed_details(session, [pmid])
+            if not source_papers:
+                return []
+
+            source = source_papers[0]
+
+            # Extract keywords from title
+            title_words = source.title.split()
+            # Take important words (skip common words)
+            skip_words = {"a", "an", "the", "of", "in", "on", "for", "and", "or", "to", "with", "by"}
+            keywords = [w for w in title_words if w.lower() not in skip_words and len(w) > 2][:5]
+
+            if not keywords:
+                return []
+
+            # Search for similar papers
+            query = " ".join(keywords)
+            papers = await self.search_pubmed(query, max_results=max_results + 1)
+
+            # Remove source paper from results
+            papers = [p for p in papers if p.pmid != pmid][:max_results]
+
+            return papers
+
+        except Exception as e:
+            print(f"Fallback similar search failed: {e}")
+            return []
+
     # ==================== Indexing Integration ====================
 
     def paper_to_chunks(self, paper: FetchedPaper) -> List[TextChunk]:

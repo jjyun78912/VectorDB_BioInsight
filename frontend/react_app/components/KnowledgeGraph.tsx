@@ -108,16 +108,30 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
 
       try {
         if (mode === 'similar' && sourcePmid) {
-          // Fetch similar papers
+          // Fetch similar papers from PubMed via crawler API (15+ papers)
           const response = await fetch(
-            `/api/search/similar/${sourcePmid}?domain=${domain}&top_k=10&include_visualization=true`
+            `/api/crawler/similar/${sourcePmid}?limit=15`
           );
           if (!response.ok) throw new Error('Failed to fetch similar papers');
-          const data: SimilarPapersData = await response.json();
-          setSimilarData(data);
+          const data = await response.json();
 
-          // Convert to graph format
-          const graphFromSimilar = convertSimilarToGraph(data);
+          // Convert crawler response to SimilarPapersData format
+          const convertedData: SimilarPapersData = {
+            source_paper: sourcePmid,
+            source_pmid: sourcePmid,
+            similar_papers: data.papers.map((p: any) => ({
+              pmid: p.pmid,
+              title: p.title,
+              abstract: p.abstract || '',
+              similarity_score: p.trend_score || 80,
+              common_keywords: p.keywords || [],
+              year: String(p.year),
+            })),
+          };
+          setSimilarData(convertedData);
+
+          // Convert to graph format with keywords
+          const graphFromSimilar = convertSimilarToGraphWithKeywords(convertedData);
           setGraphData(graphFromSimilar);
         } else {
           // Original knowledge graph fetch
@@ -136,7 +150,125 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
     fetchData();
   }, [isOpen, mode, sourcePmid, domain]);
 
-  // Convert similar papers data to graph format
+  // Convert similar papers data to graph format WITH keywords
+  const convertSimilarToGraphWithKeywords = (data: SimilarPapersData): GraphData => {
+    const nodes: GraphNode[] = [];
+    const links: GraphLink[] = [];
+
+    // Track keywords and their paper connections
+    const keywordToPapers: Map<string, string[]> = new Map();
+
+    // Source node at center
+    const sourceNode: GraphNode = {
+      id: data.source_pmid,
+      name: 'Source Paper',
+      type: 'source',
+      size: 10,
+      color: NODE_COLORS.source,
+      metadata: { isSource: true },
+      x: 0,
+      y: 0,
+      z: 0
+    };
+    nodes.push(sourceNode);
+
+    // Add paper nodes in a circle around the source
+    data.similar_papers.forEach((paper, index) => {
+      const angle = (2 * Math.PI * index) / data.similar_papers.length;
+      const distance = 120 + (100 - paper.similarity_score) * 1.5; // Higher similarity = closer
+
+      const paperNode: GraphNode = {
+        id: paper.pmid,
+        name: paper.title.length > 60 ? paper.title.substring(0, 60) + '...' : paper.title,
+        type: 'similar',
+        size: 4 + (paper.similarity_score / 100) * 4,
+        color: getColorBySimilarity(paper.similarity_score),
+        metadata: {
+          abstract: paper.abstract,
+          similarity: paper.similarity_score,
+          year: paper.year,
+          full_title: paper.title,
+          keywords: paper.common_keywords
+        },
+        x: Math.cos(angle) * distance,
+        y: Math.sin(angle) * distance,
+        z: (Math.random() - 0.5) * 40
+      };
+      nodes.push(paperNode);
+
+      // Link paper to source
+      links.push({
+        source: data.source_pmid,
+        target: paper.pmid,
+        strength: paper.similarity_score / 100
+      });
+
+      // Collect keywords from this paper
+      paper.common_keywords.forEach(keyword => {
+        if (keyword && keyword.length > 1) {
+          const normalizedKeyword = keyword.toLowerCase().trim();
+          if (!keywordToPapers.has(normalizedKeyword)) {
+            keywordToPapers.set(normalizedKeyword, []);
+          }
+          keywordToPapers.get(normalizedKeyword)!.push(paper.pmid);
+        }
+      });
+    });
+
+    // Sort keywords by frequency and take top 15+
+    const sortedKeywords = Array.from(keywordToPapers.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 20); // Top 20 keywords
+
+    // Add keyword nodes in an outer ring
+    sortedKeywords.forEach(([keyword, paperIds], index) => {
+      const angle = (2 * Math.PI * index) / sortedKeywords.length + Math.PI / sortedKeywords.length;
+      const distance = 280 + (Math.random() - 0.5) * 40; // Outer ring with some variation
+
+      const keywordNode: GraphNode = {
+        id: `kw_${keyword.replace(/\s+/g, '_')}`,
+        name: keyword.charAt(0).toUpperCase() + keyword.slice(1),
+        type: 'keyword',
+        size: 2 + paperIds.length * 0.8,
+        color: NODE_COLORS.keyword,
+        metadata: {
+          frequency: paperIds.length,
+          papers: paperIds
+        },
+        x: Math.cos(angle) * distance,
+        y: Math.sin(angle) * distance,
+        z: (Math.random() - 0.5) * 30
+      };
+      nodes.push(keywordNode);
+
+      // Link keyword to its papers
+      paperIds.forEach(paperId => {
+        links.push({
+          source: `kw_${keyword.replace(/\s+/g, '_')}`,
+          target: paperId,
+          strength: 0.3
+        });
+      });
+    });
+
+    return {
+      nodes,
+      links,
+      stats: {
+        total_nodes: nodes.length,
+        total_links: links.length,
+        total_papers: data.similar_papers.length + 1,
+        total_keywords: sortedKeywords.length,
+        node_types: {
+          source: 1,
+          similar: data.similar_papers.length,
+          keyword: sortedKeywords.length
+        }
+      }
+    };
+  };
+
+  // Legacy function (kept for compatibility)
   const convertSimilarToGraph = (data: SimilarPapersData): GraphData => {
     const nodes: GraphNode[] = [];
     const links: GraphLink[] = [];
@@ -247,6 +379,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
     if (score >= 90) return '#84cc16'; // Lime
     if (score >= 85) return '#eab308'; // Yellow
     if (score >= 80) return '#f97316'; // Orange
+    if (score >= 70) return '#ef4444'; // Red
     return '#60a5fa'; // Blue - less similar
   };
 

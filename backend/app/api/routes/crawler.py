@@ -334,6 +334,27 @@ async def batch_fetch_dois(request: BatchDOIRequest):
         raise HTTPException(status_code=500, detail=f"Batch fetch error: {str(e)}")
 
 
+@router.get("/similar/{pmid}", response_model=SearchResponse, summary="Find similar papers via PubMed")
+async def find_similar_papers_pubmed(
+    pmid: str,
+    limit: int = Query(default=10, ge=1, le=20, description="Max results")
+):
+    """
+    Find similar papers using PubMed's Related Articles feature.
+    Uses NCBI E-utilities elink to find related PMIDs, then fetches their metadata.
+    """
+    try:
+        papers = await crawler_agent.find_similar_papers(pmid, max_results=limit)
+
+        return SearchResponse(
+            query=f"similar to PMID:{pmid}",
+            total_results=len(papers),
+            papers=[paper_to_response(p) for p in papers]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error finding similar papers: {str(e)}")
+
+
 @router.get("/health", summary="Health check")
 async def health_check():
     """Check if the crawler service is healthy."""

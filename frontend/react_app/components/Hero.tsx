@@ -83,15 +83,14 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-        {/* Backdrop */}
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Backdrop - click to close */}
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
 
         {/* Modal with Split View */}
         <div
-          className="relative w-full max-w-6xl bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-200/50 flex animate-appear"
-          style={{ height: 'calc(100vh - 4rem)', maxHeight: '800px', minHeight: '500px' }}
-          onClick={(e) => e.stopPropagation()}
+          className="relative z-[51] w-full max-w-6xl bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-200/50 flex animate-appear"
+          style={{ height: 'calc(100vh - 8rem)', maxHeight: '750px', minHeight: '500px' }}
         >
           {/* Left: Paper List */}
           <div className={`${selectedPaper ? 'w-2/5' : 'w-full'} flex flex-col border-r border-purple-100/50 transition-all min-h-0`}>
@@ -275,16 +274,17 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
               </div>
 
               {/* Action Buttons */}
-              <div className="shrink-0 bg-white/95 backdrop-blur border-t border-purple-100/50 px-6 py-4 rounded-br-2xl">
+              <div className="shrink-0 bg-white border-t border-purple-100/50 px-6 py-4 rounded-br-2xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     {/* AI Chat Toggle */}
                     <button
+                      type="button"
                       onClick={() => setChatMode(!chatMode)}
                       className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
                         chatMode
                           ? 'bg-blue-100 text-blue-700'
-                          : 'glass-3 border border-purple-200/50 text-gray-700 hover:bg-purple-50'
+                          : 'bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
                       <MessageSquare className="w-4 h-4" />
@@ -294,6 +294,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                     {/* Galaxy View */}
                     {selectedPaper.pmid && (
                       <button
+                        type="button"
                         onClick={() => setShowGalaxy(true)}
                         className="px-4 py-2 rounded-full text-sm font-medium bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-600 hover:to-orange-600 transition-all flex items-center gap-2"
                       >
@@ -305,6 +306,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
 
                   {/* View on PubMed */}
                   <button
+                    type="button"
                     onClick={() => {
                       const url = selectedPaper.url || (selectedPaper.doi ? `https://doi.org/${selectedPaper.doi}` : `https://pubmed.ncbi.nlm.nih.gov/${selectedPaper.pmid}`);
                       if (url) window.open(url, '_blank');
@@ -845,6 +847,7 @@ export const Hero: React.FC = () => {
   };
 
   return (
+  <>
     <section className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden line-b">
       {/* Spline 3D DNA Background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -853,7 +856,7 @@ export const Hero: React.FC = () => {
           frameBorder='0'
           width='100%'
           height='100%'
-          className="w-full h-full opacity-60"
+          className="w-full h-full opacity-60 pointer-events-none"
           title="3D DNA Particles"
         ></iframe>
         {/* Enhanced gradient overlays */}
@@ -865,7 +868,7 @@ export const Hero: React.FC = () => {
       <Glow variant="center" className="animate-pulse-glow" />
 
       {/* Hero Content */}
-      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center pt-16 pb-48">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center py-16">
         {/* Badge */}
         <div className="animate-appear opacity-0 mb-8">
           <span className="inline-flex items-center gap-2 px-4 py-2 glass-3 rounded-full border border-purple-200/50 text-sm font-medium text-gray-700 glow-white">
@@ -1021,9 +1024,6 @@ export const Hero: React.FC = () => {
 
           {/* Chat Response */}
           {chatResponse && <ChatResult response={chatResponse} onClose={closeResults} />}
-
-          {/* PubMed Results */}
-          {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
         </div>
 
         {/* Subtle indicator text - hide when results are shown */}
@@ -1039,15 +1039,19 @@ export const Hero: React.FC = () => {
       {/* Bottom Glow */}
       <Glow variant="top" className="bottom-0 top-auto rotate-180 opacity-40" />
 
-      {/* Paper Detail Modal */}
-      {selectedResult && (
-        <PaperDetailModal
-          result={selectedResult}
-          detail={paperDetail}
-          isLoading={isLoadingDetail}
-          onClose={closePaperDetail}
-        />
-      )}
     </section>
+
+    {/* Modals rendered outside section to avoid overflow:hidden */}
+    {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
+
+    {selectedResult && (
+      <PaperDetailModal
+        result={selectedResult}
+        detail={paperDetail}
+        isLoading={isLoadingDetail}
+        onClose={closePaperDetail}
+      />
+    )}
+  </>
   );
 };

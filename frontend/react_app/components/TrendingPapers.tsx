@@ -95,22 +95,22 @@ export const TrendingPapers: React.FC = () => {
   };
 
   return (
-    <section className="relative py-16 pb-24">
+    <section className="relative py-16 pb-24 bg-white isolate">
       {/* Background */}
-      <div className="absolute top-0 left-0 right-0 h-full bg-gradient-to-b from-transparent via-orange-50/30 to-transparent pointer-events-none overflow-hidden" />
+      <div className="absolute inset-0 bg-gradient-to-b from-purple-50/50 via-orange-50/30 to-white pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <div>
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 glass-2 rounded-full border border-orange-200/50 text-sm font-medium text-orange-600 mb-3">
+          <div className="space-y-3">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-50 rounded-full border border-orange-200/50 text-sm font-medium text-orange-600">
               <Globe className="w-3.5 h-3.5" />
               Live from PubMed
             </span>
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
               Trending Research Papers
             </h2>
-            <p className="text-gray-600 mt-2">
+            <p className="text-gray-600">
               Real-time trending papers from PubMed and Semantic Scholar
             </p>
           </div>
