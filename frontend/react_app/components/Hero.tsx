@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Tag } from 'lucide-react';
+import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Tag, BarChart3, Flame } from 'lucide-react';
 import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
+import TrendAnalysis from './TrendAnalysis';
+import HotTopics from './HotTopics';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface PaperDetail {
   title: string;
@@ -1178,6 +1181,7 @@ const Glow: React.FC<{ variant?: 'top' | 'center'; className?: string }> = ({ va
 );
 
 export const Hero: React.FC = () => {
+  const { t, language } = useLanguage();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<PrecisionSearchResult[] | null>(null);
@@ -1195,6 +1199,10 @@ export const Hero: React.FC = () => {
   const [selectedResult, setSelectedResult] = useState<PrecisionSearchResult | null>(null);
   const [paperDetail, setPaperDetail] = useState<PaperDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+
+  // Trend analysis modal state
+  const [showTrendAnalysis, setShowTrendAnalysis] = useState(false);
+  const [showHotTopics, setShowHotTopics] = useState(false);
 
   // Auto-detect DOI in query
   const isDOI = (text: string): boolean => {
@@ -1214,6 +1222,20 @@ export const Hero: React.FC = () => {
     setDoiResult(null);
 
     try {
+      // Translate Korean to English if needed
+      let searchQuery = query.trim();
+      if (api.containsKorean(searchQuery)) {
+        try {
+          const translated = await api.translateQuery(searchQuery);
+          if (translated.translated && translated.translated !== searchQuery) {
+            searchQuery = translated.translated;
+            console.log(`Translated: "${query}" → "${searchQuery}"`);
+          }
+        } catch (translateErr) {
+          console.warn('Translation failed, using original query:', translateErr);
+        }
+      }
+
       // Auto-detect DOI and switch mode
       if (isDOI(query)) {
         const paper = await api.fetchByDOI(query);
@@ -1221,15 +1243,15 @@ export const Hero: React.FC = () => {
         setPubmedResults([paper]); // Show in results list
       } else if (searchMode === 'pubmed') {
         // Real-time PubMed search
-        const response = await api.searchPubMed(query, { limit: 10 });
+        const response = await api.searchPubMed(searchQuery, { limit: 10 });
         setPubmedResults(response.papers);
       } else if (query.trim().endsWith('?')) {
-        // Question mode - use RAG
+        // Question mode - use RAG (use original query for natural language)
         const response = await api.ask(query);
         setChatResponse(response);
       } else {
         // Local vector DB search with precision search
-        const response = await api.precisionSearch(query);
+        const response = await api.precisionSearch(searchQuery);
         setSearchResults(response.results);
         setSearchDiagnostics(response.diagnostics);
       }
@@ -1324,23 +1346,23 @@ export const Hero: React.FC = () => {
         <div className="animate-appear opacity-0 mb-8">
           <span className="inline-flex items-center gap-2 px-4 py-2 glass-3 rounded-full border border-purple-200/50 text-sm font-medium text-gray-700 glow-white">
             <Sparkles className="w-4 h-4 text-purple-500" />
-            <span className="text-gray-500">AI-Powered Research Platform</span>
+            <span className="text-gray-500">{t.heroBadge}</span>
             <ArrowRight className="w-3 h-3 text-purple-500" />
           </span>
         </div>
 
         <h1 className="animate-appear opacity-0 delay-100 text-5xl md:text-7xl font-bold tracking-tight mb-6 leading-tight">
           <span className="text-gradient-hero drop-shadow-sm">
-            Biological Insight,
+            {t.heroTitle1}
           </span>
           <br />
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-500 font-serif italic">
-            Starts with a Question.
+            {t.heroTitle2}
           </span>
         </h1>
 
         <p className="animate-appear opacity-0 delay-200 text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto mb-12 font-light leading-relaxed">
-          Search literature, analyze data, and interpret results — in one unified platform.
+          {t.heroSubtitle}
         </p>
 
         {/* Search Mode Selector */}
@@ -1355,7 +1377,7 @@ export const Hero: React.FC = () => {
             }`}
           >
             <Database className="w-4 h-4" />
-            Local DB
+            {t.localDB}
           </button>
           <button
             type="button"
@@ -1367,7 +1389,7 @@ export const Hero: React.FC = () => {
             }`}
           >
             <Globe className="w-4 h-4" />
-            PubMed Live
+            {t.pubmedLive}
           </button>
           <button
             type="button"
@@ -1379,7 +1401,26 @@ export const Hero: React.FC = () => {
             }`}
           >
             <Link2 className="w-4 h-4" />
-            DOI/URL
+            {t.doiUrl}
+          </button>
+
+          {/* Analysis Tools */}
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+          <button
+            type="button"
+            onClick={() => setShowTrendAnalysis(true)}
+            className="px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 glass-2 border border-blue-200/50 text-blue-600 hover:bg-blue-50/50 hover:border-blue-300"
+          >
+            <BarChart3 className="w-4 h-4" />
+            {t.trendAnalysis}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowHotTopics(true)}
+            className="px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 glass-2 border border-orange-200/50 text-orange-600 hover:bg-orange-50/50 hover:border-orange-300"
+          >
+            <Flame className="w-4 h-4" />
+            {t.hotTopics}
           </button>
         </div>
 
@@ -1402,7 +1443,7 @@ export const Hero: React.FC = () => {
             {/* Input Field with Glass Effect */}
             <input
               type="text"
-              className={`block w-full rounded-full border py-5 pl-16 pr-40 text-gray-900 placeholder:text-gray-400 focus:ring-2 text-lg shadow-xl glass-4 transition-all hover:shadow-2xl ${
+              className={`block w-full rounded-full border py-5 pl-16 pr-56 text-gray-900 placeholder:text-gray-400 focus:ring-2 text-lg shadow-xl glass-4 transition-all hover:shadow-2xl ${
                 searchMode === 'pubmed'
                   ? 'border-emerald-200/50 focus:ring-emerald-400/50 focus:border-emerald-300 hover:border-emerald-300'
                   : searchMode === 'doi'
@@ -1411,10 +1452,10 @@ export const Hero: React.FC = () => {
               }`}
               placeholder={
                 searchMode === 'pubmed'
-                  ? 'Search PubMed for papers...'
+                  ? t.searchPlaceholderPubmed
                   : searchMode === 'doi'
-                  ? 'Enter DOI (e.g., 10.1038/s41586-023-...) or URL'
-                  : 'Search genes, diseases, or ask a question...'
+                  ? t.searchPlaceholderDoi
+                  : t.searchPlaceholder
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -1436,20 +1477,22 @@ export const Hero: React.FC = () => {
               <div className="flex items-center gap-1 border-r border-purple-200/50 pr-2 mr-2 py-2">
                 <button
                   type="button"
-                  className="p-3 text-purple-400 hover:text-purple-600 hover:bg-purple-100/50 rounded-full transition-all"
-                  title="Upload Literature (PDF)"
+                  className="flex items-center gap-1.5 px-3 py-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100/50 rounded-full transition-all text-sm font-medium"
+                  title={t.uploadPdf}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
                 >
-                  <FileText className="w-5 h-5" />
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">{t.uploadPdfShort}</span>
                 </button>
                 <button
                   type="button"
-                  className="p-3 text-purple-400 hover:text-purple-600 hover:bg-purple-100/50 rounded-full transition-all"
-                  title="Upload RNA-seq Data"
+                  className="flex items-center gap-1.5 px-3 py-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100/50 rounded-full transition-all text-sm font-medium"
+                  title={t.uploadRnaseq}
                   disabled={isLoading}
                 >
-                  <Dna className="w-5 h-5" />
+                  <Dna className="w-4 h-4" />
+                  <span className="hidden sm:inline">{t.uploadRnaseqShort}</span>
                 </button>
               </div>
 
@@ -1478,7 +1521,7 @@ export const Hero: React.FC = () => {
         {!searchResults && !chatResponse && !pubmedResults && (
           <p className="animate-appear opacity-0 delay-500 mt-10 text-sm text-gray-500 flex items-center justify-center gap-2">
             <span className="w-8 h-px bg-purple-300/50"></span>
-            Try: "BRCA1 mutations" or "What causes drug resistance in cancer?"
+            {t.heroHint}
             <span className="w-8 h-px bg-purple-300/50"></span>
           </p>
         )}
@@ -1500,6 +1543,16 @@ export const Hero: React.FC = () => {
         isLoading={isLoadingDetail}
         onClose={closePaperDetail}
       />
+    )}
+
+    {/* Trend Analysis Modal */}
+    {showTrendAnalysis && (
+      <TrendAnalysis onClose={() => setShowTrendAnalysis(false)} />
+    )}
+
+    {/* Hot Topics Modal */}
+    {showHotTopics && (
+      <HotTopics onClose={() => setShowHotTopics(false)} />
     )}
   </>
   );

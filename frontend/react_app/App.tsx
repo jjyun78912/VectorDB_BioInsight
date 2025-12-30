@@ -9,12 +9,14 @@ import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
+import { LanguageProvider } from './contexts/LanguageContext';
+import { useLanguage } from './contexts/LanguageContext';
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
   Library, FileSearch, Zap
 } from 'lucide-react';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [showGraph, setShowGraph] = useState(false);
   const [showLiteratureReview, setShowLiteratureReview] = useState(false);
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
@@ -176,6 +178,15 @@ const App: React.FC = () => {
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
     </div>
+  );
+};
+
+// Wrap with LanguageProvider
+const App: React.FC = () => {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 };
 

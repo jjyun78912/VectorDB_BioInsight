@@ -138,6 +138,100 @@ export interface CrawlerSearchResponse {
   papers: CrawlerPaper[];
 }
 
+// ============== Trend Analysis Types ==============
+
+export interface YearlyCount {
+  year: number;
+  count: number;
+  growth_rate: number | null;
+}
+
+export interface KeywordTrend {
+  keyword: string;
+  total_count: number;
+  yearly_counts: YearlyCount[];
+  trend_direction: 'rising' | 'stable' | 'declining';
+  growth_5yr: number | null;
+  peak_year: number | null;
+}
+
+export interface TrendAnalysisResponse {
+  query: string;
+  years: number[];
+  trends: KeywordTrend[];
+  comparison_keywords: string[];
+  analysis_date: string;
+}
+
+export interface HotTopic {
+  keyword: string;
+  recent_count: number;
+  previous_count: number;
+  growth_rate: number;
+  sample_titles: string[];
+}
+
+export interface HotTopicsResponse {
+  domain: string;
+  hot_topics: HotTopic[];
+  analysis_period: string;
+}
+
+export interface TrendDomain {
+  key: string;
+  name: string;
+  keyword_count: number;
+}
+
+export interface EmergingTopic {
+  topic: string;
+  modifier: string;
+  current_year_count: number;
+  two_years_ago_count: number;
+  growth_rate: number;
+}
+
+export interface EmergingTopicsResponse {
+  base_keyword: string;
+  emerging_topics: EmergingTopic[];
+  analysis_period: string;
+}
+
+// ============== Enhanced Hot Topics Types ==============
+
+export interface MultiDimensionalScore {
+  rising_score: number;      // YoY growth rate (0-100)
+  interest_score: number;    // Search/citation interest (0-100)
+  activity_score: number;    // Active research volume (0-100)
+  future_score: number;      // Future research potential (0-100)
+  total_score: number;       // Weighted composite score
+}
+
+export interface EnhancedHotTopic {
+  keyword: string;
+  scores: MultiDimensionalScore;
+
+  // Raw metrics
+  current_year_papers: number;
+  previous_year_papers: number;
+  growth_rate: number;
+  clinical_trials: number;
+  future_mentions: number;
+
+  // Insights
+  trend_label: string;       // "🔥 Explosive", "📈 Rising", etc.
+  research_stage: string;    // "Early Stage", "Growth Phase", etc.
+  recommendation: string;    // Brief insight
+}
+
+export interface EnhancedHotTopicsResponse {
+  domain: string;
+  hot_topics: EnhancedHotTopic[];
+  analysis_period: string;
+  methodology: string;
+  last_updated: string;
+}
+
 class BioInsightAPI {
   private baseUrl: string;
 
@@ -490,6 +584,135 @@ class BioInsightAPI {
 
     if (!response.ok) {
       throw new Error(`Ask failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // ============== Translation API ==============
+
+  /**
+   * Translate Korean search query to English for PubMed search
+   */
+  async translateQuery(text: string): Promise<{
+    original: string;
+    translated: string;
+    detected_lang: string;
+    is_biomedical: boolean;
+  }> {
+    const response = await fetch(`${this.baseUrl}/chat/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Translation failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Check if text contains Korean characters
+   */
+  containsKorean(text: string): boolean {
+    return /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(text);
+  }
+
+  // ============== Trend Analysis API ==============
+
+  /**
+   * Analyze keyword trends over 5 years
+   */
+  async analyzeTrends(
+    keywords: string[],
+    options?: { startYear?: number; endYear?: number }
+  ): Promise<TrendAnalysisResponse> {
+    const params = new URLSearchParams({
+      keywords: keywords.join(','),
+      ...(options?.startYear && { start_year: options.startYear.toString() }),
+      ...(options?.endYear && { end_year: options.endYear.toString() }),
+    });
+
+    const response = await fetch(`${this.baseUrl}/trends/keyword?${params}`);
+    if (!response.ok) {
+      throw new Error(`Trend analysis failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Compare keyword trends
+   */
+  async compareTrends(
+    keyword1: string,
+    keyword2: string,
+    keyword3?: string
+  ): Promise<TrendAnalysisResponse> {
+    const params = new URLSearchParams({
+      keyword1,
+      keyword2,
+      ...(keyword3 && { keyword3 }),
+    });
+
+    const response = await fetch(`${this.baseUrl}/trends/compare?${params}`);
+    if (!response.ok) {
+      throw new Error(`Trend comparison failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get hot topics in a domain (legacy)
+   */
+  async getHotTopics(domain: string, limit: number = 10): Promise<HotTopicsResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/trends/hot-topics/${domain}?limit=${limit}`
+    );
+    if (!response.ok) {
+      throw new Error(`Hot topics failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get enhanced hot topics with multi-dimensional analysis
+   */
+  async getEnhancedHotTopics(domain: string, limit: number = 10): Promise<EnhancedHotTopicsResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/trends/hot-topics-enhanced/${domain}?limit=${limit}`
+    );
+    if (!response.ok) {
+      throw new Error(`Enhanced hot topics failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get available domains for hot topic analysis
+   */
+  async getTrendDomains(): Promise<{ domains: TrendDomain[] }> {
+    const response = await fetch(`${this.baseUrl}/trends/domains`);
+    if (!response.ok) {
+      throw new Error(`Get domains failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Find emerging topics in a research area
+   */
+  async findEmergingTopics(
+    baseKeyword: string,
+    limit: number = 10
+  ): Promise<EmergingTopicsResponse> {
+    const params = new URLSearchParams({
+      base_keyword: baseKeyword,
+      limit: limit.toString(),
+    });
+
+    const response = await fetch(`${this.baseUrl}/trends/emerging?${params}`);
+    if (!response.ok) {
+      throw new Error(`Emerging topics failed: ${response.statusText}`);
     }
     return response.json();
   }

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ArrowRight, Sparkles } from 'lucide-react';
+import { Menu, X, ArrowRight, Sparkles, Globe } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const Navbar: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
+
+  const toggleLanguage = () => {
+    setLanguage(language === 'en' ? 'ko' : 'en');
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -48,6 +54,15 @@ export const Navbar: React.FC = () => {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center gap-3">
+          {/* Language Toggle */}
+          <button
+            onClick={toggleLanguage}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-purple-50/50 rounded-lg transition-all"
+            title={language === 'en' ? 'Switch to Korean' : '영어로 전환'}
+          >
+            <Globe className="w-4 h-4" />
+            <span>{language === 'en' ? 'EN' : 'KO'}</span>
+          </button>
           <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-purple-50/50 rounded-lg transition-all">
             Log in
           </button>
@@ -79,6 +94,14 @@ export const Navbar: React.FC = () => {
             </a>
           ))}
           <div className="h-px bg-purple-100/50 w-full my-3"></div>
+          {/* Language Toggle - Mobile */}
+          <button
+            onClick={toggleLanguage}
+            className="flex items-center gap-2 px-4 py-3 text-lg font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50/50 rounded-xl transition-all"
+          >
+            <Globe className="w-5 h-5" />
+            {language === 'en' ? 'English (EN)' : '한국어 (KO)'}
+          </button>
           <button className="px-4 py-3 text-left text-lg font-medium text-gray-900 hover:bg-purple-50/50 rounded-xl transition-colors">
             Log in
           </button>
