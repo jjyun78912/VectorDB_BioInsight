@@ -4,6 +4,12 @@ VectorDB 인덱싱 검증 스크립트
 
 논문별 섹션 분리, 청킹, 메타데이터가 제대로 저장되었는지 확인
 """
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from src.vector_store import create_vector_store
 from collections import defaultdict
 import json

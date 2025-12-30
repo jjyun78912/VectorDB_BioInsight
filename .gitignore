@@ -34,6 +34,9 @@ data/chroma_db/
 data/papers/
 *.pdf
 
+# Output directory
+output/
+
 # IDE
 .idea/
 .vscode/
