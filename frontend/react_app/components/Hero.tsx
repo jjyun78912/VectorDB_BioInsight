@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope } from 'lucide-react';
 import api, { SearchResult, ChatResponse, CrawlerPaper } from '../services/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
@@ -23,6 +23,14 @@ interface PubMedResultsProps {
   isLoading?: boolean;
 }
 
+// Chat message interface for history
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
 const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading }) => {
   const [selectedPaper, setSelectedPaper] = useState<CrawlerPaper | null>(null);
   const [showGalaxy, setShowGalaxy] = useState(false);
@@ -30,8 +38,9 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [chatMode, setChatMode] = useState(false);
   const [chatQuestion, setChatQuestion] = useState('');
-  const [chatAnswer, setChatAnswer] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);  // Chat history array
   const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);  // For auto-scroll
 
   // State for key points
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
@@ -41,7 +50,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
     setSelectedPaper(paper);
     setAiSummary(null);
     setKeyPoints([]);
-    setChatAnswer(null);
+    setChatHistory([]);  // Clear chat history when selecting new paper
     setChatMode(false);
     setChatQuestion('');
 
@@ -60,22 +69,51 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
     }
   };
 
-  // Handle AI Q&A
+  // Auto scroll to bottom when chat history updates
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
+
+  // Handle AI Q&A with chat history
   const handleAskQuestion = async () => {
     if (!chatQuestion.trim() || !selectedPaper) return;
+
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: chatQuestion,
+      timestamp: new Date(),
+    };
+
+    setChatHistory(prev => [...prev, userMessage]);
+    const currentQuestion = chatQuestion;
+    setChatQuestion('');
     setIsAskingQuestion(true);
-    setChatAnswer(null);
 
     try {
       // Use the new ask-abstract API
       const response = await api.askAbstract(
         selectedPaper.title,
         selectedPaper.abstract || '',
-        chatQuestion
+        currentQuestion
       );
-      setChatAnswer(response.answer);
+
+      const assistantMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: response.answer,
+        timestamp: new Date(),
+      };
+
+      setChatHistory(prev => [...prev, assistantMessage]);
     } catch (err) {
-      setChatAnswer('Sorry, I could not process your question.');
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: 'Sorry, I could not process your question.',
+        timestamp: new Date(),
+      };
+      setChatHistory(prev => [...prev, errorMessage]);
     } finally {
       setIsAskingQuestion(false);
     }
@@ -225,13 +263,48 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                   )}
                 </div>
 
-                {/* Q&A Section */}
+                {/* Q&A Section with Chat History */}
                 {chatMode && (
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
                       <MessageSquare className="w-3.5 h-3.5" />
                       Ask AI
                     </h4>
+
+                    {/* Chat History */}
+                    {chatHistory.length > 0 && (
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                        {chatHistory.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                                msg.role === 'user'
+                                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-sm'
+                                  : 'glass-2 border border-blue-100/50 text-gray-700 rounded-bl-sm'
+                              }`}
+                            >
+                              <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {isAskingQuestion && (
+                          <div className="flex justify-start">
+                            <div className="glass-2 border border-blue-100/50 rounded-2xl rounded-bl-sm px-4 py-2.5">
+                              <div className="flex items-center gap-2 text-gray-500">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span className="text-sm">Thinking...</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div ref={chatEndRef} />
+                      </div>
+                    )}
+
+                    {/* Input */}
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -239,7 +312,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                         onChange={(e) => setChatQuestion(e.target.value)}
                         placeholder="Ask about this paper..."
                         className="flex-1 px-4 py-2.5 glass-3 border border-purple-200/50 rounded-xl text-sm focus:ring-2 focus:ring-purple-400/50"
-                        onKeyDown={(e) => e.key === 'Enter' && handleAskQuestion()}
+                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAskQuestion()}
                         disabled={isAskingQuestion}
                       />
                       <button
@@ -250,11 +323,6 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                         {isAskingQuestion ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                       </button>
                     </div>
-                    {chatAnswer && (
-                      <div className="glass-2 rounded-xl p-4 border border-blue-100/50 animate-appear">
-                        <p className="text-sm text-gray-700 leading-relaxed">{chatAnswer}</p>
-                      </div>
-                    )}
                   </div>
                 )}
 
