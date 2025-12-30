@@ -8,7 +8,7 @@ Provides real-time paper fetching capabilities:
 4. Semantic Scholar integration
 
 Usage:
-    from src.web_crawler_agent import WebCrawlerAgent
+    from backend.app.core.web_crawler_agent import WebCrawlerAgent
 
     agent = WebCrawlerAgent()
 

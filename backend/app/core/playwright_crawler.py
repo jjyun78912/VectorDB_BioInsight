@@ -13,7 +13,7 @@ Features:
 5. Rate limiting to respect robots.txt
 
 Usage:
-    from src.playwright_crawler import PlaywrightDeepCrawler
+    from backend.app.core.playwright_crawler import PlaywrightDeepCrawler
 
     crawler = PlaywrightDeepCrawler()
 

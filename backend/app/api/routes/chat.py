@@ -4,14 +4,12 @@ Chat/RAG API endpoints - AI-powered paper Q&A and summarization.
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, List
-import sys
 from pathlib import Path
 import json
 import tempfile
 import shutil
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 router = APIRouter()
 
@@ -39,9 +37,9 @@ async def upload_paper_to_agent(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     try:
-        from src.pdf_parser import BioPaperParser
-        from src.text_splitter import BioPaperSplitter
-        from src.paper_agent import create_paper_session, get_paper_agent
+        from backend.app.core.pdf_parser import BioPaperParser
+        from backend.app.core.text_splitter import BioPaperSplitter
+        from backend.app.core.paper_agent import create_paper_session, get_paper_agent
 
         # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -111,7 +109,7 @@ async def ask_paper_agent(request: AgentQueryRequest):
     Uses the session_id from upload to query only that paper.
     """
     try:
-        from src.paper_agent import get_paper_agent
+        from backend.app.core.paper_agent import get_paper_agent
 
         agent = get_paper_agent(request.session_id)
         if not agent:
@@ -146,7 +144,7 @@ class AgentSessionInfo(BaseModel):
 @router.get("/agent/session/{session_id}", response_model=AgentSessionInfo)
 async def get_agent_session(session_id: str):
     """Get information about a paper agent session."""
-    from src.paper_agent import get_paper_agent
+    from backend.app.core.paper_agent import get_paper_agent
 
     agent = get_paper_agent(session_id)
     if not agent:
@@ -163,7 +161,7 @@ async def get_agent_session(session_id: str):
 @router.delete("/agent/session/{session_id}")
 async def delete_agent_session(session_id: str):
     """Delete a paper agent session."""
-    from src.paper_agent import delete_paper_session, get_paper_agent
+    from backend.app.core.paper_agent import delete_paper_session, get_paper_agent
 
     if not get_paper_agent(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
@@ -175,7 +173,7 @@ async def delete_agent_session(session_id: str):
 @router.get("/agent/session/{session_id}/debug")
 async def debug_agent_session(session_id: str):
     """Debug endpoint to see actual stored chunks."""
-    from src.paper_agent import get_paper_agent
+    from backend.app.core.paper_agent import get_paper_agent
 
     agent = get_paper_agent(session_id)
     if not agent:
@@ -253,7 +251,7 @@ async def ask_question(request: ChatRequest):
     Returns AI-generated answer with source citations.
     """
     try:
-        from src.rag_pipeline import create_rag_pipeline
+        from backend.app.core.rag_pipeline import create_rag_pipeline
 
         rag = create_rag_pipeline(
             disease_domain=request.domain,
@@ -320,7 +318,7 @@ async def summarize_paper(request: SummarizeRequest):
     Generate an AI summary of a specific paper.
     """
     try:
-        from src.config import PAPERS_DIR, GOOGLE_API_KEY
+        from backend.app.core.config import PAPERS_DIR, GOOGLE_API_KEY
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.prompts import ChatPromptTemplate
 
@@ -476,7 +474,7 @@ async def summarize_abstract(request: AbstractSummaryRequest):
     Used for PubMed papers that aren't in local DB.
     """
     try:
-        from src.config import GOOGLE_API_KEY
+        from backend.app.core.config import GOOGLE_API_KEY
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.prompts import ChatPromptTemplate
 
@@ -588,7 +586,7 @@ async def ask_about_abstract(request: AbstractQARequest):
     Used for PubMed papers that aren't in local DB.
     """
     try:
-        from src.config import GOOGLE_API_KEY
+        from backend.app.core.config import GOOGLE_API_KEY
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.prompts import ChatPromptTemplate
 
@@ -664,8 +662,8 @@ async def analyze_paper(request: AnalyzeRequest):
     Perform detailed analysis of a paper.
     """
     try:
-        from src.config import PAPERS_DIR, GOOGLE_API_KEY
-        from src.vector_store import create_vector_store
+        from backend.app.core.config import PAPERS_DIR, GOOGLE_API_KEY
+        from backend.app.core.vector_store import create_vector_store
         from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.prompts import ChatPromptTemplate
 

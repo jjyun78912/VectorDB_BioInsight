@@ -14,13 +14,12 @@ import asyncio
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
-from src.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES, MAJOR_JOURNALS
+from backend.app.core.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES, MAJOR_JOURNALS
 
 # Try to import Playwright crawler (optional dependency)
 try:
-    from src.playwright_crawler import PlaywrightDeepCrawler, CrawlResult, PLAYWRIGHT_AVAILABLE
+    from backend.app.core.playwright_crawler import PlaywrightDeepCrawler, CrawlResult, PLAYWRIGHT_AVAILABLE
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     PlaywrightDeepCrawler = None

@@ -1,15 +1,15 @@
 """
 Search API endpoints - Enhanced for paper discovery and similarity.
+
+Features:
+- Precision search with MeSH vocabulary support
+- Field-aware ranking (Title > Abstract > Full text)
+- Search diagnostics explaining why results matched
 """
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict
-import sys
-from pathlib import Path
 import json
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 router = APIRouter()
 
@@ -23,6 +23,44 @@ class SearchResult(BaseModel):
     pmid: Optional[str] = None
     year: Optional[str] = None
     doi: Optional[str] = None
+
+
+class SearchDiagnosticResult(BaseModel):
+    """Search result with diagnostics."""
+    rank: int
+    content: str
+    relevance_score: float
+    disease_relevance: float
+    paper_title: str
+    section: str
+    pmid: Optional[str] = None
+    year: Optional[str] = None
+    doi: Optional[str] = None
+    match_field: str  # title, abstract, full_text
+    matched_terms: List[str] = []
+    explanation: str = ""
+
+
+class SearchDiagnostics(BaseModel):
+    """Search diagnostics explaining the search."""
+    query: str
+    detected_disease: Optional[str] = None
+    mesh_term: Optional[str] = None
+    search_terms: List[str] = []
+    modifiers: List[str] = []
+    total_candidates: int = 0
+    filtered_results: int = 0
+    strategy_used: str = ""
+    explanation: str = ""
+
+
+class PrecisionSearchResponse(BaseModel):
+    """Precision search response with diagnostics."""
+    query: str
+    domain: str
+    results: List[SearchDiagnosticResult]
+    diagnostics: SearchDiagnostics
+    total: int
 
 
 class SearchResponse(BaseModel):
@@ -106,18 +144,156 @@ async def list_domains():
     return {"domains": DISEASE_DOMAINS}
 
 
+@router.get("/supported-diseases")
+async def list_supported_diseases():
+    """List diseases supported by precision search with MeSH terms."""
+    try:
+        from backend.app.core.precision_search import PrecisionSearch
+
+        searcher = PrecisionSearch()
+        diseases = searcher.get_supported_diseases()
+        return {"diseases": diseases, "total": len(diseases)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/precision", response_model=PrecisionSearchResponse)
+async def precision_search(
+    query: str = Query(..., description="Search query (e.g., 'ADHD treatment')"),
+    domain: str = Query("auto", description="Disease domain ('auto' to detect from query)"),
+    section: Optional[str] = Query(None, description="Filter by section"),
+    top_k: int = Query(10, ge=1, le=50, description="Number of results"),
+    require_title_match: bool = Query(True, description="Require disease term in title/abstract")
+):
+    """
+    Precision search with MeSH vocabulary and field-aware ranking.
+
+    Features:
+    - Detects disease terms using MeSH vocabulary
+    - Ranks by field: Title match > Abstract match > Full text
+    - Returns diagnostics explaining why each result was matched
+    - Filters out low-relevance results
+    - Auto-detects domain from query when domain='auto'
+
+    Example queries:
+    - "ADHD treatment" → Uses ADHD MeSH terms
+    - "glioblastoma immunotherapy" → Uses GBM vocabulary + modifier
+    - "pancreatic cancer biomarkers" → Uses PDAC vocabulary
+    """
+    try:
+        from backend.app.core.precision_search import PrecisionSearch
+        from backend.app.core.medical_vocabulary import get_medical_vocabulary
+
+        # Auto-detect domain from query if domain is 'auto'
+        actual_domain = domain
+        if domain == "auto":
+            vocab = get_medical_vocabulary()
+            detected = vocab.normalize_disease(query)
+            if detected:
+                actual_domain = detected
+            else:
+                # Default to pheochromocytoma if no disease detected
+                actual_domain = "pheochromocytoma"
+
+        searcher = PrecisionSearch(
+            disease_domain=actual_domain,
+            require_title_abstract_match=require_title_match
+        )
+
+        results, diagnostics = searcher.search(
+            query=query,
+            top_k=top_k,
+            section_filter=section
+        )
+
+        # Convert to response models
+        search_results = [
+            SearchDiagnosticResult(
+                rank=r.rank,
+                content=r.content[:500],
+                relevance_score=r.final_score,
+                disease_relevance=r.disease_relevance * 100,
+                paper_title=r.paper_title,
+                section=r.section,
+                pmid=r.pmid or None,
+                year=r.year or None,
+                doi=r.doi or None,
+                match_field=r.field_match.value,
+                matched_terms=r.diagnostic.matched_terms,
+                explanation=r.diagnostic.explanation
+            )
+            for r in results
+        ]
+
+        diag_response = SearchDiagnostics(
+            query=diagnostics.query,
+            detected_disease=diagnostics.detected_disease,
+            mesh_term=diagnostics.mesh_term,
+            search_terms=diagnostics.search_terms,
+            modifiers=diagnostics.modifiers,
+            total_candidates=diagnostics.total_candidates,
+            filtered_results=diagnostics.filtered_results,
+            strategy_used=diagnostics.strategy_used,
+            explanation=diagnostics.explanation
+        )
+
+        return PrecisionSearchResponse(
+            query=query,
+            domain=actual_domain,  # Return the actually used domain
+            results=search_results,
+            diagnostics=diag_response,
+            total=len(search_results)
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/", response_model=SearchResponse)
 async def search(
     query: str = Query(..., description="Search query"),
     domain: str = Query("pancreatic_cancer", description="Disease domain"),
     section: Optional[str] = Query(None, description="Filter by section"),
-    top_k: int = Query(10, ge=1, le=50, description="Number of results")
+    top_k: int = Query(10, ge=1, le=50, description="Number of results"),
+    use_precision: bool = Query(False, description="Use precision search with MeSH vocabulary")
 ):
     """
     Search the vector database for relevant content chunks.
+
+    Set use_precision=true for disease-aware search with field ranking.
     """
     try:
-        from src.vector_store import create_vector_store
+        # Use precision search if requested
+        if use_precision:
+            from backend.app.core.precision_search import PrecisionSearch
+
+            searcher = PrecisionSearch(disease_domain=domain)
+            results, _ = searcher.search(query=query, top_k=top_k, section_filter=section)
+
+            search_results = [
+                SearchResult(
+                    content=r.content[:500],
+                    relevance_score=r.final_score,
+                    paper_title=r.paper_title,
+                    section=r.section,
+                    pmid=r.pmid or None,
+                    year=r.year or None,
+                    doi=r.doi or None
+                )
+                for r in results
+            ]
+
+            return SearchResponse(
+                query=query,
+                domain=domain,
+                results=search_results,
+                total=len(search_results)
+            )
+
+        # Default: hybrid search
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
 
@@ -169,8 +345,8 @@ async def search_papers(
     Aggregates chunk results to paper level.
     """
     try:
-        from src.vector_store import create_vector_store
-        from src.config import PAPERS_DIR
+        from backend.app.core.vector_store import create_vector_store
+        from backend.app.core.config import PAPERS_DIR
 
         vector_store = create_vector_store(disease_domain=domain)
 
@@ -273,8 +449,8 @@ async def find_similar_papers(
     Uses embedding similarity from vector store with t-SNE visualization coordinates.
     """
     try:
-        from src.vector_store import create_vector_store
-        from src.config import PAPERS_DIR
+        from backend.app.core.vector_store import create_vector_store
+        from backend.app.core.config import PAPERS_DIR
 
         # First try vector store (faster, uses indexed embeddings)
         vector_store = create_vector_store(disease_domain=domain)
@@ -358,8 +534,8 @@ async def find_similar_papers(
 
 async def _fallback_similar_papers(pmid: str, domain: str, top_k: int) -> SimilarPapersResponse:
     """Fallback method using JSON files and live embedding calculation."""
-    from src.config import PAPERS_DIR
-    from src.embeddings import get_embedder
+    from backend.app.core.config import PAPERS_DIR
+    from backend.app.core.embeddings import get_embedder
     import numpy as np
 
     papers_dir = PAPERS_DIR / domain
@@ -440,7 +616,7 @@ async def list_all_papers(
     List all papers in a domain with basic info.
     """
     try:
-        from src.config import PAPERS_DIR
+        from backend.app.core.config import PAPERS_DIR
 
         papers_dir = PAPERS_DIR / domain
 
@@ -493,7 +669,7 @@ async def get_paper_detail(
     Get detailed information about a specific paper.
     """
     try:
-        from src.config import PAPERS_DIR
+        from backend.app.core.config import PAPERS_DIR
 
         papers_dir = PAPERS_DIR / domain
         paper_file = papers_dir / f"{pmid}.json"

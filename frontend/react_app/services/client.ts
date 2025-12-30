@@ -23,6 +23,50 @@ export interface SearchResponse {
   total: number;
 }
 
+// Precision Search types
+export interface PrecisionSearchResult {
+  rank: number;
+  content: string;
+  relevance_score: number;
+  disease_relevance: number;
+  paper_title: string;
+  section: string;
+  pmid?: string;
+  year?: string;
+  doi?: string;
+  match_field: 'mesh' | 'title' | 'abstract' | 'full_text' | 'none';
+  matched_terms: string[];
+  explanation: string;
+}
+
+export interface SearchDiagnostics {
+  query: string;
+  detected_disease?: string;
+  mesh_term?: string;
+  search_terms: string[];
+  modifiers: string[];
+  total_candidates: number;
+  filtered_results: number;
+  strategy_used: string;
+  explanation: string;
+}
+
+export interface PrecisionSearchResponse {
+  query: string;
+  domain: string;
+  results: PrecisionSearchResult[];
+  diagnostics: SearchDiagnostics;
+  total: number;
+}
+
+export interface SupportedDisease {
+  key: string;
+  mesh_term: string;
+  mesh_id: string;
+  synonyms: string[];
+  abbreviations: string[];
+}
+
 export interface Source {
   citation_index: number;  // 1-based index for [1], [2], etc.
   paper_title: string;
@@ -119,6 +163,41 @@ class BioInsightAPI {
     const response = await fetch(`${this.baseUrl}/search/?${params}`);
     if (!response.ok) {
       throw new Error(`Search failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Precision search with MeSH vocabulary and field-aware ranking
+   * domain='auto' will auto-detect disease from query
+   */
+  async precisionSearch(
+    query: string,
+    domain: string = 'auto',
+    options?: { section?: string; topK?: number; requireTitleMatch?: boolean }
+  ): Promise<PrecisionSearchResponse> {
+    const params = new URLSearchParams({
+      query,
+      domain,
+      ...(options?.section && { section: options.section }),
+      ...(options?.topK && { top_k: options.topK.toString() }),
+      require_title_match: (options?.requireTitleMatch !== false).toString(),
+    });
+
+    const response = await fetch(`${this.baseUrl}/search/precision?${params}`);
+    if (!response.ok) {
+      throw new Error(`Precision search failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get list of supported diseases with MeSH terms
+   */
+  async getSupportedDiseases(): Promise<{ diseases: SupportedDisease[]; total: number }> {
+    const response = await fetch(`${this.baseUrl}/search/supported-diseases`);
+    if (!response.ok) {
+      throw new Error(`Get diseases failed: ${response.statusText}`);
     }
     return response.json();
   }

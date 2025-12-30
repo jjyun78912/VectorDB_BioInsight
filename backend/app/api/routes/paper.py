@@ -10,7 +10,6 @@ import tempfile
 import shutil
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 router = APIRouter()
 
@@ -48,7 +47,7 @@ async def list_papers(
     List all indexed papers.
     """
     try:
-        from src.vector_store import create_vector_store
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
         papers = vector_store.get_all_papers()
@@ -89,7 +88,7 @@ async def get_stats(
     Get collection statistics.
     """
     try:
-        from src.vector_store import create_vector_store
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
         stats = vector_store.get_collection_stats()
@@ -127,7 +126,7 @@ async def upload_paper(
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     try:
-        from src.indexer import create_indexer
+        from backend.app.core.indexer import create_indexer
 
         # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -168,7 +167,7 @@ async def delete_paper(
     Delete a paper from the index.
     """
     try:
-        from src.vector_store import create_vector_store
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
         deleted = vector_store.delete_paper(paper_title)

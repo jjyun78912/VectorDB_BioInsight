@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope } from 'lucide-react';
-import api, { SearchResult, ChatResponse, CrawlerPaper } from '../services/client';
+import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Tag } from 'lucide-react';
+import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
 
 interface PaperDetail {
@@ -408,44 +408,423 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
   );
 };
 
-interface SearchResultsProps {
-  results: SearchResult[];
+interface LocalDBResultsProps {
+  results: PrecisionSearchResult[];
+  diagnostics: SearchDiagnostics | null;
   onClose: () => void;
-  onSelectResult: (result: SearchResult) => void;
+  onSelectResult: (result: PrecisionSearchResult) => void;
 }
 
-const SearchResults: React.FC<SearchResultsProps> = ({ results, onClose, onSelectResult }) => (
-  <div className="absolute top-full left-0 right-0 mt-3 glass-4 rounded-2xl shadow-2xl border border-purple-200/50 max-h-[400px] overflow-y-auto z-50 animate-appear">
-    <div className="sticky top-0 glass-5 border-b border-purple-100/50 px-5 py-4 flex justify-between items-center">
-      <span className="text-sm font-semibold text-gray-700">{results.length} results found</span>
-      <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
-        <X className="w-4 h-4 text-gray-500" />
-      </button>
-    </div>
-    {results.map((result, idx) => (
+// Helper to get match field color
+const getMatchFieldStyle = (field: string) => {
+  switch (field) {
+    case 'title':
+      return { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Title Match' };
+    case 'abstract':
+      return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Abstract Match' };
+    case 'mesh':
+      return { bg: 'bg-purple-100', text: 'text-purple-700', label: 'MeSH Match' };
+    case 'full_text':
+      return { bg: 'bg-gray-100', text: 'text-gray-600', label: 'Full Text' };
+    default:
+      return { bg: 'bg-gray-100', text: 'text-gray-500', label: 'No Match' };
+  }
+};
+
+const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnostics, onClose, onSelectResult }) => {
+  const [selectedResult, setSelectedResult] = useState<PrecisionSearchResult | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [keyPoints, setKeyPoints] = useState<string[]>([]);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [chatMode, setChatMode] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [isAskingQuestion, setIsAskingQuestion] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory]);
+
+  // Generate AI summary when result is selected
+  const handleSelectResult = async (result: PrecisionSearchResult) => {
+    setSelectedResult(result);
+    setAiSummary(null);
+    setKeyPoints([]);
+    setChatHistory([]);
+    setChatMode(false);
+    setChatQuestion('');
+
+    // Generate summary from the content
+    if (result.content) {
+      setIsLoadingSummary(true);
+      try {
+        const response = await api.summarizeAbstract(result.paper_title, result.content);
+        setAiSummary(response.summary);
+        setKeyPoints(response.key_points || []);
+      } catch (err) {
+        setAiSummary('Unable to generate summary.');
+      } finally {
+        setIsLoadingSummary(false);
+      }
+    }
+  };
+
+  // Handle AI Q&A
+  const handleAskQuestion = async () => {
+    if (!chatQuestion.trim() || !selectedResult) return;
+
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: chatQuestion,
+      timestamp: new Date(),
+    };
+
+    setChatHistory(prev => [...prev, userMessage]);
+    const currentQuestion = chatQuestion;
+    setChatQuestion('');
+    setIsAskingQuestion(true);
+
+    try {
+      const response = await api.askAbstract(
+        selectedResult.paper_title,
+        selectedResult.content,
+        currentQuestion
+      );
+
+      const assistantMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: response.answer,
+        timestamp: new Date(),
+      };
+
+      setChatHistory(prev => [...prev, assistantMessage]);
+    } catch (err) {
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        role: 'assistant',
+        content: 'Sorry, I could not process your question.',
+        timestamp: new Date(),
+      };
+      setChatHistory(prev => [...prev, errorMessage]);
+    } finally {
+      setIsAskingQuestion(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Modal with Split View */}
       <div
-        key={idx}
-        className="p-4 border-b border-purple-50/50 hover:bg-purple-50/50 transition-all cursor-pointer card-hover group"
-        style={{ animationDelay: `${idx * 50}ms` }}
-        onClick={() => onSelectResult(result)}
+        className="relative z-[51] w-full max-w-6xl bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-purple-200/50 flex animate-appear"
+        style={{ height: 'calc(100vh - 8rem)', maxHeight: '750px', minHeight: '500px' }}
       >
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-purple-600 bg-purple-100/80 px-2.5 py-1 rounded-full">
-            {result.section}
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              {result.relevance_score.toFixed(1)}% match
-            </span>
-            <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-purple-500 group-hover:translate-x-0.5 transition-all" />
+        {/* Left: Results List */}
+        <div className={`${selectedResult ? 'w-2/5' : 'w-full'} flex flex-col border-r border-purple-100/50 transition-all min-h-0`}>
+          {/* Header with Diagnostics Toggle */}
+          <div className="flex-shrink-0 bg-white/80 backdrop-blur border-b border-purple-100/50 px-5 py-4 rounded-tl-2xl">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-purple-500" />
+                <span className="text-sm font-semibold text-gray-700">
+                  {results.length} precision results
+                </span>
+                {diagnostics?.detected_disease && (
+                  <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    {diagnostics.detected_disease}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {diagnostics && (
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className={`p-1.5 rounded-full transition-colors ${showDiagnostics ? 'bg-purple-100 text-purple-600' : 'hover:bg-purple-100/50 text-gray-400'}`}
+                    title="Show search diagnostics"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+                )}
+                <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Diagnostics Panel */}
+            {showDiagnostics && diagnostics && (
+              <div className="mt-3 p-3 bg-purple-50/50 rounded-xl border border-purple-100/50 text-xs space-y-2 animate-appear">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-purple-700">Search Strategy:</span>
+                  <span className="text-gray-600">{diagnostics.strategy_used}</span>
+                </div>
+                {diagnostics.mesh_term && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-purple-700">MeSH Term:</span>
+                    <span className="text-gray-600">{diagnostics.mesh_term}</span>
+                  </div>
+                )}
+                {diagnostics.search_terms.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="font-semibold text-purple-700">Terms:</span>
+                    {diagnostics.search_terms.slice(0, 5).map((term, i) => (
+                      <span key={i} className="px-1.5 py-0.5 bg-white rounded text-gray-600 border border-purple-100">
+                        {term}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="text-gray-500 pt-1 border-t border-purple-100">
+                  {diagnostics.total_candidates} candidates → {diagnostics.filtered_results} filtered
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Results List */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {results.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                <FileText className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+                <p>No results found.</p>
+                {diagnostics && (
+                  <p className="text-xs mt-2 text-gray-400">
+                    {diagnostics.total_candidates} candidates checked, none matched criteria
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-purple-50/50">
+                {results.map((result, idx) => {
+                  const matchStyle = getMatchFieldStyle(result.match_field);
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-4 cursor-pointer transition-all ${
+                        selectedResult?.paper_title === result.paper_title && selectedResult?.section === result.section
+                          ? 'bg-purple-100/50 border-l-4 border-purple-500'
+                          : 'hover:bg-purple-50/50'
+                      }`}
+                      onClick={() => handleSelectResult(result)}
+                    >
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className={`text-xs font-semibold ${matchStyle.bg} ${matchStyle.text} px-2 py-0.5 rounded-full`}>
+                          {matchStyle.label}
+                        </span>
+                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                          {result.section}
+                        </span>
+                        <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          {result.relevance_score.toFixed(1)}%
+                        </span>
+                      </div>
+                      <h4 className="text-sm font-medium text-gray-800 line-clamp-2">{result.paper_title}</h4>
+                      {/* Matched terms */}
+                      {result.matched_terms.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {result.matched_terms.slice(0, 4).map((term, i) => (
+                            <span key={i} className="text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                              {term}
+                            </span>
+                          ))}
+                          {result.matched_terms.length > 4 && (
+                            <span className="text-[10px] text-gray-400">+{result.matched_terms.length - 4}</span>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2">{result.content}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-        <h4 className="text-sm font-semibold text-gray-800 mb-1.5 line-clamp-1 group-hover:text-purple-700 transition-colors">{result.paper_title}</h4>
-        <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{result.content}</p>
+
+        {/* Right: Preview Panel */}
+        {selectedResult && (
+          <div className="w-3/5 flex flex-col min-h-0">
+            {/* Preview Header */}
+            <div className="shrink-0 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100/50 px-6 py-4 rounded-tr-2xl">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {(() => {
+                  const matchStyle = getMatchFieldStyle(selectedResult.match_field);
+                  return (
+                    <span className={`text-xs font-semibold ${matchStyle.bg} ${matchStyle.text} px-2.5 py-1 rounded-full`}>
+                      {matchStyle.label}
+                    </span>
+                  );
+                })()}
+                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {selectedResult.section}
+                </span>
+                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  {selectedResult.relevance_score.toFixed(1)}% match
+                </span>
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                  {selectedResult.disease_relevance.toFixed(0)}% disease relevance
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 leading-snug">{selectedResult.paper_title}</h3>
+              {/* Match explanation */}
+              {selectedResult.explanation && (
+                <p className="text-xs text-gray-500 mt-2 italic">{selectedResult.explanation}</p>
+              )}
+            </div>
+
+            {/* Preview Content - Scrollable */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
+              {/* Matched Content */}
+              <div>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Matched Content
+                </h4>
+                <p className="text-sm text-gray-700 leading-relaxed">{selectedResult.content}</p>
+              </div>
+
+              {/* AI Summary */}
+              <div className="glass-2 rounded-xl p-4 border border-purple-100/50">
+                <h4 className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  AI Summary
+                </h4>
+                {isLoadingSummary ? (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Generating summary...</span>
+                  </div>
+                ) : aiSummary ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+                    {keyPoints.length > 0 && (
+                      <div className="pt-2 border-t border-purple-100/50">
+                        <h5 className="text-xs font-semibold text-purple-500 mb-2">Key Points</h5>
+                        <ul className="space-y-1.5">
+                          {keyPoints.map((point, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                              <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">
+                                {i + 1}
+                              </span>
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">No content available for summary.</p>
+                )}
+              </div>
+
+              {/* Q&A Section with Chat History */}
+              {chatMode && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Ask AI
+                  </h4>
+
+                  {/* Chat History */}
+                  {chatHistory.length > 0 && (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                      {chatHistory.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+                              msg.role === 'user'
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-sm'
+                                : 'glass-2 border border-blue-100/50 text-gray-700 rounded-bl-sm'
+                            }`}
+                          >
+                            <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {isAskingQuestion && (
+                        <div className="flex justify-start">
+                          <div className="glass-2 border border-blue-100/50 rounded-2xl rounded-bl-sm px-4 py-2.5">
+                            <div className="flex items-center gap-2 text-gray-500">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-sm">Thinking...</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+                  )}
+
+                  {/* Input */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatQuestion}
+                      onChange={(e) => setChatQuestion(e.target.value)}
+                      placeholder="Ask about this content..."
+                      className="flex-1 px-4 py-2.5 glass-3 border border-purple-200/50 rounded-xl text-sm focus:ring-2 focus:ring-purple-400/50"
+                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAskQuestion()}
+                      disabled={isAskingQuestion}
+                    />
+                    <button
+                      onClick={handleAskQuestion}
+                      disabled={isAskingQuestion || !chatQuestion.trim()}
+                      className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50"
+                    >
+                      {isAskingQuestion ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="shrink-0 bg-white border-t border-purple-100/50 px-6 py-4 rounded-br-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {/* AI Chat Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setChatMode(!chatMode)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${
+                      chatMode
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    AI Chat
+                  </button>
+                </div>
+
+                {/* View Full Paper */}
+                <button
+                  type="button"
+                  onClick={() => onSelectResult(selectedResult)}
+                  className="px-5 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-full text-sm font-semibold hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-2 shadow-lg"
+                >
+                  View Full Details
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    ))}
-  </div>
-);
+    </div>
+  );
+};
 
 interface ChatResultProps {
   response: ChatResponse;
@@ -492,7 +871,7 @@ const ChatResult: React.FC<ChatResultProps> = ({ response, onClose }) => (
 
 // Paper Detail Modal with Q&A and Similar Papers
 interface PaperDetailModalProps {
-  result: SearchResult;
+  result: PrecisionSearchResult;
   detail: PaperDetail | null;
   isLoading: boolean;
   onClose: () => void;
@@ -801,7 +1180,8 @@ const Glow: React.FC<{ variant?: 'top' | 'center'; className?: string }> = ({ va
 export const Hero: React.FC = () => {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [searchResults, setSearchResults] = useState<PrecisionSearchResult[] | null>(null);
+  const [searchDiagnostics, setSearchDiagnostics] = useState<SearchDiagnostics | null>(null);
   const [chatResponse, setChatResponse] = useState<ChatResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -812,7 +1192,7 @@ export const Hero: React.FC = () => {
   const [doiResult, setDoiResult] = useState<CrawlerPaper | null>(null);
 
   // Paper detail modal state
-  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  const [selectedResult, setSelectedResult] = useState<PrecisionSearchResult | null>(null);
   const [paperDetail, setPaperDetail] = useState<PaperDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
@@ -828,6 +1208,7 @@ export const Hero: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setSearchResults(null);
+    setSearchDiagnostics(null);
     setChatResponse(null);
     setPubmedResults(null);
     setDoiResult(null);
@@ -847,9 +1228,10 @@ export const Hero: React.FC = () => {
         const response = await api.ask(query);
         setChatResponse(response);
       } else {
-        // Local vector DB search
-        const response = await api.search(query);
+        // Local vector DB search with precision search
+        const response = await api.precisionSearch(query);
         setSearchResults(response.results);
+        setSearchDiagnostics(response.diagnostics);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -882,12 +1264,13 @@ export const Hero: React.FC = () => {
 
   const closeResults = () => {
     setSearchResults(null);
+    setSearchDiagnostics(null);
     setChatResponse(null);
     setPubmedResults(null);
     setDoiResult(null);
   };
 
-  const handleSelectResult = async (result: SearchResult) => {
+  const handleSelectResult = async (result: PrecisionSearchResult) => {
     setSelectedResult(result);
     setPaperDetail(null);
     setIsLoadingDetail(true);
@@ -1087,9 +1470,6 @@ export const Hero: React.FC = () => {
             </div>
           )}
 
-          {/* Search Results */}
-          {searchResults && <SearchResults results={searchResults} onClose={closeResults} onSelectResult={handleSelectResult} />}
-
           {/* Chat Response */}
           {chatResponse && <ChatResult response={chatResponse} onClose={closeResults} />}
         </div>
@@ -1110,6 +1490,7 @@ export const Hero: React.FC = () => {
     </section>
 
     {/* Modals rendered outside section to avoid overflow:hidden */}
+    {searchResults && <LocalDBResults results={searchResults} diagnostics={searchDiagnostics} onClose={closeResults} onSelectResult={handleSelectResult} />}
     {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
 
     {selectedResult && (

@@ -11,7 +11,6 @@ import re
 from collections import defaultdict
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 
 router = APIRouter()
 
@@ -256,7 +255,7 @@ async def get_knowledge_graph(
     Perfect for 3D universe-style visualization.
     """
     try:
-        from src.vector_store import create_vector_store
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
 
@@ -396,7 +395,7 @@ async def list_keywords(
 ):
     """List all extracted keywords with their occurrence counts."""
     try:
-        from src.vector_store import create_vector_store
+        from backend.app.core.vector_store import create_vector_store
 
         vector_store = create_vector_store(disease_domain=domain)
 
@@ -450,8 +449,8 @@ async def get_graph_stats(
 ):
     """Get statistics about the knowledge graph for a domain."""
     try:
-        from src.vector_store import create_vector_store
-        from src.config import PAPERS_DIR
+        from backend.app.core.vector_store import create_vector_store
+        from backend.app.core.config import PAPERS_DIR
 
         vector_store = create_vector_store(disease_domain=domain)
 
