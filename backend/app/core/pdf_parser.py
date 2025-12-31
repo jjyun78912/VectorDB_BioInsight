@@ -320,15 +320,34 @@ class BioPaperParser:
                     line_lower = line_text.lower()
 
                     # 섹션 헤더 조건:
-                    # 1. 키워드 포함
+                    # 1. 키워드 포함 OR numbered subsection pattern
                     # 2. 짧은 텍스트 (< 80자)
-                    # 3. 볼드이거나 큰 폰트
-                    if len(line_text) < 80 and (line_is_bold or line_font_size >= 10):
+                    # 3. 볼드이거나 큰 폰트 (>=9 for subsections, >=10 for main)
+                    if len(line_text) < 80 and (line_is_bold or line_font_size >= 9):
                         matched_section = self._match_section_keyword(line_lower)
+
+                        # Check if it's a numbered subsection (e.g., "3.1 Overview")
+                        subsection_match = re.match(r'^([\d.]+)\s+(.+)', line_text)
+                        subsection_num = subsection_match.group(1) if subsection_match else None
+                        subsection_title = line_text  # Keep original for display
+
+                        # If no keyword match but has numbered pattern, infer parent section
+                        if not matched_section and subsection_num and "." in subsection_num:
+                            # Get the main section number (e.g., "3" from "3.1")
+                            main_num = subsection_num.split(".")[0]
+                            # Try to find the parent section from previous headers
+                            for prev_h in reversed(headers):
+                                prev_num = prev_h.get("subsection_num", "")
+                                if prev_num == main_num:
+                                    matched_section = prev_h["section_name"]
+                                    break
+
                         if matched_section:
                             headers.append({
                                 "text": line_text,
                                 "section_name": matched_section,
+                                "subsection_num": subsection_num,
+                                "subsection_title": subsection_title,
                                 "page": page_num,
                                 "position": char_position,
                                 "font_size": line_font_size,
@@ -338,10 +357,13 @@ class BioPaperParser:
                     char_position += len(line_text) + 1
 
         # 중복 제거 (같은 섹션이 여러 번 감지될 수 있음)
+        # But allow different subsections (e.g., 3.1, 3.2, 3.3 are all under Results)
         seen_sections = set()
         unique_headers = []
         for h in headers:
-            key = (h["section_name"], h["page"])
+            # Use section_name + page + subsection_num as key to allow different subsections
+            subsec = h.get("subsection_num") or ""
+            key = (h["section_name"], h["page"], subsec)
             if key not in seen_sections:
                 seen_sections.add(key)
                 unique_headers.append(h)
@@ -686,11 +708,26 @@ class BioPaperParser:
         header_positions = []
         for header in headers:
             # 헤더 텍스트를 전체 텍스트에서 찾기
-            pattern = re.escape(header["text"])
+            # Use partial matching (first 25 chars) to handle special characters
+            search_text = header["text"][:25] if len(header["text"]) > 25 else header["text"]
+            pattern = re.escape(search_text)
             matches = list(re.finditer(pattern, full_text, re.IGNORECASE))
             if matches:
+                # Create display name: "Results - 3.1 Overview..." or just "Results"
+                subsection_title = header.get("subsection_title", "")
+                subsection_num = header.get("subsection_num", "")
+
+                # If it's a subsection, create a combined display name
+                if subsection_num and "." in subsection_num:
+                    # It's a subsection like "3.1", "2.2"
+                    display_name = f"{header['section_name']} ({subsection_num})"
+                else:
+                    display_name = header["section_name"]
+
                 header_positions.append({
-                    "name": header["section_name"],
+                    "name": display_name,
+                    "parent_section": header["section_name"],
+                    "subsection_num": subsection_num,
                     "start": matches[0].start(),
                     "end": matches[0].end(),
                     "original_text": header["text"]
