@@ -65,6 +65,7 @@ export interface Translations {
   categories: string;
   trendAnalysis: string;
   hotTopics: string;
+  researchTrends: string;
 
   // Language
   language: string;
@@ -166,6 +167,7 @@ export const translations: Record<Language, Translations> = {
     categories: 'Categories',
     trendAnalysis: 'Trend Analysis',
     hotTopics: 'Hot Topics',
+    researchTrends: 'Research Trends',
 
     // Language
     language: 'Language',
@@ -266,6 +268,7 @@ export const translations: Record<Language, Translations> = {
     categories: '카테고리',
     trendAnalysis: '트렌드 분석',
     hotTopics: '급상승 주제',
+    researchTrends: '연구 트렌드',
 
     // Language
     language: '언어',

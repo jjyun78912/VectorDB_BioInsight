@@ -826,8 +826,16 @@ function TrendingPapersTab({
   };
 
   const openPaper = (paper: CrawlerPaper) => {
+    console.log('Opening paper:', paper);
     const url = paper.url || (paper.doi ? `https://doi.org/${paper.doi}` : null);
-    if (url) window.open(url, '_blank');
+    console.log('URL:', url);
+    if (url) {
+      window.open(url, '_blank');
+    } else {
+      // Fallback: search on PubMed by title
+      const searchUrl = `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(paper.title)}`;
+      window.open(searchUrl, '_blank');
+    }
   };
 
   const handleAskQuestion = (paper: CrawlerPaper, question: string) => {
@@ -901,6 +909,13 @@ function PaperCard({
 }) {
   const [showQuestions, setShowQuestions] = useState(false);
 
+  const handleOpenClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('PaperCard handleOpenClick called');
+    onOpen();
+  };
+
   return (
     <div className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-all p-3">
       <div className="flex gap-3">
@@ -912,8 +927,8 @@ function PaperCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <h3
-            className="font-semibold text-gray-900 text-sm line-clamp-2 hover:text-purple-700 cursor-pointer"
-            onClick={onOpen}
+            className="font-semibold text-gray-900 text-sm line-clamp-2 hover:text-purple-700 cursor-pointer hover:underline"
+            onClick={handleOpenClick}
           >
             {paper.title}
           </h3>
@@ -942,7 +957,8 @@ function PaperCard({
           {/* Actions */}
           <div className="flex items-center gap-2 mt-2">
             <button
-              onClick={onOpen}
+              type="button"
+              onClick={handleOpenClick}
               className="text-xs px-2 py-1 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 flex items-center gap-1"
             >
               <ExternalLink className="w-3 h-3" />
