@@ -718,9 +718,16 @@ class BioPaperParser:
                 subsection_num = header.get("subsection_num", "")
 
                 # If it's a subsection, create a combined display name
-                if subsection_num and "." in subsection_num:
-                    # It's a subsection like "3.1", "2.2"
-                    display_name = f"{header['section_name']} ({subsection_num})"
+                # Only show subsection number if it's a real subsection (e.g., "3.1", "2.2")
+                # Don't show for main sections like "3" or "3."
+                if subsection_num:
+                    # Clean up: remove trailing dots
+                    clean_num = subsection_num.rstrip(".")
+                    # Check if it's a real subsection (has format like "3.1", "2.2")
+                    if "." in clean_num:
+                        display_name = f"{header['section_name']} ({clean_num})"
+                    else:
+                        display_name = header["section_name"]
                 else:
                     display_name = header["section_name"]
 
