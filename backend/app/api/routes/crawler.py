@@ -529,3 +529,147 @@ async def playwright_status():
         "playwright_available": PLAYWRIGHT_AVAILABLE,
         "message": "Ready for deep crawling" if PLAYWRIGHT_AVAILABLE else "Install with: pip install playwright && playwright install chromium"
     }
+
+
+# ==================== Full Text Retrieval with Chat Session ====================
+
+class FullTextRequest(BaseModel):
+    pmid: Optional[str] = Field(default=None, description="PubMed ID")
+    pmcid: Optional[str] = Field(default=None, description="PMC ID (e.g., PMC1234567)")
+    doi: Optional[str] = Field(default=None, description="DOI")
+    title: str = Field(..., description="Paper title for session")
+    url: Optional[str] = Field(default=None, description="Publisher URL for Playwright fallback")
+
+
+class FullTextSummary(BaseModel):
+    summary: str = ""
+    key_findings: List[str] = []
+    methodology: str = ""
+
+
+class FullTextResponse(BaseModel):
+    success: bool
+    session_id: Optional[str] = None
+    paper_title: str
+    full_text_preview: str = ""
+    full_text_length: int = 0
+    chunks_created: int = 0
+    source: str = ""  # "pmc", "europe_pmc", "unpaywall", "publisher"
+    ai_summary: Optional[FullTextSummary] = None
+    error: Optional[str] = None
+
+
+@router.post("/full-text", response_model=FullTextResponse, summary="Get full text and create chat session")
+async def get_full_text(request: FullTextRequest):
+    """
+    Fetch full text of a paper and create a chat session for Q&A.
+
+    Tries in order:
+    1. PMC Open Access API (if PMCID available)
+    2. Europe PMC (if PMID or PMCID available)
+    3. Playwright deep crawl (if URL provided and Playwright available)
+
+    Returns a session_id that can be used with the paper chat API.
+    """
+    from backend.app.core.paper_agent import create_paper_session, get_paper_agent
+    from backend.app.core.text_splitter import BioPaperSplitter
+
+    full_text = None
+    source = ""
+
+    try:
+        # Try all methods via fetch_full_text (PMC, Europe PMC, Unpaywall, PubMed links)
+        if request.pmid or request.pmcid or request.doi:
+            full_text = await crawler_agent.fetch_full_text(
+                pmid=request.pmid,
+                pmcid=request.pmcid,
+                doi=request.doi,
+                use_playwright=PLAYWRIGHT_AVAILABLE
+            )
+            if full_text:
+                # Determine source based on content/method used
+                if request.pmcid:
+                    source = "pmc"
+                elif "Unpaywall" in str(full_text)[:100]:
+                    source = "unpaywall"
+                else:
+                    source = "europe_pmc"
+
+        # Fallback: Try Playwright directly with URL
+        if not full_text and request.url and PLAYWRIGHT_AVAILABLE:
+            crawler = None
+            try:
+                crawler = PlaywrightDeepCrawler(headless=True)
+                result = await crawler.extract_full_text(request.url)
+                if result.success and result.full_text:
+                    full_text = result.full_text
+                    source = "publisher"
+            except Exception as e:
+                print(f"Playwright crawl failed: {e}")
+            finally:
+                if crawler:
+                    await crawler.close()
+
+        if not full_text:
+            return FullTextResponse(
+                success=False,
+                paper_title=request.title,
+                error="Full text not available. Paper may not be open access."
+            )
+
+        # Create paper chat session
+        session_id = create_paper_session(request.title)
+        agent = get_paper_agent(session_id)
+
+        if not agent:
+            return FullTextResponse(
+                success=False,
+                paper_title=request.title,
+                error="Failed to create chat session"
+            )
+
+        # Split full text into chunks
+        splitter = BioPaperSplitter()
+        chunks = splitter.split_text_simple(
+            full_text,
+            metadata={
+                "paper_title": request.title,
+                "pmid": request.pmid or "",
+                "pmcid": request.pmcid or "",
+                "doi": request.doi or "",
+                "source": source
+            }
+        )
+
+        # Add chunks to session
+        chunks_added = agent.add_chunks(chunks)
+
+        # Generate AI summary from the indexed content
+        ai_summary = None
+        try:
+            summary_result = agent.summarize()
+            ai_summary = FullTextSummary(
+                summary=summary_result.get("summary", ""),
+                key_findings=summary_result.get("key_findings", []),
+                methodology=summary_result.get("methodology", "")
+            )
+        except Exception as e:
+            print(f"Summary generation failed: {e}")
+
+        return FullTextResponse(
+            success=True,
+            session_id=session_id,
+            paper_title=request.title,
+            full_text_preview=full_text[:500] + "..." if len(full_text) > 500 else full_text,
+            full_text_length=len(full_text),
+            chunks_created=chunks_added,
+            source=source,
+            ai_summary=ai_summary
+        )
+
+    except Exception as e:
+        return FullTextResponse(
+            success=False,
+            paper_title=request.title,
+            error=str(e)
+        )

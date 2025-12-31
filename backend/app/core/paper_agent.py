@@ -288,6 +288,99 @@ Answer (remember to cite sources using [1], [2], etc.):""")
 
         return max(0.0, min(1.0, confidence))
 
+    def summarize(self) -> dict:
+        """
+        Generate AI summary of the paper using the indexed chunks.
+
+        Returns:
+            dict with summary, key_findings, methodology
+        """
+        from langchain_core.prompts import ChatPromptTemplate
+
+        # Get diverse chunks from different sections
+        intro_results = self.vector_store.search("introduction background purpose", top_k=2)
+        method_results = self.vector_store.search("methods methodology approach", top_k=2)
+        result_results = self.vector_store.search("results findings outcomes", top_k=3)
+        conclusion_results = self.vector_store.search("conclusion discussion implications", top_k=2)
+
+        # Combine unique chunks
+        all_chunks = []
+        seen_content = set()
+        for r in intro_results + method_results + result_results + conclusion_results:
+            content_key = r.content[:100]
+            if content_key not in seen_content:
+                seen_content.add(content_key)
+                section = r.metadata.get("section", "Unknown")
+                all_chunks.append(f"[{section}] {r.content}")
+
+        if not all_chunks:
+            return {
+                "summary": "Unable to generate summary - no content indexed.",
+                "key_findings": [],
+                "methodology": ""
+            }
+
+        context = "\n\n---\n\n".join(all_chunks[:8])  # Limit to 8 chunks
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a research paper summarizer. Analyze the paper content and provide a structured summary.
+
+Output format (JSON):
+{
+  "summary": "2-3 sentence overview of what the paper is about and its main contribution",
+  "key_findings": ["finding 1", "finding 2", "finding 3"],
+  "methodology": "Brief description of the research approach/methods used"
+}
+
+Be concise and focus on the most important aspects."""),
+            ("human", """Paper: {title}
+
+Content from paper:
+{context}
+
+Provide a structured summary in JSON format:""")
+        ])
+
+        chain = prompt | self.llm
+
+        try:
+            result = chain.invoke({
+                "title": self.paper_title,
+                "context": context
+            })
+
+            # Parse JSON from response
+            import json
+            response_text = result.content.strip()
+
+            # Try to extract JSON from response
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
+
+            try:
+                parsed = json.loads(response_text)
+                return {
+                    "summary": parsed.get("summary", ""),
+                    "key_findings": parsed.get("key_findings", []),
+                    "methodology": parsed.get("methodology", "")
+                }
+            except json.JSONDecodeError:
+                # Fallback: return raw response as summary
+                return {
+                    "summary": response_text[:500],
+                    "key_findings": [],
+                    "methodology": ""
+                }
+
+        except Exception as e:
+            return {
+                "summary": f"Error generating summary: {str(e)}",
+                "key_findings": [],
+                "methodology": ""
+            }
+
     def get_session_info(self) -> dict:
         """Get information about this session."""
         return {

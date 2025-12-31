@@ -50,34 +50,123 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
   // State for key points
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
 
-  // Generate AI summary when paper is selected
+  // Full text retrieval state
+  const [fullTextSessionId, setFullTextSessionId] = useState<string | null>(null);
+  const [isLoadingFullText, setIsLoadingFullText] = useState(false);
+  const [fullTextError, setFullTextError] = useState<string | null>(null);
+  const [fullTextMode, setFullTextMode] = useState(false);  // true = using full text, false = using abstract
+  const [fullTextSummary, setFullTextSummary] = useState<{
+    summary: string;
+    key_findings: string[];
+    methodology: string;
+  } | null>(null);
+
+  // Generate AI summary when paper is selected - automatically try full text first
   const handleSelectPaper = async (paper: CrawlerPaper) => {
     setSelectedPaper(paper);
     setAiSummary(null);
     setKeyPoints([]);
-    setChatHistory([]);  // Clear chat history when selecting new paper
+    setChatHistory([]);
     setChatMode(false);
     setChatQuestion('');
+    // Reset full text state
+    setFullTextSessionId(null);
+    setFullTextError(null);
+    setFullTextMode(false);
+    setFullTextSummary(null);
+    setIsLoadingSummary(true);
 
+    // Try to get full text first (automatic crawling)
+    try {
+      const fullTextResult = await api.getFullText({
+        title: paper.title,
+        pmid: paper.pmid,
+        pmcid: paper.pmcid,
+        doi: paper.doi,
+        url: paper.url
+      });
+
+      if (fullTextResult.success && fullTextResult.session_id) {
+        // Full text available - use full text summary
+        setFullTextSessionId(fullTextResult.session_id);
+        setFullTextMode(true);
+
+        if (fullTextResult.ai_summary) {
+          setFullTextSummary(fullTextResult.ai_summary);
+          setAiSummary(fullTextResult.ai_summary.summary);
+          setKeyPoints(fullTextResult.ai_summary.key_findings);
+        }
+        setIsLoadingSummary(false);
+        return;
+      }
+    } catch (err) {
+      console.log('Full text not available, falling back to abstract');
+    }
+
+    // Fallback: use abstract-based summary
     if (paper.abstract) {
-      setIsLoadingSummary(true);
       try {
-        // Use the new summarize-abstract API
         const response = await api.summarizeAbstract(paper.title, paper.abstract);
         setAiSummary(response.summary);
         setKeyPoints(response.key_points || []);
       } catch (err) {
         setAiSummary('Unable to generate summary.');
-      } finally {
-        setIsLoadingSummary(false);
       }
     }
+    setIsLoadingSummary(false);
   };
 
   // Auto scroll to bottom when chat history updates
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
+
+  // Fetch full text and create chat session
+  const handleGetFullText = async () => {
+    if (!selectedPaper) return;
+
+    setIsLoadingFullText(true);
+    setFullTextError(null);
+
+    try {
+      const result = await api.getFullText({
+        title: selectedPaper.title,
+        pmid: selectedPaper.pmid,
+        pmcid: selectedPaper.pmcid,
+        doi: selectedPaper.doi,
+        url: selectedPaper.url
+      });
+
+      if (result.success && result.session_id) {
+        setFullTextSessionId(result.session_id);
+        setFullTextMode(true);
+        setChatMode(true);  // Auto-enable chat mode
+        setChatHistory([]);  // Clear abstract-based chat history
+
+        // Store AI summary if available
+        if (result.ai_summary) {
+          setFullTextSummary(result.ai_summary);
+          setAiSummary(result.ai_summary.summary);  // Update the main summary display
+          setKeyPoints(result.ai_summary.key_findings);  // Update key points
+        }
+
+        // Add system message about full text availability
+        const systemMessage: ChatMessage = {
+          id: `msg-${Date.now()}`,
+          role: 'assistant',
+          content: `✅ Full text loaded! (${result.chunks_created} sections from ${result.source.toUpperCase()}). Ask detailed questions about the paper.`,
+          timestamp: new Date(),
+        };
+        setChatHistory([systemMessage]);
+      } else {
+        setFullTextError(result.error || 'Full text not available');
+      }
+    } catch (err) {
+      setFullTextError(err instanceof Error ? err.message : 'Failed to get full text');
+    } finally {
+      setIsLoadingFullText(false);
+    }
+  };
 
   // Handle AI Q&A with chat history
   const handleAskQuestion = async () => {
@@ -96,17 +185,31 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
     setIsAskingQuestion(true);
 
     try {
-      // Use the new ask-abstract API
-      const response = await api.askAbstract(
-        selectedPaper.title,
-        selectedPaper.abstract || '',
-        currentQuestion
-      );
+      let answerContent: string;
+
+      if (fullTextMode && fullTextSessionId) {
+        // Use paper agent API with full text session
+        const response = await api.askAgent(fullTextSessionId, currentQuestion);
+        // Format answer with citations if available
+        if (response.sources && response.sources.length > 0) {
+          answerContent = response.answer;
+        } else {
+          answerContent = response.answer;
+        }
+      } else {
+        // Use abstract-only API
+        const response = await api.askAbstract(
+          selectedPaper.title,
+          selectedPaper.abstract || '',
+          currentQuestion
+        );
+        answerContent = response.answer;
+      }
 
       const assistantMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: response.answer,
+        content: answerContent,
         timestamp: new Date(),
       };
 
@@ -252,12 +355,22 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
             <div className="w-3/5 flex flex-col min-h-0">
               {/* Preview Header */}
               <div className="shrink-0 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100/50 px-6 py-4 rounded-tr-2xl">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
                   <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-full">
                     {selectedPaper.source === 'pubmed' ? 'PubMed' : selectedPaper.source}
                   </span>
                   {selectedPaper.pmid && (
                     <span className="text-xs text-gray-500">PMID: {selectedPaper.pmid}</span>
+                  )}
+                  {selectedPaper.pmcid ? (
+                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                      Open Access
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      Abstract Only
+                    </span>
                   )}
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 leading-snug">{selectedPaper.title}</h3>
@@ -286,15 +399,26 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                   <h4 className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5" />
                     AI Summary
+                    {fullTextMode && (
+                      <span className="ml-auto px-2 py-0.5 text-[10px] font-semibold bg-emerald-100 text-emerald-700 rounded-full">
+                        Full Text
+                      </span>
+                    )}
                   </h4>
                   {isLoadingSummary ? (
                     <div className="flex items-center gap-2 text-gray-500">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Generating summary...</span>
+                      <span className="text-sm">Fetching full text & generating AI summary...</span>
                     </div>
                   ) : aiSummary ? (
                     <div className="space-y-3">
                       <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+                      {fullTextSummary?.methodology && (
+                        <div className="pt-2 border-t border-purple-100/50">
+                          <h5 className="text-xs font-semibold text-blue-500 mb-1">Methodology</h5>
+                          <p className="text-xs text-gray-600">{fullTextSummary.methodology}</p>
+                        </div>
+                      )}
                       {keyPoints.length > 0 && (
                         <div className="pt-2 border-t border-purple-100/50">
                           <h5 className="text-xs font-semibold text-purple-500 mb-2">Key Points</h5>
@@ -409,8 +533,21 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                       }`}
                     >
                       <MessageSquare className="w-4 h-4" />
-                      AI Chat
+                      {fullTextMode ? 'Full Text Chat' : 'AI Chat'}
                     </button>
+
+                    {/* Full Text Status Indicator */}
+                    {fullTextMode ? (
+                      <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        Full Text Loaded
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5" />
+                        Abstract Only
+                      </span>
+                    )}
 
                     {/* Galaxy View */}
                     {selectedPaper.pmid && (

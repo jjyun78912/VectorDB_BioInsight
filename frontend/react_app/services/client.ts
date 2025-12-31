@@ -593,6 +593,42 @@ class BioInsightAPI {
     return response.json();
   }
 
+  /**
+   * Get full text of a paper and create a chat session
+   * Tries PMC (free) first, then Playwright for publisher pages
+   */
+  async getFullText(params: {
+    title: string;
+    pmid?: string;
+    pmcid?: string;
+    doi?: string;
+    url?: string;
+  }): Promise<{
+    success: boolean;
+    session_id?: string;
+    paper_title: string;
+    full_text_preview: string;
+    full_text_length: number;
+    chunks_created: number;
+    source: string;
+    ai_summary?: {
+      summary: string;
+      key_findings: string[];
+      methodology: string;
+    };
+    error?: string;
+  }> {
+    const response = await fetch(`${this.baseUrl}/crawler/full-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) {
+      throw new Error(`Full text fetch failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
   // ============== Abstract-based AI API ==============
 
   /**

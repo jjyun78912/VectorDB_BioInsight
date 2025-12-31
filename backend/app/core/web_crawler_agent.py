@@ -939,6 +939,331 @@ class WebCrawlerAgent:
             print(f"Fallback similar search failed: {e}")
             return []
 
+    # ==================== Full Text Retrieval ====================
+
+    async def fetch_full_text(self, pmid: str = None, pmcid: str = None, doi: str = None, use_playwright: bool = True) -> Optional[str]:
+        """
+        Fetch full text content from various sources.
+
+        Tries multiple methods in order:
+        1. PMC OA API for open access papers (if pmcid available)
+        2. Europe PMC for full text XML
+        3. Unpaywall API (finds legal free versions by DOI)
+        4. PubMed full text links → Publisher site via Playwright
+
+        Args:
+            pmid: PubMed ID
+            pmcid: PMC ID (e.g., "PMC1234567")
+            doi: DOI (for fallback lookup)
+            use_playwright: Whether to try Playwright for publisher sites
+
+        Returns:
+            Full text string or None if not available
+        """
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            # Method 1: Try PMC OA API (for open access papers)
+            if pmcid:
+                full_text = await self._fetch_from_pmc_oa(session, pmcid)
+                if full_text:
+                    return full_text
+
+            # Method 2: Try Europe PMC
+            if pmid or pmcid:
+                full_text = await self._fetch_from_europe_pmc(session, pmid, pmcid)
+                if full_text:
+                    return full_text
+
+            # Method 3: Try Unpaywall API (finds legal free versions)
+            if doi:
+                full_text = await self._fetch_from_unpaywall(session, doi)
+                if full_text:
+                    return full_text
+
+            # Method 4: If we only have DOI, try to get PMCID first
+            if doi and not pmcid:
+                paper = await self.fetch_by_doi(doi)
+                if paper and paper.pmcid:
+                    return await self.fetch_full_text(pmcid=paper.pmcid, use_playwright=False)
+
+            # Method 5: Try Playwright to crawl publisher site via PubMed links
+            if use_playwright and pmid:
+                full_text = await self._fetch_via_pubmed_links(pmid)
+                if full_text:
+                    return full_text
+
+            return None
+
+    async def _fetch_from_pmc_oa(self, session: aiohttp.ClientSession, pmcid: str) -> Optional[str]:
+        """Fetch full text from PMC Open Access subset."""
+        try:
+            # Clean PMCID format
+            if not pmcid.startswith("PMC"):
+                pmcid = f"PMC{pmcid}"
+
+            # Get OA file location
+            params = {"id": pmcid, "format": "tgz"}
+            await self._rate_limit("pubmed")
+
+            async with session.get(PMC_OA_URL, params=params) as response:
+                if response.status != 200:
+                    return None
+
+                xml_text = await response.text()
+                root = ET.fromstring(xml_text)
+
+                # Check if full text available
+                record = root.find(".//record")
+                if record is None:
+                    return None
+
+                # Get full text XML URL
+                link = record.find(".//link[@format='xml']")
+                if link is None:
+                    link = record.find(".//link[@format='pdf']")
+
+                if link is None:
+                    return None
+
+                xml_url = link.get("href")
+                if not xml_url:
+                    return None
+
+                # Fetch the full text XML
+                async with session.get(xml_url) as xml_response:
+                    if xml_response.status == 200:
+                        content_type = xml_response.content_type
+                        if 'xml' in content_type:
+                            xml_content = await xml_response.text()
+                            return self._parse_pmc_xml(xml_content)
+
+            return None
+
+        except Exception as e:
+            print(f"PMC OA fetch error: {e}")
+            return None
+
+    async def _fetch_from_europe_pmc(self, session: aiohttp.ClientSession, pmid: str = None, pmcid: str = None) -> Optional[str]:
+        """Fetch full text from Europe PMC."""
+        try:
+            # Build query
+            if pmcid:
+                source = "PMC"
+                ext_id = pmcid.replace("PMC", "")
+            elif pmid:
+                source = "MED"
+                ext_id = pmid
+            else:
+                return None
+
+            url = f"{EUROPE_PMC_API}/{source}/{ext_id}/fullTextXML"
+
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return None
+
+                xml_text = await response.text()
+                return self._parse_pmc_xml(xml_text)
+
+        except Exception as e:
+            print(f"Europe PMC fetch error: {e}")
+            return None
+
+    def _parse_pmc_xml(self, xml_text: str) -> str:
+        """Parse PMC/JATS XML and extract text content."""
+        try:
+            root = ET.fromstring(xml_text)
+
+            sections = []
+
+            # Extract title
+            title = root.find(".//article-title")
+            if title is not None:
+                title_text = "".join(title.itertext()).strip()
+                if title_text:
+                    sections.append(f"# {title_text}\n")
+
+            # Extract abstract
+            abstract = root.find(".//abstract")
+            if abstract is not None:
+                abstract_text = "".join(abstract.itertext()).strip()
+                if abstract_text:
+                    sections.append(f"## Abstract\n{abstract_text}\n")
+
+            # Extract body sections
+            body = root.find(".//body")
+            if body is not None:
+                for sec in body.findall(".//sec"):
+                    section_title = sec.find("title")
+                    title_text = "".join(section_title.itertext()).strip() if section_title is not None else ""
+
+                    # Get paragraphs
+                    paragraphs = []
+                    for p in sec.findall(".//p"):
+                        p_text = "".join(p.itertext()).strip()
+                        if p_text:
+                            paragraphs.append(p_text)
+
+                    if paragraphs:
+                        if title_text:
+                            sections.append(f"## {title_text}\n" + "\n\n".join(paragraphs))
+                        else:
+                            sections.append("\n\n".join(paragraphs))
+
+            # Also get any remaining paragraphs in body not in sections
+            if body is not None:
+                for p in body.findall("./p"):
+                    p_text = "".join(p.itertext()).strip()
+                    if p_text:
+                        sections.append(p_text)
+
+            full_text = "\n\n".join(sections)
+
+            # Clean up whitespace
+            import re
+            full_text = re.sub(r'\n{3,}', '\n\n', full_text)
+            full_text = re.sub(r' {2,}', ' ', full_text)
+
+            return full_text.strip() if len(full_text) > 100 else None
+
+        except ET.ParseError as e:
+            print(f"XML parse error: {e}")
+            return None
+
+    async def _fetch_from_unpaywall(self, session: aiohttp.ClientSession, doi: str) -> Optional[str]:
+        """
+        Fetch full text using Unpaywall API.
+        Unpaywall finds legal free versions of papers.
+        """
+        try:
+            # Unpaywall API requires an email
+            url = f"https://api.unpaywall.org/v2/{doi}?email=bioinsight@example.com"
+
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return None
+
+                data = await response.json()
+
+                # Check for open access version
+                best_oa = data.get("best_oa_location")
+                if not best_oa:
+                    return None
+
+                # Get the PDF or HTML URL
+                oa_url = best_oa.get("url_for_pdf") or best_oa.get("url")
+                if not oa_url:
+                    return None
+
+                # If it's a PMC URL, extract via Europe PMC
+                if "ncbi.nlm.nih.gov/pmc" in oa_url:
+                    pmcid_match = re.search(r"PMC(\d+)", oa_url)
+                    if pmcid_match:
+                        return await self._fetch_from_europe_pmc(session, None, f"PMC{pmcid_match.group(1)}")
+
+                # If it's a direct PDF/HTML, we need Playwright to extract
+                # Return the URL for now, the caller can use Playwright
+                print(f"Unpaywall found OA version: {oa_url}")
+
+                # Try to fetch if it's XML/HTML
+                if not oa_url.endswith('.pdf'):
+                    try:
+                        async with session.get(oa_url) as oa_response:
+                            if oa_response.status == 200:
+                                content_type = oa_response.headers.get('content-type', '')
+                                if 'xml' in content_type:
+                                    xml_text = await oa_response.text()
+                                    return self._parse_pmc_xml(xml_text)
+                    except:
+                        pass
+
+                return None
+
+        except Exception as e:
+            print(f"Unpaywall fetch error: {e}")
+            return None
+
+    async def _fetch_via_pubmed_links(self, pmid: str) -> Optional[str]:
+        """
+        Fetch full text by following PubMed's 'Full text links' to publisher site.
+        Uses Playwright to navigate and extract content.
+        """
+        try:
+            # Check if Playwright is available
+            from .playwright_crawler import PlaywrightDeepCrawler, PLAYWRIGHT_AVAILABLE
+            if not PLAYWRIGHT_AVAILABLE:
+                return None
+
+            crawler = PlaywrightDeepCrawler(headless=True)
+            try:
+                # First, get the full text link from PubMed page
+                pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+                publisher_url = await self._get_pubmed_fulltext_link(crawler, pubmed_url)
+
+                if not publisher_url:
+                    return None
+
+                print(f"Found publisher link: {publisher_url}")
+
+                # Extract full text from publisher site
+                result = await crawler.extract_full_text(publisher_url)
+
+                if result.success and result.full_text:
+                    # Clean up the text
+                    text = result.full_text.strip()
+                    if len(text) > 500:  # Minimum viable full text
+                        return text
+
+                return None
+
+            finally:
+                await crawler.close()
+
+        except ImportError:
+            return None
+        except Exception as e:
+            print(f"PubMed links fetch error: {e}")
+            return None
+
+    async def _get_pubmed_fulltext_link(self, crawler, pubmed_url: str) -> Optional[str]:
+        """Extract full text link from PubMed page."""
+        try:
+            await crawler._ensure_browser()
+            page = await crawler._context.new_page()
+
+            try:
+                await page.goto(pubmed_url, wait_until="domcontentloaded", timeout=30000)
+
+                # Wait for the full text links section
+                await page.wait_for_selector("#full-text-links-list, .full-text-links", timeout=10000)
+
+                # Find the first full text link (usually the best one)
+                # PubMed shows links like "Free PMC article", "Free article", etc.
+                link_selectors = [
+                    "#full-text-links-list a.link-item",
+                    ".full-text-links a",
+                    "a[data-ga-action='full_text']",
+                    ".linkout-category-links a",
+                ]
+
+                for selector in link_selectors:
+                    link = await page.query_selector(selector)
+                    if link:
+                        href = await link.get_attribute("href")
+                        if href:
+                            # Make absolute URL
+                            if href.startswith("/"):
+                                href = f"https://pubmed.ncbi.nlm.nih.gov{href}"
+                            return href
+
+                return None
+
+            finally:
+                await page.close()
+
+        except Exception as e:
+            print(f"Error getting PubMed full text link: {e}")
+            return None
+
     # ==================== Indexing Integration ====================
 
     def paper_to_chunks(self, paper: FetchedPaper) -> List[TextChunk]:
