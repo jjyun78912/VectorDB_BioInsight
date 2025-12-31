@@ -147,11 +147,23 @@ export const ChatWithPDF: React.FC<ChatWithPDFProps> = ({ isOpen, onClose }) => 
         highlightedCitation: null,
       };
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
+    } catch (err: any) {
+      let errorContent = 'Sorry, I encountered an error processing your question. Please try again.';
+
+      // Check for session expiry (404 error)
+      if (err?.message?.includes('404') || err?.message?.includes('not found')) {
+        errorContent = 'Session expired. Please re-upload the PDF to continue chatting.';
+        // Remove the expired paper from the list
+        setUploadedPapers(prev => prev.filter(p => p.id !== selectedPaper?.id));
+        setSelectedPaper(null);
+      } else if (err?.message?.includes('500')) {
+        errorContent = 'Server error occurred. Please try again in a moment.';
+      }
+
       const errorMessage: Message = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
-        content: 'Sorry, I encountered an error processing your question. Please try again.',
+        content: errorContent,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);

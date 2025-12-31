@@ -479,7 +479,9 @@ class BioInsightAPI {
     });
 
     if (!response.ok) {
-      throw new Error(`Ask failed: ${response.statusText}`);
+      // Include status code in error message for better error handling
+      const errorDetail = await response.text().catch(() => response.statusText);
+      throw new Error(`Ask failed (${response.status}): ${errorDetail}`);
     }
     return response.json();
   }
