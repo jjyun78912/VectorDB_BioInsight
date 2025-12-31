@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Library, FolderPlus, Search, Filter, Grid3X3, List, Star,
   MoreVertical, Trash2, FolderOpen, FileText, Calendar, Tag,
-  X, Plus, Edit2, Check, ChevronRight, Download, BookOpen
+  X, Plus, Edit2, Check, ChevronRight, Download, BookOpen, ExternalLink
 } from 'lucide-react';
 import api from '../services/client';
 
@@ -17,6 +17,8 @@ interface Paper {
   isStarred: boolean;
   tags: string[];
   collectionId?: string;
+  doi?: string;
+  pmid?: string;
 }
 
 interface Collection {
@@ -79,6 +81,7 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({ isOpen, onClos
             addedAt: new Date(),
             isStarred: false,
             tags: [domain],
+            doi: p.doi,
           }));
           allPapers.push(...domainPapers);
         } catch (e) {
@@ -153,6 +156,19 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({ isOpen, onClos
   // Delete paper
   const deletePaper = (id: string) => {
     setPapers(papers.filter(p => p.id !== id));
+  };
+
+  // Open paper in new tab
+  const openPaper = (paper: Paper) => {
+    if (paper.doi) {
+      window.open(`https://doi.org/${paper.doi}`, '_blank');
+    } else if (paper.pmid) {
+      window.open(`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`, '_blank');
+    } else {
+      // Fallback: search on PubMed by title
+      const searchUrl = `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(paper.title)}`;
+      window.open(searchUrl, '_blank');
+    }
   };
 
   if (!isOpen) return null;
@@ -337,11 +353,25 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({ isOpen, onClos
                     </div>
                   </div>
 
-                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm">{paper.title}</h3>
+                  <h3
+                    className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm cursor-pointer hover:text-purple-600 transition-colors"
+                    onClick={() => openPaper(paper)}
+                  >
+                    {paper.title}
+                  </h3>
 
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-auto">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{paper.year}</span>
+                  <div className="flex items-center justify-between mt-auto">
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{paper.year}</span>
+                    </div>
+                    <button
+                      onClick={() => openPaper(paper)}
+                      className="p-1.5 text-purple-500 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Open paper"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -358,7 +388,12 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({ isOpen, onClos
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 truncate">{paper.title}</h3>
+                    <h3
+                      className="font-medium text-gray-900 truncate cursor-pointer hover:text-purple-600 transition-colors"
+                      onClick={() => openPaper(paper)}
+                    >
+                      {paper.title}
+                    </h3>
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-gray-500">{paper.year}</span>
                       {paper.tags.slice(0, 2).map((tag) => (
@@ -370,6 +405,13 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({ isOpen, onClos
                   </div>
 
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openPaper(paper)}
+                      className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition-colors"
+                      title="Open paper"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => toggleStar(paper.id)}
                       className={`p-2 rounded-lg transition-colors ${paper.isStarred ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}

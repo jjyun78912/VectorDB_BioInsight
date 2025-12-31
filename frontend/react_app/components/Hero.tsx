@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Flame } from 'lucide-react';
+import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Flame, Plus, FolderPlus } from 'lucide-react';
 import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import ResearchTrends from './ResearchTrends';
 import { useLanguage } from '../contexts/LanguageContext';
+import type { ReviewPaper } from '../App';
 
 interface PaperDetail {
   title: string;
@@ -23,6 +24,8 @@ interface PubMedResultsProps {
   papers: CrawlerPaper[];
   onClose: () => void;
   isLoading?: boolean;
+  onAddToReview?: (paper: ReviewPaper) => void;
+  onAddAllToReview?: (papers: ReviewPaper[]) => void;
 }
 
 // Chat message interface for history
@@ -33,7 +36,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading }) => {
+const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading, onAddToReview, onAddAllToReview }) => {
   const [selectedPaper, setSelectedPaper] = useState<CrawlerPaper | null>(null);
   const [showGalaxy, setShowGalaxy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -142,9 +145,33 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                   {isLoading ? 'Searching...' : `${papers.length} papers`}
                 </span>
               </div>
-              <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="flex items-center gap-2">
+                {onAddAllToReview && papers.length > 0 && !isLoading && (
+                  <button
+                    onClick={() => {
+                      const reviewPapers: ReviewPaper[] = papers.map(p => ({
+                        id: p.pmid || p.id,
+                        title: p.title,
+                        authors: p.authors,
+                        year: p.year,
+                        journal: p.journal,
+                        abstract: p.abstract,
+                        doi: p.doi,
+                        pmid: p.pmid,
+                        relevance: p.trend_score
+                      }));
+                      onAddAllToReview(reviewPapers);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-xs font-medium rounded-lg hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-1.5"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                    Add All to Review
+                  </button>
+                )}
+                <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
             </div>
 
             {/* Paper List */}
@@ -164,7 +191,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                   {papers.map((paper) => (
                     <div
                       key={paper.id}
-                      className={`p-4 cursor-pointer transition-all ${
+                      className={`group p-4 cursor-pointer transition-all ${
                         selectedPaper?.id === paper.id
                           ? 'bg-purple-100/50 border-l-4 border-purple-500'
                           : 'hover:bg-purple-50/50'
@@ -184,11 +211,35 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                         )}
                       </div>
                       <h4 className="text-sm font-medium text-gray-800 line-clamp-2">{paper.title}</h4>
-                      {paper.authors.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-1">
-                          {paper.authors.slice(0, 2).join(', ')}{paper.authors.length > 2 && ' et al.'}
-                        </p>
-                      )}
+                      <div className="flex items-center justify-between mt-1">
+                        {paper.authors.length > 0 && (
+                          <p className="text-xs text-gray-500 line-clamp-1 flex-1">
+                            {paper.authors.slice(0, 2).join(', ')}{paper.authors.length > 2 && ' et al.'}
+                          </p>
+                        )}
+                        {onAddToReview && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddToReview({
+                                id: paper.pmid || paper.id,
+                                title: paper.title,
+                                authors: paper.authors,
+                                year: paper.year,
+                                journal: paper.journal,
+                                abstract: paper.abstract,
+                                doi: paper.doi,
+                                pmid: paper.pmid,
+                                relevance: paper.trend_score
+                              });
+                            }}
+                            className="ml-2 p-1.5 text-purple-500 hover:bg-purple-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            title="Add to Literature Review"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1179,7 +1230,19 @@ const Glow: React.FC<{ variant?: 'top' | 'center'; className?: string }> = ({ va
   </div>
 );
 
-export const Hero: React.FC = () => {
+interface HeroProps {
+  onAddToReview?: (paper: ReviewPaper) => void;
+  onAddMultipleToReview?: (papers: ReviewPaper[]) => void;
+  reviewPapersCount?: number;
+  onOpenReview?: () => void;
+}
+
+export const Hero: React.FC<HeroProps> = ({
+  onAddToReview,
+  onAddMultipleToReview,
+  reviewPapersCount = 0,
+  onOpenReview
+}) => {
   const { t, language } = useLanguage();
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -1528,7 +1591,15 @@ export const Hero: React.FC = () => {
 
     {/* Modals rendered outside section to avoid overflow:hidden */}
     {searchResults && <LocalDBResults results={searchResults} diagnostics={searchDiagnostics} onClose={closeResults} onSelectResult={handleSelectResult} />}
-    {pubmedResults && <PubMedResults papers={pubmedResults} onClose={closeResults} isLoading={isLoading} />}
+    {pubmedResults && (
+        <PubMedResults
+          papers={pubmedResults}
+          onClose={closeResults}
+          isLoading={isLoading}
+          onAddToReview={onAddToReview}
+          onAddAllToReview={onAddMultipleToReview}
+        />
+      )}
 
     {selectedResult && (
       <PaperDetailModal

@@ -16,17 +16,71 @@ import {
   Library, FileSearch, Zap
 } from 'lucide-react';
 
+// Paper type for Literature Review
+export interface ReviewPaper {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number;
+  journal?: string;
+  abstract?: string;
+  doi?: string;
+  pmid?: string;
+  relevance?: number;
+}
+
 const AppContent: React.FC = () => {
   const [showGraph, setShowGraph] = useState(false);
   const [showLiteratureReview, setShowLiteratureReview] = useState(false);
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
 
+  // Papers for Literature Review (collected from Hero search)
+  const [reviewPapers, setReviewPapers] = useState<ReviewPaper[]>([]);
+
+  // Add paper to Literature Review
+  const addToReview = (paper: ReviewPaper) => {
+    setReviewPapers(prev => {
+      // Avoid duplicates
+      if (prev.some(p => p.id === paper.id || p.title === paper.title)) {
+        return prev;
+      }
+      return [...prev, paper];
+    });
+  };
+
+  // Add multiple papers to Literature Review
+  const addMultipleToReview = (papers: ReviewPaper[]) => {
+    setReviewPapers(prev => {
+      const newPapers = papers.filter(p =>
+        !prev.some(existing => existing.id === p.id || existing.title === p.title)
+      );
+      return [...prev, ...newPapers];
+    });
+    // Open Literature Review after adding
+    setShowLiteratureReview(true);
+  };
+
+  // Remove paper from review
+  const removeFromReview = (paperId: string) => {
+    setReviewPapers(prev => prev.filter(p => p.id !== paperId));
+  };
+
+  // Clear all papers from review
+  const clearReview = () => {
+    setReviewPapers([]);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-100 text-gray-900 selection:bg-purple-200">
       <Navbar />
       <main>
-        <Hero />
+        <Hero
+          onAddToReview={addToReview}
+          onAddMultipleToReview={addMultipleToReview}
+          reviewPapersCount={reviewPapers.length}
+          onOpenReview={() => setShowLiteratureReview(true)}
+        />
         <TrendingPapers />
         <FeatureSuite />
 
@@ -174,7 +228,13 @@ const AppContent: React.FC = () => {
 
       {/* Modals */}
       <KnowledgeGraph isOpen={showGraph} onClose={() => setShowGraph(false)} />
-      <LiteratureReview isOpen={showLiteratureReview} onClose={() => setShowLiteratureReview(false)} />
+      <LiteratureReview
+        isOpen={showLiteratureReview}
+        onClose={() => setShowLiteratureReview(false)}
+        papers={reviewPapers}
+        onRemovePaper={removeFromReview}
+        onClearAll={clearReview}
+      />
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
     </div>
