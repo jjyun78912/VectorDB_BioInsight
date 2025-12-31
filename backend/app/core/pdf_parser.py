@@ -87,7 +87,50 @@ class BioPaperParser:
         "study population": "Methods",
         "participants": "Methods",
         "trial design": "Methods",
-        "treatment": "Methods",
+        "treatment": "Treatment",
+        # Bio/Medical specific sections
+        "epidemiology": "Epidemiology",
+        "etiology": "Etiology",
+        "pathophysiology": "Pathophysiology",
+        "pathogenesis": "Pathogenesis",
+        "diagnosis": "Diagnosis",
+        "diagnostic": "Diagnosis",
+        "clinical presentation": "Clinical Presentation",
+        "clinical features": "Clinical Features",
+        "clinical manifestations": "Clinical Presentation",
+        "management": "Management",
+        "management and treatment": "Management",
+        "therapeutic": "Treatment",
+        "therapy": "Treatment",
+        "prognosis": "Prognosis",
+        "outcome": "Outcomes",
+        "outcomes": "Outcomes",
+        "complications": "Complications",
+        "prevention": "Prevention",
+        "screening": "Screening",
+        "surveillance": "Surveillance",
+        "follow-up": "Follow-up",
+        "case report": "Case Report",
+        "case presentation": "Case Report",
+        "patient characteristics": "Patient Characteristics",
+        "hereditary": "Hereditary Patterns",
+        "genetic": "Genetics",
+        "genetics": "Genetics",
+        "molecular": "Molecular",
+        "imaging": "Imaging",
+        "laboratory": "Laboratory",
+        "histopathology": "Histopathology",
+        "immunohistochemistry": "Immunohistochemistry",
+        "biomarkers": "Biomarkers",
+        "surgical": "Surgical Treatment",
+        "surgery": "Surgical Treatment",
+        "pharmacotherapy": "Pharmacotherapy",
+        "chemotherapy": "Chemotherapy",
+        "radiotherapy": "Radiotherapy",
+        "immunotherapy": "Immunotherapy",
+        "targeted therapy": "Targeted Therapy",
+        "clinical trial": "Clinical Trials",
+        "novel therapies": "Novel Therapies",
     }
 
     # Methods 하위 섹션 키워드
@@ -176,6 +219,9 @@ class BioPaperParser:
         # 1. 폰트 기반으로 섹션 헤더 감지
         section_headers = self._detect_section_headers_by_font(doc)
 
+        # 1.5. 폰트 기반 타이틀 추출 (가장 큰 폰트 사용)
+        font_based_title = self._extract_title_by_font(doc)
+
         # 2. 전체 텍스트 추출
         full_text, text_blocks = self._extract_text_with_positions(doc)
 
@@ -191,6 +237,10 @@ class BioPaperParser:
 
         # 3. 메타데이터 추출
         metadata = self._extract_metadata(full_text, pdf_path)
+
+        # 3.5. 폰트 기반 타이틀이 있으면 우선 사용
+        if font_based_title and len(font_based_title) > len(metadata.title or ""):
+            metadata.title = font_based_title
 
         # 4. 섹션 추출 (폰트 기반 헤더 사용)
         if section_headers:
@@ -298,20 +348,119 @@ class BioPaperParser:
 
         return unique_headers
 
+    def _extract_title_by_font(self, doc) -> str:
+        """Extract paper title using font size (largest text on first page)."""
+        if len(doc) == 0:
+            return ""
+
+        page = doc[0]
+        blocks = page.get_text("dict")["blocks"]
+
+        # Collect text spans with font info
+        title_candidates = []
+
+        for block in blocks:
+            if "lines" not in block:
+                continue
+            for line in block["lines"]:
+                line_text = ""
+                max_font_size = 0
+                is_bold = False
+
+                for span in line["spans"]:
+                    line_text += span["text"]
+                    max_font_size = max(max_font_size, span["size"])
+                    if span["flags"] & 16:  # Bold flag
+                        is_bold = True
+
+                line_text = line_text.strip()
+
+                # Skip empty or very short lines
+                if len(line_text) < 5:
+                    continue
+
+                # Skip metadata patterns
+                skip_patterns = ["http", "://", "doi:", "issn", "copyright", "©",
+                               "journal", "volume", "published", "@", "review"]
+                if any(p in line_text.lower() for p in skip_patterns):
+                    continue
+
+                title_candidates.append({
+                    "text": line_text,
+                    "font_size": max_font_size,
+                    "is_bold": is_bold
+                })
+
+        if not title_candidates:
+            return ""
+
+        # Find the largest font size (likely title)
+        max_font = max(c["font_size"] for c in title_candidates)
+
+        # Collect all lines with the largest font (title might span multiple lines)
+        title_parts = []
+        for c in title_candidates:
+            if c["font_size"] >= max_font - 1:  # Allow small variation
+                title_parts.append(c["text"])
+            elif title_parts:  # Stop once we've passed the title
+                break
+
+        # Combine title parts
+        title = " ".join(title_parts)
+
+        # Clean up title
+        title = re.sub(r"\s+", " ", title).strip()
+
+        return title
+
     def _match_section_keyword(self, text: str) -> Optional[str]:
         """텍스트에서 섹션 키워드 매칭."""
         text = text.strip().lower()
 
-        # 정확한 매칭 우선
+        # Remove leading numbers and punctuation (e.g., "1 ", "1. ", "2.1 ", "4.2.1 ")
+        # This handles formats like "1 Introduction", "1. Introduction", "2.1 Methods"
+        stripped_text = re.sub(r'^[\d.]+\s*', '', text).strip()
+
+        # 정확한 매칭 우선 (번호 제거 후)
+        if stripped_text in self.SECTION_KEYWORDS:
+            return self.SECTION_KEYWORDS[stripped_text]
+
+        # Also check original text
         if text in self.SECTION_KEYWORDS:
             return self.SECTION_KEYWORDS[text]
 
         # 부분 매칭 (키워드로 시작하는 경우)
         for keyword, section_name in self.SECTION_KEYWORDS.items():
+            # Check stripped text first
+            if stripped_text.startswith(keyword) or stripped_text == keyword:
+                return section_name
+            # Check original text
             if text.startswith(keyword) or text == keyword:
                 return section_name
-            # "1. Introduction" 같은 번호 패턴
-            if re.match(rf"^\d+\.?\s*{re.escape(keyword)}", text):
+            # "1. Introduction" 같은 번호 패턴 (more flexible regex)
+            if re.match(rf"^[\d.]+\s*{re.escape(keyword)}", text):
+                return section_name
+
+        # Special handling for compound section names
+        compound_sections = [
+            ("clinical predictor", "Clinical Predictors"),
+            ("predictor of metastasis", "Clinical Predictors"),
+            ("hereditary and phenotypic", "Hereditary Patterns"),
+            ("susceptibility genes", "Genetics"),
+            ("inheritance pattern", "Genetics"),
+            ("molecular phenotype", "Molecular"),
+            ("laboratory tests", "Laboratory"),
+            ("imaging study", "Imaging"),
+            ("genetic testing", "Genetics"),
+            ("surgical resection", "Surgical Treatment"),
+            ("preoperative stabilization", "Preoperative Management"),
+            ("non-surgical", "Non-surgical Treatment"),
+            ("novel therapies", "Novel Therapies"),
+            ("restaging", "Surveillance"),
+            ("metastatic ppgl", "Metastatic Disease"),
+        ]
+        for pattern, section_name in compound_sections:
+            if pattern in stripped_text or pattern in text:
                 return section_name
 
         return None
@@ -452,11 +601,35 @@ class BioPaperParser:
         metadata = PaperMetadata(file_path=str(pdf_path))
 
         lines = text.split("\n")
-        for line in lines[:20]:
+
+        # Patterns to skip when looking for title
+        skip_patterns = [
+            "doi:", "http", "https", "://", "journal", "volume", "[page",
+            "issn", "isbn", "copyright", "©", "published", "article",
+            "open access", "creative commons", "licence", "license",
+            "academic.oup", "elsevier", "springer", "wiley", "nature.com",
+            "frontiersin", "received:", "accepted:", "printed:",
+        ]
+
+        # Find title - look for first substantial line that's not metadata
+        for line in lines[:30]:  # Look at more lines
             line = line.strip()
-            if len(line) > 20 and not any(x in line.lower() for x in ["doi:", "http", "journal", "volume", "[page"]):
-                metadata.title = line
-                break
+            if len(line) < 20:  # Too short
+                continue
+            line_lower = line.lower()
+            # Skip lines with metadata patterns
+            if any(pattern in line_lower for pattern in skip_patterns):
+                continue
+            # Skip lines that start with numbers only (page numbers, dates)
+            if re.match(r'^[\d\-/.,\s]+$', line):
+                continue
+            # Skip lines that are mostly non-alphabetic
+            alpha_ratio = sum(1 for c in line if c.isalpha()) / len(line)
+            if alpha_ratio < 0.5:
+                continue
+            # Found a potential title
+            metadata.title = line
+            break
 
         doi_match = re.search(r"(?:doi[:\s]*)?10\.\d{4,}/[^\s]+", text, re.IGNORECASE)
         if doi_match:
