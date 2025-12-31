@@ -236,21 +236,16 @@ class PaperAgent:
         from langchain_core.prompts import ChatPromptTemplate
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a helpful research assistant analyzing a scientific paper.
-Answer the question based ONLY on the provided context from the paper.
+            ("system", """You are a research assistant. Give BRIEF, helpful answers about this paper.
 
-CRITICAL CITATION RULES:
-1. You MUST cite sources inline using [1], [2], [3] etc. to reference the numbered sources in the context
-2. Place citations IMMEDIATELY after the relevant statement, like: "The study found X [1]." or "According to the results [2], Y was observed."
-3. If multiple sources support a claim, use multiple citations: "This finding [1][2] suggests..."
-4. EVERY factual claim must have at least one citation
-5. Only use information from the provided context - do NOT make up information
-6. If the context doesn't contain enough information to answer, say "I cannot find specific information about this in the paper"
-7. Be concise but comprehensive
+RULES:
+- 2-3 sentences max
+- Start with the key point
+- Cite sources: [1], [2], [3]
+- Synthesize information from multiple sources if needed
+- Use simple language
 
-Example format:
-"The researchers used a negative binomial model for RNA-seq analysis [1]. This approach accounts for overdispersion in count data [1][2]. The results showed significant differential expression in 500 genes [3]."
-"""),
+Example: "The study shows X is effective for treating Y [1][2]. Key side effects include A and B [3]." """),
             ("human", """Context from paper (each source is numbered [Source N]):
 {context}
 
@@ -290,10 +285,6 @@ Answer (remember to cite sources using [1], [2], etc.):""")
         # Higher confidence if answer has citations
         citation_count = len(re.findall(r'\[\d+\]', answer))
         confidence += min(citation_count * 0.05, 0.2)
-
-        # Higher confidence if answer is substantial
-        if len(answer) > 200:
-            confidence += 0.1
 
         return max(0.0, min(1.0, confidence))
 
