@@ -790,3 +790,206 @@ async def find_emerging_topics(
         "emerging_topics": emerging[:limit],
         "analysis_period": f"{current_year-2} to {current_year}"
     }
+
+
+# ============================================================================
+# Validated Trend Endpoints
+# ============================================================================
+
+from ...core.trend_validator import (
+    TrendValidator,
+    ValidatedTrend,
+    ConfidenceLevel,
+    validate_trend,
+    get_validated_hot_topics,
+)
+
+
+class ValidatedTrendResponse(BaseModel):
+    """Validated trend with evidence."""
+    keyword: str
+
+    # Scores
+    publication_score: float
+    diversity_score: float
+    review_score: float
+    clinical_score: float
+    gap_score: float
+    total_score: float
+
+    # Confidence
+    confidence_level: str
+    confidence_emoji: str
+
+    # Evidence
+    summary: str
+    evidence_summary: List[str]
+
+    # Raw metrics
+    total_papers_5yr: int
+    growth_rate_5yr: float
+    growth_rate_yoy: float
+    unique_journals: int
+    high_if_journals: int
+    systematic_reviews: int
+    meta_analyses: int
+    active_clinical_trials: int
+    future_research_mentions: int
+
+    # Metadata
+    validated_at: str
+    data_period: str
+
+
+class ValidatedTrendsResponse(BaseModel):
+    """Multiple validated trends response."""
+    trends: List[ValidatedTrendResponse]
+    total_validated: int
+    methodology: str
+    last_updated: str
+
+
+def _trend_to_response(trend: ValidatedTrend) -> ValidatedTrendResponse:
+    """Convert ValidatedTrend to API response."""
+    confidence_emojis = {
+        ConfidenceLevel.HIGH: "🟢",
+        ConfidenceLevel.MEDIUM: "🟡",
+        ConfidenceLevel.EMERGING: "🟠",
+        ConfidenceLevel.UNCERTAIN: "🔴",
+    }
+
+    return ValidatedTrendResponse(
+        keyword=trend.keyword,
+        publication_score=trend.publication_score,
+        diversity_score=trend.diversity_score,
+        review_score=trend.review_score,
+        clinical_score=trend.clinical_score,
+        gap_score=trend.gap_score,
+        total_score=trend.total_score,
+        confidence_level=trend.confidence_level.value,
+        confidence_emoji=confidence_emojis.get(trend.confidence_level, "⚪"),
+        summary=trend.summary,
+        evidence_summary=trend.evidence_summary,
+        total_papers_5yr=trend.sparse_signals.total_papers_5yr if trend.sparse_signals else 0,
+        growth_rate_5yr=trend.sparse_signals.growth_rate_5yr if trend.sparse_signals else 0,
+        growth_rate_yoy=trend.sparse_signals.growth_rate_yoy if trend.sparse_signals else 0,
+        unique_journals=trend.sparse_signals.unique_journals if trend.sparse_signals else 0,
+        high_if_journals=trend.sparse_signals.high_if_journals if trend.sparse_signals else 0,
+        systematic_reviews=trend.validation_evidence.systematic_reviews if trend.validation_evidence else 0,
+        meta_analyses=trend.validation_evidence.meta_analyses if trend.validation_evidence else 0,
+        active_clinical_trials=trend.validation_evidence.active_clinical_trials if trend.validation_evidence else 0,
+        future_research_mentions=trend.validation_evidence.future_research_mentions if trend.validation_evidence else 0,
+        validated_at=trend.validated_at,
+        data_period=trend.data_period,
+    )
+
+
+@router.get("/validate/{keyword}", response_model=ValidatedTrendResponse)
+async def validate_keyword_trend(keyword: str):
+    """
+    Validate a single keyword as a research trend.
+
+    Returns comprehensive validation with:
+    - Multi-dimensional scores (publication, diversity, review, clinical, gap)
+    - Confidence level (high/medium/emerging/uncertain)
+    - Evidence summary with citations
+    - Raw metrics for transparency
+
+    This endpoint provides explainable, defensible trend validation
+    for user trust.
+    """
+    try:
+        trend = await validate_trend(keyword)
+        return _trend_to_response(trend)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
+
+@router.get("/validated-defaults", response_model=ValidatedTrendsResponse)
+async def get_validated_default_keywords():
+    """
+    Get validated default keywords for TrendAnalysis.
+
+    Returns top 5 keywords that have passed validation criteria:
+    - Minimum total score of 40
+    - Evidence from multiple sources
+    - Statistical significance
+
+    These keywords are suitable for display as default trends.
+    """
+    validator = TrendValidator()
+    try:
+        # Candidate pool
+        candidates = [
+            'CRISPR',
+            'CAR-T therapy',
+            'mRNA vaccine',
+            'AlphaFold',
+            'single-cell RNA-seq',
+            'immune checkpoint inhibitor',
+            'liquid biopsy',
+            'spatial transcriptomics',
+            'tumor microenvironment',
+            'large language model medicine',
+        ]
+
+        validated = await validator.validate_keywords(candidates, min_score=40.0)
+        top_5 = validated[:5]
+
+        return ValidatedTrendsResponse(
+            trends=[_trend_to_response(t) for t in top_5],
+            total_validated=len(top_5),
+            methodology=(
+                "Multi-signal validation: Publication Growth (25%) + "
+                "Journal Diversity (20%) + Review Coverage (20%) + "
+                "Clinical Activity (20%) + Research Gap (15%)"
+            ),
+            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+    finally:
+        await validator.close()
+
+
+@router.get("/validated-domain/{domain}", response_model=ValidatedTrendsResponse)
+async def get_validated_domain_trends(
+    domain: str,
+    limit: int = Query(10, ge=1, le=15),
+    min_score: float = Query(30.0, ge=0, le=100)
+):
+    """
+    Get validated hot topics for a specific domain.
+
+    Domains: oncology, neuroscience, genomics, infectious_disease, ai_medicine
+
+    Each topic is validated with multi-dimensional scoring:
+    - Publication growth & volume
+    - Journal diversity (including high-IF journals)
+    - Review coverage (systematic reviews, meta-analyses)
+    - Clinical trial activity
+    - Research gap signals
+
+    Only topics meeting min_score threshold are returned.
+    """
+    if domain not in HOT_TOPIC_DOMAINS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown domain. Available: {list(HOT_TOPIC_DOMAINS.keys())}"
+        )
+
+    validator = TrendValidator()
+    try:
+        candidates = HOT_TOPIC_DOMAINS[domain]
+        validated = await validator.validate_keywords(candidates, min_score=min_score)
+
+        return ValidatedTrendsResponse(
+            trends=[_trend_to_response(t) for t in validated[:limit]],
+            total_validated=len(validated[:limit]),
+            methodology=(
+                "Multi-signal validation: Publication Growth (25%) + "
+                "Journal Diversity (20%) + Review Coverage (20%) + "
+                "Clinical Activity (20%) + Research Gap (15%)"
+            ),
+            last_updated=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+    finally:
+        await validator.close()

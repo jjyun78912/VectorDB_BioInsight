@@ -1,11 +1,13 @@
 /**
- * TrendAnalysis Component - Research Trend Visualization
+ * TrendAnalysis Component - Research Trend Visualization with Validation
  *
  * Features:
  * - 5-year keyword trend line chart
  * - Multiple keyword comparison
  * - Growth rate indicators
  * - Trend direction badges (rising/stable/declining)
+ * - **Validation badges with confidence levels**
+ * - **Evidence-based trend justification**
  */
 
 import { useState, useEffect } from 'react';
@@ -20,6 +22,11 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from 'recharts';
 import {
   TrendingUp,
@@ -33,8 +40,16 @@ import {
   LineChartIcon,
   ArrowUp,
   ArrowDown,
+  ShieldCheck,
+  BookOpen,
+  Beaker,
+  FileText,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
-import api, { TrendAnalysisResponse, KeywordTrend } from '../services/client';
+import api, { TrendAnalysisResponse, KeywordTrend, ValidatedTrend, ValidatedTrendsResponse } from '../services/client';
 import { useLanguage } from '../contexts/LanguageContext';
 
 // Chart colors for up to 5 keywords
@@ -52,19 +67,22 @@ interface TrendAnalysisProps {
 
 export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
   const { language } = useLanguage();
-  const [keywords, setKeywords] = useState<string[]>(['CRISPR']);
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [validatedKeywords, setValidatedKeywords] = useState<Map<string, ValidatedTrend>>(new Map());
   const [newKeyword, setNewKeyword] = useState('');
   const [trendData, setTrendData] = useState<TrendAnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingValidation, setLoadingValidation] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+  const [showValidationDetails, setShowValidationDetails] = useState<string | null>(null);
 
   // Translations
   const t = {
     title: language === 'ko' ? '연구 트렌드 분석' : 'Research Trend Analysis',
     subtitle: language === 'ko'
-      ? 'PubMed 5년 키워드 트렌드 (2021-2025)'
-      : 'PubMed 5-Year Keyword Trends (2021-2025)',
+      ? 'PubMed 5년 키워드 트렌드 - 자동 검증 시스템'
+      : 'PubMed 5-Year Keyword Trends - Auto-Validated',
     addKeyword: language === 'ko' ? '키워드 추가' : 'Add keyword',
     analyze: language === 'ko' ? '분석' : 'Analyze',
     analyzing: language === 'ko' ? '분석 중...' : 'Analyzing...',
@@ -80,20 +98,74 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
     publications: language === 'ko' ? '논문 수' : 'Publications',
     year: language === 'ko' ? '연도' : 'Year',
     placeholder: language === 'ko' ? '예: CAR-T, immunotherapy' : 'e.g., CAR-T, immunotherapy',
-    maxKeywords: language === 'ko' ? '최대 5개 키워드' : 'Max 5 keywords',
-    noData: language === 'ko' ? '키워드를 입력하고 분석 버튼을 클릭하세요' : 'Enter keywords and click Analyze',
+    maxKeywords: language === 'ko' ? '최대 5개 키워드 (검증된 기본값 로딩 중...)' : 'Max 5 keywords (Loading validated defaults...)',
+    maxKeywordsReady: language === 'ko' ? '최대 5개 키워드 (검증 완료)' : 'Max 5 keywords (Validated)',
+    noData: language === 'ko' ? '검증된 키워드를 불러오는 중...' : 'Loading validated keywords...',
     error: language === 'ko' ? '분석 중 오류 발생' : 'Analysis failed',
+    validated: language === 'ko' ? '검증됨' : 'Validated',
+    confidence: language === 'ko' ? '신뢰도' : 'Confidence',
+    high: language === 'ko' ? '높음' : 'High',
+    medium: language === 'ko' ? '보통' : 'Medium',
+    emerging: language === 'ko' ? '신흥' : 'Emerging',
+    uncertain: language === 'ko' ? '불확실' : 'Uncertain',
+    evidence: language === 'ko' ? '검증 근거' : 'Validation Evidence',
+    clinicalTrials: language === 'ko' ? '활성 임상시험' : 'Active Clinical Trials',
+    reviews: language === 'ko' ? '체계적 문헌고찰' : 'Systematic Reviews',
+    journals: language === 'ko' ? '고영향력 저널' : 'High-IF Journals',
+    viewDetails: language === 'ko' ? '상세 보기' : 'View Details',
+    hideDetails: language === 'ko' ? '접기' : 'Hide',
+    validationScore: language === 'ko' ? '검증 점수' : 'Validation Score',
+    publicationScore: language === 'ko' ? '출판 점수' : 'Publication',
+    diversityScore: language === 'ko' ? '다양성 점수' : 'Diversity',
+    reviewScore: language === 'ko' ? '리뷰 점수' : 'Reviews',
+    clinicalScore: language === 'ko' ? '임상 점수' : 'Clinical',
+    gapScore: language === 'ko' ? '연구갭 점수' : 'Research Gap',
   };
 
-  // Analyze trends
-  const analyzeTrends = async () => {
-    if (keywords.length === 0) return;
+  // Load validated defaults on mount
+  useEffect(() => {
+    loadValidatedDefaults();
+  }, []);
+
+  // Load validated default keywords
+  const loadValidatedDefaults = async () => {
+    setLoadingValidation(true);
+    try {
+      const response = await api.getValidatedDefaults();
+      const keywordList = response.trends.map(t => t.keyword);
+      setKeywords(keywordList);
+
+      // Store validation data
+      const validationMap = new Map<string, ValidatedTrend>();
+      response.trends.forEach(trend => {
+        validationMap.set(trend.keyword, trend);
+      });
+      setValidatedKeywords(validationMap);
+
+      // Auto-analyze after loading defaults
+      if (keywordList.length > 0) {
+        analyzeTrendsWithKeywords(keywordList);
+      }
+    } catch (err) {
+      console.error('Failed to load validated defaults:', err);
+      // Fallback to hardcoded defaults
+      const fallbackKeywords = ['CRISPR', 'CAR-T therapy', 'mRNA vaccine', 'AlphaFold', 'single-cell RNA-seq'];
+      setKeywords(fallbackKeywords);
+      analyzeTrendsWithKeywords(fallbackKeywords);
+    } finally {
+      setLoadingValidation(false);
+    }
+  };
+
+  // Analyze trends with specific keywords
+  const analyzeTrendsWithKeywords = async (keywordList: string[]) => {
+    if (keywordList.length === 0) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const data = await api.analyzeTrends(keywords);
+      const data = await api.analyzeTrends(keywordList);
       setTrendData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error);
@@ -102,18 +174,34 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
     }
   };
 
-  // Add keyword
-  const addKeyword = () => {
+  // Analyze trends
+  const analyzeTrends = async () => {
+    await analyzeTrendsWithKeywords(keywords);
+  };
+
+  // Add keyword with validation
+  const addKeyword = async () => {
     const trimmed = newKeyword.trim();
     if (trimmed && keywords.length < 5 && !keywords.includes(trimmed)) {
       setKeywords([...keywords, trimmed]);
       setNewKeyword('');
+
+      // Validate the new keyword
+      try {
+        const validated = await api.validateKeyword(trimmed);
+        setValidatedKeywords(new Map(validatedKeywords.set(trimmed, validated)));
+      } catch (err) {
+        console.error('Validation failed for:', trimmed);
+      }
     }
   };
 
   // Remove keyword
   const removeKeyword = (keyword: string) => {
     setKeywords(keywords.filter(k => k !== keyword));
+    const newMap = new Map(validatedKeywords);
+    newMap.delete(keyword);
+    setValidatedKeywords(newMap);
   };
 
   // Handle Enter key
@@ -123,11 +211,6 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
       addKeyword();
     }
   };
-
-  // Auto-analyze on mount
-  useEffect(() => {
-    analyzeTrends();
-  }, []);
 
   // Prepare chart data
   const chartData = trendData?.years.map(year => {
@@ -139,47 +222,33 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
     return dataPoint;
   }) || [];
 
-  // Trend direction icon
-  const TrendIcon = ({ direction }: { direction: string }) => {
-    switch (direction) {
-      case 'rising':
-        return <TrendingUp className="w-4 h-4 text-green-500" />;
-      case 'declining':
-        return <TrendingDown className="w-4 h-4 text-red-500" />;
+  // Get confidence badge colors
+  const getConfidenceBadge = (level: string) => {
+    switch (level) {
+      case 'high':
+        return { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200', label: t.high };
+      case 'medium':
+        return { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200', label: t.medium };
+      case 'emerging':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200', label: t.emerging };
       default:
-        return <Minus className="w-4 h-4 text-gray-500" />;
+        return { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', label: t.uncertain };
     }
-  };
-
-  // Trend badge
-  const TrendBadge = ({ direction }: { direction: string }) => {
-    const colors = {
-      rising: 'bg-green-100 text-green-700 border-green-200',
-      declining: 'bg-red-100 text-red-700 border-red-200',
-      stable: 'bg-gray-100 text-gray-700 border-gray-200',
-    };
-    const labels = {
-      rising: t.rising,
-      declining: t.declining,
-      stable: t.stable,
-    };
-
-    return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${colors[direction as keyof typeof colors]}`}>
-        {labels[direction as keyof typeof labels]}
-      </span>
-    );
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-5xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <BarChart3 className="w-6 h-6 text-blue-600" />
               {t.title}
+              <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                {t.validated}
+              </span>
             </h2>
             <p className="text-sm text-gray-600 mt-1">{t.subtitle}</p>
           </div>
@@ -196,27 +265,37 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
         {/* Search Bar */}
         <div className="p-4 border-b bg-gray-50">
           <div className="flex gap-2 items-center flex-wrap">
-            {/* Existing keywords as chips */}
-            {keywords.map((keyword, idx) => (
-              <span
-                key={keyword}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium"
-                style={{
-                  backgroundColor: `${CHART_COLORS[idx]}20`,
-                  color: CHART_COLORS[idx],
-                  borderColor: CHART_COLORS[idx],
-                  borderWidth: 1,
-                }}
-              >
-                {keyword}
-                <button
-                  onClick={() => removeKeyword(keyword)}
-                  className="ml-1 hover:opacity-70"
+            {/* Existing keywords as chips with validation badges */}
+            {keywords.map((keyword, idx) => {
+              const validation = validatedKeywords.get(keyword);
+              const confidence = validation ? getConfidenceBadge(validation.confidence_level) : null;
+
+              return (
+                <span
+                  key={keyword}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium"
+                  style={{
+                    backgroundColor: `${CHART_COLORS[idx]}20`,
+                    color: CHART_COLORS[idx],
+                    borderColor: CHART_COLORS[idx],
+                    borderWidth: 1,
+                  }}
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
+                  {keyword}
+                  {validation && (
+                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${confidence?.bg} ${confidence?.text}`}>
+                      {validation.confidence_emoji}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => removeKeyword(keyword)}
+                    className="ml-1 hover:opacity-70"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
 
             {/* Add keyword input */}
             {keywords.length < 5 && (
@@ -258,7 +337,9 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
               )}
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">{t.maxKeywords}</p>
+          <p className="text-xs text-gray-500 mt-2">
+            {loadingValidation ? t.maxKeywords : t.maxKeywordsReady}
+          </p>
         </div>
 
         {/* Content */}
@@ -373,14 +454,29 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
                 </ResponsiveContainer>
               </div>
 
-              {/* Trend Summary Cards */}
+              {/* Trend Summary Cards with Validation */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {trendData.trends.map((trend, idx) => (
-                  <TrendCard key={trend.keyword} trend={trend} color={CHART_COLORS[idx]} t={t} />
+                  <ValidatedTrendCard
+                    key={trend.keyword}
+                    trend={trend}
+                    validation={validatedKeywords.get(trend.keyword)}
+                    color={CHART_COLORS[idx]}
+                    t={t}
+                    isExpanded={showValidationDetails === trend.keyword}
+                    onToggle={() => setShowValidationDetails(
+                      showValidationDetails === trend.keyword ? null : trend.keyword
+                    )}
+                  />
                 ))}
               </div>
             </div>
-          ) : !loading && (
+          ) : loading || loadingValidation ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+              <Loader2 className="w-12 h-12 mb-4 text-blue-500 animate-spin" />
+              <p>{t.noData}</p>
+            </div>
+          ) : (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <BarChart3 className="w-16 h-16 mb-4 text-gray-300" />
               <p>{t.noData}</p>
@@ -392,71 +488,209 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
   );
 }
 
-// Trend summary card component
-function TrendCard({
+// Validated Trend Card Component
+function ValidatedTrendCard({
   trend,
+  validation,
   color,
-  t
+  t,
+  isExpanded,
+  onToggle,
 }: {
   trend: KeywordTrend;
+  validation?: ValidatedTrend;
   color: string;
   t: Record<string, string>;
+  isExpanded: boolean;
+  onToggle: () => void;
 }) {
   const latestGrowth = trend.yearly_counts[trend.yearly_counts.length - 1]?.growth_rate;
 
+  const getConfidenceBadge = (level: string) => {
+    switch (level) {
+      case 'high':
+        return { bg: 'bg-green-100', text: 'text-green-700', label: t.high };
+      case 'medium':
+        return { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t.medium };
+      case 'emerging':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', label: t.emerging };
+      default:
+        return { bg: 'bg-gray-100', text: 'text-gray-700', label: t.uncertain };
+    }
+  };
+
+  const confidence = validation ? getConfidenceBadge(validation.confidence_level) : null;
+
+  // Radar chart data for validation scores
+  const radarData = validation ? [
+    { subject: t.publicationScore, score: validation.publication_score, fullMark: 100 },
+    { subject: t.diversityScore, score: validation.diversity_score, fullMark: 100 },
+    { subject: t.reviewScore, score: validation.review_score, fullMark: 100 },
+    { subject: t.clinicalScore, score: validation.clinical_score, fullMark: 100 },
+    { subject: t.gapScore, score: validation.gap_score, fullMark: 100 },
+  ] : [];
+
   return (
     <div
-      className="bg-white rounded-xl border p-4 hover:shadow-md transition-shadow"
+      className="bg-white rounded-xl border hover:shadow-md transition-shadow overflow-hidden"
       style={{ borderLeftColor: color, borderLeftWidth: 4 }}
     >
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-gray-900">{trend.keyword}</h3>
-        <span
-          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-            trend.trend_direction === 'rising'
-              ? 'bg-green-100 text-green-700'
-              : trend.trend_direction === 'declining'
-              ? 'bg-red-100 text-red-700'
-              : 'bg-gray-100 text-gray-700'
-          }`}
-        >
-          {trend.trend_direction === 'rising' ? t.rising :
-           trend.trend_direction === 'declining' ? t.declining : t.stable}
-        </span>
+      <div className="p-4">
+        {/* Header with validation badge */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-900">{trend.keyword}</h3>
+          <div className="flex items-center gap-2">
+            {validation && (
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${confidence?.bg} ${confidence?.text}`}>
+                {validation.confidence_emoji} {confidence?.label}
+              </span>
+            )}
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                trend.trend_direction === 'rising'
+                  ? 'bg-green-100 text-green-700'
+                  : trend.trend_direction === 'declining'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              {trend.trend_direction === 'rising' ? t.rising :
+               trend.trend_direction === 'declining' ? t.declining : t.stable}
+            </span>
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-gray-500">{t.totalPapers}</p>
+            <p className="font-bold text-lg text-gray-900">
+              {trend.total_count.toLocaleString()}
+            </p>
+          </div>
+          <div>
+            <p className="text-gray-500">{t.growth5yr}</p>
+            <p className={`font-bold text-lg flex items-center gap-1 ${
+              (trend.growth_5yr || 0) > 0 ? 'text-green-600' :
+              (trend.growth_5yr || 0) < 0 ? 'text-red-600' : 'text-gray-600'
+            }`}>
+              {(trend.growth_5yr || 0) > 0 && <ArrowUp className="w-4 h-4" />}
+              {(trend.growth_5yr || 0) < 0 && <ArrowDown className="w-4 h-4" />}
+              {trend.growth_5yr !== null ? `${trend.growth_5yr}%` : '-'}
+            </p>
+          </div>
+        </div>
+
+        {/* Validation metrics preview */}
+        {validation && (
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <Beaker className="w-3 h-3" />
+                  {validation.active_clinical_trials}
+                </span>
+                <span className="flex items-center gap-1">
+                  <BookOpen className="w-3 h-3" />
+                  {validation.systematic_reviews + validation.meta_analyses}
+                </span>
+                <span className="flex items-center gap-1">
+                  <FileText className="w-3 h-3" />
+                  {validation.unique_journals}
+                </span>
+              </div>
+              <span className="font-medium text-blue-600">
+                {validation.total_score.toFixed(0)}점
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Expand button */}
+        {validation && (
+          <button
+            onClick={onToggle}
+            className="mt-3 w-full flex items-center justify-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="w-3 h-3" />
+                {t.hideDetails}
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                {t.viewDetails}
+              </>
+            )}
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <p className="text-gray-500">{t.totalPapers}</p>
-          <p className="font-bold text-lg text-gray-900">
-            {trend.total_count.toLocaleString()}
-          </p>
+      {/* Expanded validation details */}
+      {isExpanded && validation && (
+        <div className="px-4 pb-4 pt-2 border-t bg-gray-50">
+          {/* Radar Chart */}
+          <div className="h-48 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="#e5e7eb" />
+                <PolarAngleAxis
+                  dataKey="subject"
+                  tick={{ fontSize: 10, fill: '#6b7280' }}
+                />
+                <PolarRadiusAxis
+                  angle={90}
+                  domain={[0, 100]}
+                  tick={{ fontSize: 8 }}
+                />
+                <Radar
+                  name={t.validationScore}
+                  dataKey="score"
+                  stroke={color}
+                  fill={color}
+                  fillOpacity={0.3}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Evidence summary */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              {t.evidence}
+            </h4>
+            <ul className="space-y-1">
+              {validation.evidence_summary.map((evidence, idx) => (
+                <li key={idx} className="text-xs text-gray-600 pl-2 border-l-2 border-blue-200">
+                  {evidence}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Detailed metrics */}
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-gray-500">{t.clinicalTrials}</span>
+              <span className="font-medium">{validation.active_clinical_trials}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">{t.reviews}</span>
+              <span className="font-medium">{validation.systematic_reviews}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">{t.journals}</span>
+              <span className="font-medium">{validation.high_if_journals}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">{t.yearlyChange}</span>
+              <span className="font-medium">{validation.growth_rate_yoy.toFixed(1)}%</span>
+            </div>
+          </div>
         </div>
-        <div>
-          <p className="text-gray-500">{t.growth5yr}</p>
-          <p className={`font-bold text-lg flex items-center gap-1 ${
-            (trend.growth_5yr || 0) > 0 ? 'text-green-600' :
-            (trend.growth_5yr || 0) < 0 ? 'text-red-600' : 'text-gray-600'
-          }`}>
-            {(trend.growth_5yr || 0) > 0 && <ArrowUp className="w-4 h-4" />}
-            {(trend.growth_5yr || 0) < 0 && <ArrowDown className="w-4 h-4" />}
-            {trend.growth_5yr !== null ? `${trend.growth_5yr}%` : '-'}
-          </p>
-        </div>
-        <div>
-          <p className="text-gray-500">{t.peakYear}</p>
-          <p className="font-bold text-gray-900">{trend.peak_year || '-'}</p>
-        </div>
-        <div>
-          <p className="text-gray-500">{t.yearlyChange}</p>
-          <p className={`font-bold flex items-center gap-1 ${
-            (latestGrowth || 0) > 0 ? 'text-green-600' :
-            (latestGrowth || 0) < 0 ? 'text-red-600' : 'text-gray-600'
-          }`}>
-            {latestGrowth !== null ? `${latestGrowth > 0 ? '+' : ''}${latestGrowth}%` : '-'}
-          </p>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

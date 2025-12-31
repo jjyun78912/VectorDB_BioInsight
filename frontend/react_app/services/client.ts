@@ -197,6 +197,50 @@ export interface EmergingTopicsResponse {
   analysis_period: string;
 }
 
+// ============== Validated Trend Types ==============
+
+export interface ValidatedTrend {
+  keyword: string;
+
+  // Scores (0-100)
+  publication_score: number;
+  diversity_score: number;
+  review_score: number;
+  clinical_score: number;
+  gap_score: number;
+  total_score: number;
+
+  // Confidence
+  confidence_level: 'high' | 'medium' | 'emerging' | 'uncertain';
+  confidence_emoji: string;
+
+  // Evidence
+  summary: string;
+  evidence_summary: string[];
+
+  // Raw metrics
+  total_papers_5yr: number;
+  growth_rate_5yr: number;
+  growth_rate_yoy: number;
+  unique_journals: number;
+  high_if_journals: number;
+  systematic_reviews: number;
+  meta_analyses: number;
+  active_clinical_trials: number;
+  future_research_mentions: number;
+
+  // Metadata
+  validated_at: string;
+  data_period: string;
+}
+
+export interface ValidatedTrendsResponse {
+  trends: ValidatedTrend[];
+  total_validated: number;
+  methodology: string;
+  last_updated: string;
+}
+
 // ============== Enhanced Hot Topics Types ==============
 
 export interface MultiDimensionalScore {
@@ -713,6 +757,56 @@ class BioInsightAPI {
     const response = await fetch(`${this.baseUrl}/trends/emerging?${params}`);
     if (!response.ok) {
       throw new Error(`Emerging topics failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // ============== Validated Trend API ==============
+
+  /**
+   * Validate a single keyword as a research trend
+   * Returns comprehensive validation with multi-dimensional scores
+   */
+  async validateKeyword(keyword: string): Promise<ValidatedTrend> {
+    const response = await fetch(
+      `${this.baseUrl}/trends/validate/${encodeURIComponent(keyword)}`
+    );
+    if (!response.ok) {
+      throw new Error(`Validation failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get validated default keywords for TrendAnalysis
+   * Returns top 5 pre-validated hot topics
+   */
+  async getValidatedDefaults(): Promise<ValidatedTrendsResponse> {
+    const response = await fetch(`${this.baseUrl}/trends/validated-defaults`);
+    if (!response.ok) {
+      throw new Error(`Get validated defaults failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get validated hot topics for a domain
+   * Each topic includes validation scores and evidence
+   */
+  async getValidatedDomainTrends(
+    domain: string,
+    options?: { limit?: number; minScore?: number }
+  ): Promise<ValidatedTrendsResponse> {
+    const params = new URLSearchParams({
+      ...(options?.limit && { limit: options.limit.toString() }),
+      ...(options?.minScore && { min_score: options.minScore.toString() }),
+    });
+
+    const response = await fetch(
+      `${this.baseUrl}/trends/validated-domain/${domain}?${params}`
+    );
+    if (!response.ok) {
+      throw new Error(`Validated domain trends failed: ${response.statusText}`);
     }
     return response.json();
   }
