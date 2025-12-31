@@ -238,7 +238,7 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-6xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-6xl h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
           <div>
@@ -282,11 +282,14 @@ export default function TrendAnalysis({ onClose }: TrendAnalysisProps) {
                   }}
                 >
                   {keyword}
-                  {validation && (
-                    <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${confidence?.bg} ${confidence?.text}`}>
-                      {validation.confidence_emoji}
-                    </span>
-                  )}
+                  {/* Fixed-size badge placeholder to prevent layout shift */}
+                  <span className={`ml-1 w-6 h-5 flex items-center justify-center text-xs rounded-full ${
+                    validation
+                      ? `${confidence?.bg} ${confidence?.text}`
+                      : 'bg-gray-100 text-gray-400'
+                  }`}>
+                    {validation ? validation.confidence_emoji : '·'}
+                  </span>
                   <button
                     onClick={() => removeKeyword(keyword)}
                     className="ml-1 hover:opacity-70"

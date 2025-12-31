@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Tag, BarChart3, Flame } from 'lucide-react';
 import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
 import { KnowledgeGraph } from './KnowledgeGraph';
-import TrendAnalysis from './TrendAnalysis';
-import HotTopics from './HotTopics';
+import ResearchTrends from './ResearchTrends';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface PaperDetail {
@@ -1200,9 +1199,9 @@ export const Hero: React.FC = () => {
   const [paperDetail, setPaperDetail] = useState<PaperDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-  // Trend analysis modal state
-  const [showTrendAnalysis, setShowTrendAnalysis] = useState(false);
-  const [showHotTopics, setShowHotTopics] = useState(false);
+  // Research Trends modal state
+  const [showResearchTrends, setShowResearchTrends] = useState(false);
+  const [researchTrendsTab, setResearchTrendsTab] = useState<'hot-topics' | 'trend-evolution' | 'trending-papers'>('hot-topics');
 
   // Auto-detect DOI in query
   const isDOI = (text: string): boolean => {
@@ -1404,23 +1403,29 @@ export const Hero: React.FC = () => {
             {t.doiUrl}
           </button>
 
-          {/* Analysis Tools */}
+          {/* Research Trends Hub */}
           <div className="w-px h-6 bg-gray-300 mx-1" />
           <button
             type="button"
-            onClick={() => setShowTrendAnalysis(true)}
-            className="px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 glass-2 border border-blue-200/50 text-blue-600 hover:bg-blue-50/50 hover:border-blue-300"
-          >
-            <BarChart3 className="w-4 h-4" />
-            {t.trendAnalysis}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowHotTopics(true)}
+            onClick={() => {
+              setResearchTrendsTab('hot-topics');
+              setShowResearchTrends(true);
+            }}
             className="px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 glass-2 border border-orange-200/50 text-orange-600 hover:bg-orange-50/50 hover:border-orange-300"
           >
             <Flame className="w-4 h-4" />
             {t.hotTopics}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setResearchTrendsTab('trend-evolution');
+              setShowResearchTrends(true);
+            }}
+            className="px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 glass-2 border border-blue-200/50 text-blue-600 hover:bg-blue-50/50 hover:border-blue-300"
+          >
+            <BarChart3 className="w-4 h-4" />
+            {t.trendAnalysis}
           </button>
         </div>
 
@@ -1545,14 +1550,12 @@ export const Hero: React.FC = () => {
       />
     )}
 
-    {/* Trend Analysis Modal */}
-    {showTrendAnalysis && (
-      <TrendAnalysis onClose={() => setShowTrendAnalysis(false)} />
-    )}
-
-    {/* Hot Topics Modal */}
-    {showHotTopics && (
-      <HotTopics onClose={() => setShowHotTopics(false)} />
+    {/* Research Trends Hub Modal */}
+    {showResearchTrends && (
+      <ResearchTrends
+        onClose={() => setShowResearchTrends(false)}
+        initialTab={researchTrendsTab}
+      />
     )}
   </>
   );
