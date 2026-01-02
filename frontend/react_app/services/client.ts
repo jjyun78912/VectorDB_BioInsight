@@ -156,18 +156,25 @@ export interface NewsItem {
   category: string;
   category_name: string;
   source: string;        // 저널명
+  source_type: string;   // pubmed, biorxiv, medrxiv, nature, science
   date: string;
   pmid?: string;
   doi?: string;
+  url?: string;          // Direct link to paper
 }
 
 export interface DailyNewsResponse {
   date: string;
+  language: string;      // ko, en
+  sources: string[];     // Sources included
   news_items: NewsItem[];
   total: number;
   cached: boolean;
   generated_at: string;
 }
+
+export type NewsLanguage = 'ko' | 'en';
+export type NewsSource = 'pubmed' | 'biorxiv' | 'nature' | 'all';
 
 // ============== Enhanced Trending Types ==============
 
@@ -715,9 +722,16 @@ class BioInsightAPI {
    * Returns news-style content in Korean
    * Cache refreshes at KST 07:00 daily
    */
-  async getDailyNews(limit: number = 6, noCache: boolean = false): Promise<DailyNewsResponse> {
+  async getDailyNews(
+    limit: number = 6,
+    noCache: boolean = false,
+    language: NewsLanguage = 'ko',
+    sources: NewsSource | NewsSource[] = 'pubmed'
+  ): Promise<DailyNewsResponse> {
     const params = new URLSearchParams({
       limit: limit.toString(),
+      language: language,
+      sources: Array.isArray(sources) ? sources.join(',') : sources,
     });
     if (noCache) {
       params.set('no_cache', 'true');

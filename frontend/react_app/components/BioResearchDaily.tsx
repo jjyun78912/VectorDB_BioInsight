@@ -4,9 +4,10 @@ import {
   Dna, Brain, Heart, Microscope, Pill, FlaskConical,
   BookOpen, Award, Users, ChevronRight, Clock, Eye,
   FileText, GraduationCap, Building, Sparkles, BarChart3,
-  ArrowUpRight, Tag, Filter, Loader2, AlertCircle, Zap, Lightbulb
+  ArrowUpRight, Tag, Filter, Loader2, AlertCircle, Zap, Lightbulb,
+  Globe, Languages
 } from 'lucide-react';
-import api, { EnhancedHotTopic, NewsItem as ApiNewsItem, DailyNewsResponse } from '../services/client';
+import api, { EnhancedHotTopic, NewsItem as ApiNewsItem, DailyNewsResponse, NewsLanguage, NewsSource } from '../services/client';
 
 // ========== 카테고리 정의 ==========
 const RESEARCH_CATEGORIES = {
@@ -44,8 +45,16 @@ interface DailyStats {
   reports: number;
 }
 
+// ========== 소스 정의 ==========
+const NEWS_SOURCES = {
+  pubmed: { name: 'PubMed', icon: '📚', color: 'blue' },
+  biorxiv: { name: 'bioRxiv', icon: '🧬', color: 'green' },
+  nature: { name: 'Nature/Science', icon: '🌍', color: 'purple' },
+  all: { name: 'All Sources', icon: '🌐', color: 'indigo' },
+};
+
 // ========== 캐시 관리 ==========
-const CACHE_KEY = 'bio_daily_news_cache';
+const CACHE_KEY = 'bio_daily_news_cache_v2';
 
 interface CachedData {
   newsItems: ApiNewsItem[];
@@ -53,6 +62,8 @@ interface CachedData {
   stats: DailyStats;
   generatedAt: string;
   cachedAt: string; // ISO timestamp
+  language: NewsLanguage;
+  sources: NewsSource[];
 }
 
 // 대한민국 07:00 기준으로 캐시 만료 확인
@@ -90,13 +101,22 @@ const loadFromCache = (): CachedData | null => {
   }
 };
 
-const saveToCache = (newsItems: ApiNewsItem[], trends: WeeklyTrend[], stats: DailyStats, generatedAt: string) => {
+const saveToCache = (
+  newsItems: ApiNewsItem[],
+  trends: WeeklyTrend[],
+  stats: DailyStats,
+  generatedAt: string,
+  language: NewsLanguage,
+  sources: NewsSource[]
+) => {
   const data: CachedData = {
     newsItems,
     trends,
     stats,
     generatedAt,
     cachedAt: new Date().toISOString(),
+    language,
+    sources,
   };
   localStorage.setItem(CACHE_KEY, JSON.stringify(data));
 };
@@ -109,6 +129,10 @@ export default function BioResearchDaily() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+
+  // Global settings
+  const [language, setLanguage] = useState<NewsLanguage>('ko');
+  const [selectedSources, setSelectedSources] = useState<NewsSource[]>(['pubmed']);
 
   // Real data states
   const [newsItems, setNewsItems] = useState<ApiNewsItem[]>([]);
@@ -123,8 +147,9 @@ export default function BioResearchDaily() {
   // Load data on mount - check cache first
   useEffect(() => {
     const cached = loadFromCache();
-    if (cached) {
-      // 캐시 데이터 사용 - 즉시 로딩 완료
+    if (cached && cached.language === language &&
+        JSON.stringify(cached.sources?.sort()) === JSON.stringify(selectedSources.sort())) {
+      // 캐시 데이터 사용 - 설정이 같을 때만
       setNewsItems(cached.newsItems);
       setWeeklyTrends(cached.trends);
       setDailyStats(cached.stats);
@@ -132,18 +157,21 @@ export default function BioResearchDaily() {
       setLastUpdated(cached.cachedAt);
       setLoading(false);
     } else {
-      // 캐시 없음 - API 호출
+      // 캐시 없거나 설정 다름 - API 호출
       loadDailyData();
     }
-  }, []);
+  }, [language, selectedSources]);
 
   const loadDailyData = async (forceRefresh: boolean = false) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Load AI-generated daily news
-      const newsData = await api.getDailyNews(6, forceRefresh);
+      // Determine sources to fetch
+      const sourcesToFetch = selectedSources.includes('all') ? 'all' : selectedSources;
+
+      // Load AI-generated daily news with language and sources
+      const newsData = await api.getDailyNews(8, forceRefresh, language, sourcesToFetch);
       setNewsItems(newsData.news_items);
       setGeneratedAt(newsData.generated_at);
 
@@ -173,7 +201,7 @@ export default function BioResearchDaily() {
       setDailyStats(stats);
 
       // 캐시에 저장
-      saveToCache(newsData.news_items, weeklyTrends, stats, newsData.generated_at);
+      saveToCache(newsData.news_items, weeklyTrends, stats, newsData.generated_at, language, selectedSources);
       setLastUpdated(new Date().toISOString());
 
     } catch (err) {
@@ -216,10 +244,40 @@ export default function BioResearchDaily() {
   };
 
   const openPaper = (item: ApiNewsItem) => {
-    if (item.pmid) {
+    if (item.url) {
+      window.open(item.url, '_blank');
+    } else if (item.pmid) {
       window.open(`https://pubmed.ncbi.nlm.nih.gov/${item.pmid}`, '_blank');
     } else if (item.doi) {
       window.open(`https://doi.org/${item.doi}`, '_blank');
+    }
+  };
+
+  // Get source badge color
+  const getSourceBadgeColor = (sourceType: string) => {
+    const colors: Record<string, string> = {
+      pubmed: 'bg-blue-100 text-blue-700',
+      biorxiv: 'bg-green-100 text-green-700',
+      medrxiv: 'bg-teal-100 text-teal-700',
+      nature: 'bg-purple-100 text-purple-700',
+      science: 'bg-indigo-100 text-indigo-700',
+    };
+    return colors[sourceType] || 'bg-gray-100 text-gray-700';
+  };
+
+  // Toggle source selection
+  const toggleSource = (source: NewsSource) => {
+    if (source === 'all') {
+      setSelectedSources(['all']);
+    } else {
+      setSelectedSources(prev => {
+        const filtered = prev.filter(s => s !== 'all');
+        if (filtered.includes(source)) {
+          const result = filtered.filter(s => s !== source);
+          return result.length === 0 ? ['pubmed'] : result;
+        }
+        return [...filtered, source];
+      });
     }
   };
 
@@ -248,15 +306,56 @@ export default function BioResearchDaily() {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-sm text-slate-600">
+            <div className="flex items-center gap-3">
+              {/* Language Toggle */}
+              <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                <button
+                  onClick={() => setLanguage('ko')}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    language === 'ko'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  🇰🇷 한국어
+                </button>
+                <button
+                  onClick={() => setLanguage('en')}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    language === 'en'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  🇺🇸 English
+                </button>
+              </div>
+
+              {/* Source Filter */}
+              <div className="hidden md:flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                {(['pubmed', 'biorxiv', 'nature', 'all'] as NewsSource[]).map((source) => (
+                  <button
+                    key={source}
+                    onClick={() => toggleSource(source)}
+                    className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      selectedSources.includes(source)
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    {NEWS_SOURCES[source].icon} {NEWS_SOURCES[source].name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-sm text-slate-600">
                 <Calendar className="w-4 h-4" />
                 <span>{getTodayDate()}</span>
               </div>
               {lastUpdated && (
-                <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500">
+                <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-500">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>업데이트: {new Date(lastUpdated).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span>{new Date(lastUpdated).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               )}
               <button
@@ -268,7 +367,7 @@ export default function BioResearchDaily() {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">새로고침</span>
+                <span className="hidden sm:inline">{language === 'ko' ? '새로고침' : 'Refresh'}</span>
               </button>
             </div>
           </div>
@@ -401,6 +500,9 @@ export default function BioResearchDaily() {
                               </span>
                               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors.badge}`}>
                                 {item.category_name}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getSourceBadgeColor(item.source_type || 'pubmed')}`}>
+                                {item.source_type?.toUpperCase() || 'PUBMED'}
                               </span>
                               <span className="text-xs text-slate-500 ml-auto">
                                 {item.source}
