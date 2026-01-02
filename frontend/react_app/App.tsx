@@ -37,17 +37,6 @@ const AppContent: React.FC = () => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showBioDaily, setShowBioDaily] = useState(false);
 
-  // ESC key handler for BioResearchDaily
-  React.useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showBioDaily) {
-        setShowBioDaily(false);
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [showBioDaily]);
-
   // Papers for Literature Review (collected from Hero search)
   const [reviewPapers, setReviewPapers] = useState<ReviewPaper[]>([]);
 
@@ -271,14 +260,7 @@ const AppContent: React.FC = () => {
       {/* BIO Research Daily - Full Screen */}
       {showBioDaily && (
         <div className="fixed inset-0 z-50 bg-white overflow-hidden">
-          <button
-            onClick={() => setShowBioDaily(false)}
-            className="fixed top-4 right-4 z-[60] px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors shadow-lg flex items-center gap-2"
-          >
-            <span>Close</span>
-            <span className="text-slate-400">ESC</span>
-          </button>
-          <BioResearchDaily />
+          <BioResearchDaily onClose={() => setShowBioDaily(false)} />
         </div>
       )}
     </div>
