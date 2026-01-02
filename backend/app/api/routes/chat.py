@@ -458,6 +458,7 @@ class AbstractSummaryRequest(BaseModel):
     """Request to summarize abstract directly."""
     title: str
     abstract: str
+    language: Optional[str] = "en"  # "en" for English, "ko" for Korean
 
 
 class AbstractSummaryResponse(BaseModel):
@@ -499,8 +500,23 @@ async def summarize_abstract(request: AbstractSummaryRequest):
             temperature=0.3
         )
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a biomedical research expert. Summarize the following paper abstract in 2-3 clear sentences that capture the main purpose, methodology, and findings.
+        # Choose language-specific prompt
+        if request.language == "ko":
+            system_prompt = """당신은 생의학 연구 전문가입니다. 다음 논문 초록을 연구의 주요 목적, 방법론, 핵심 발견을 담아 2-3문장으로 명확하게 요약해주세요.
+
+그 다음 3-4개의 핵심 포인트를 불릿 포인트로 나열해주세요.
+
+다음 형식으로 응답해주세요:
+요약: [2-3문장 요약]
+
+핵심 포인트:
+- 포인트 1
+- 포인트 2
+- 포인트 3
+
+중요: 반드시 한국어로 응답해주세요."""
+        else:
+            system_prompt = """You are a biomedical research expert. Summarize the following paper abstract in 2-3 clear sentences that capture the main purpose, methodology, and findings.
 
 Then list 3-4 key points as bullet points.
 
@@ -510,7 +526,10 @@ SUMMARY: [your 2-3 sentence summary]
 KEY POINTS:
 - Point 1
 - Point 2
-- Point 3"""),
+- Point 3"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
             ("human", """Paper Title: {title}
 
 Abstract: {abstract}""")
@@ -536,10 +555,16 @@ Abstract: {abstract}""")
             if not line:
                 continue
 
+            # Handle both English and Korean section markers
             if line.upper().startswith("SUMMARY:"):
                 current_section = "summary"
                 summary = line[8:].strip()
+            elif line.startswith("요약:"):
+                current_section = "summary"
+                summary = line[3:].strip()  # "요약:" is 3 chars
             elif "KEY POINT" in line.upper() or line.upper().startswith("KEY POINTS"):
+                current_section = "points"
+            elif "핵심 포인트" in line:
                 current_section = "points"
             elif current_section == "summary" and not line.startswith("-"):
                 summary += " " + line
@@ -878,5 +903,162 @@ Content:
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Paper Insights Endpoints ==============
+
+
+class PaperInsightsRequest(BaseModel):
+    """Request for paper insights extraction."""
+    title: str
+    abstract: str
+    full_text: Optional[str] = None
+
+
+class BottomLineResponse(BaseModel):
+    """Bottom line summary response."""
+    summary: Optional[str] = None
+    clinical_relevance: Optional[str] = None
+    action_type: Optional[str] = None
+
+
+class QualityResponse(BaseModel):
+    """Study quality assessment response."""
+    design: Optional[str] = None
+    design_score: Optional[int] = None
+    sample_size: Optional[int] = None
+    quality_score: Optional[float] = None
+    quality_label: Optional[str] = None
+    bias_risk: Optional[str] = None
+    strengths: List[str] = []
+    limitations: List[str] = []
+
+
+class OutcomeResponse(BaseModel):
+    """Key outcome response."""
+    outcome: str
+    metric: str
+    value: float
+    ci: Optional[str] = None
+    interpretation: Optional[str] = None
+
+
+class PopulationResponse(BaseModel):
+    """Population information response."""
+    n: Optional[int] = None
+    condition: Optional[str] = None
+    age: Optional[str] = None
+    female_percent: Optional[float] = None
+    setting: Optional[str] = None
+
+
+class PaperInsightsResponse(BaseModel):
+    """Complete paper insights response."""
+    bottom_line: Optional[BottomLineResponse] = None
+    quality: Optional[QualityResponse] = None
+    key_outcomes: List[OutcomeResponse] = []
+    population: Optional[PopulationResponse] = None
+
+
+@router.post("/insights", response_model=PaperInsightsResponse)
+async def get_paper_insights(request: PaperInsightsRequest):
+    """
+    Extract quick evaluation insights from a paper.
+
+    Returns:
+    - Bottom Line: One-sentence takeaway
+    - Quality Score: Study design and methodological assessment
+    - Key Outcomes: Effect sizes (HR, OR, RR) with CIs
+    - Population: Sample size, demographics, condition
+    """
+    try:
+        from backend.app.core.paper_insights import extract_paper_insights
+
+        insights = extract_paper_insights(
+            title=request.title,
+            abstract=request.abstract,
+            full_text=request.full_text
+        )
+
+        # Build response
+        bottom_line = None
+        if insights.get("bottom_line"):
+            bottom_line = BottomLineResponse(**insights["bottom_line"])
+
+        quality = None
+        if insights.get("quality"):
+            quality = QualityResponse(**insights["quality"])
+
+        key_outcomes = []
+        for o in insights.get("key_outcomes", []):
+            key_outcomes.append(OutcomeResponse(**o))
+
+        population = None
+        if insights.get("population"):
+            population = PopulationResponse(**insights["population"])
+
+        return PaperInsightsResponse(
+            bottom_line=bottom_line,
+            quality=quality,
+            key_outcomes=key_outcomes,
+            population=population
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/insights/bottom-line", response_model=BottomLineResponse)
+async def get_bottom_line_only(request: PaperInsightsRequest):
+    """
+    Get just the bottom line summary - fastest extraction.
+    """
+    try:
+        from backend.app.core.paper_insights import get_insights_extractor
+
+        extractor = get_insights_extractor()
+        bottom_line = extractor.extract_bottom_line(request.title, request.abstract)
+
+        if bottom_line:
+            return BottomLineResponse(
+                summary=bottom_line.summary,
+                clinical_relevance=bottom_line.clinical_relevance,
+                action_type=bottom_line.action_type
+            )
+
+        return BottomLineResponse()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/insights/quality", response_model=QualityResponse)
+async def get_quality_only(request: PaperInsightsRequest):
+    """
+    Get just the study quality assessment - fast rule-based extraction.
+    """
+    try:
+        from backend.app.core.paper_insights import get_insights_extractor
+
+        extractor = get_insights_extractor()
+        quality = extractor.extract_quality(
+            request.title,
+            request.abstract,
+            request.full_text
+        )
+
+        return QualityResponse(
+            design=quality.design.label,
+            design_score=quality.design.evidence_score,
+            sample_size=quality.sample_size,
+            quality_score=quality.quality_score,
+            quality_label=quality.quality_label,
+            bias_risk=quality.bias_risk,
+            strengths=quality.strengths,
+            limitations=quality.limitations
+        )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

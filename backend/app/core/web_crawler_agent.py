@@ -35,6 +35,9 @@ import xml.etree.ElementTree as ET
 
 from .config import PAPERS_DIR, CHROMA_DIR
 from .text_splitter import BioPaperSplitter, TextChunk
+from .pubmed_fulltext_crawler import get_fulltext_crawler
+from .core_paper_reranker import CorePaperReranker, get_reranker
+from .lens_classifier import LensClassifier, get_lens_classifier, Lens
 
 
 # API Endpoints
@@ -104,16 +107,28 @@ MAJOR_JOURNALS = [
 # Build journal filter for PubMed
 MAJOR_JOURNAL_FILTER = " OR ".join([f'"{j}"[Journal]' for j in MAJOR_JOURNALS])
 
-# Trending topic categories for PubMed (with major journal filter option)
+# Base queries for trending categories (without year filter - for daily endpoint)
+TRENDING_CATEGORY_BASES = {
+    "oncology": "(cancer[Title] OR tumor[Title] OR oncology[Title])",
+    "immunotherapy": "(immunotherapy[Title] OR CAR-T[Title] OR checkpoint inhibitor[Title])",
+    "gene_therapy": "(gene therapy[Title] OR CRISPR[Title] OR gene editing[Title])",
+    "neurology": "(Alzheimer[Title] OR Parkinson[Title] OR neurodegenerative[Title])",
+    "infectious_disease": "(COVID-19[Title] OR SARS-CoV-2[Title] OR pandemic[Title])",
+    "ai_medicine": "(artificial intelligence[Title] OR machine learning[Title] OR deep learning[Title]) AND medicine",
+    "genomics": "(single-cell[Title] OR RNA-seq[Title] OR genomics[Title])",
+    "drug_discovery": "(drug discovery[Title] OR pharmaceutical[Title] OR clinical trial[Title])",
+}
+
+# Dynamic year filter function
+def _get_year_filter() -> str:
+    """Get dynamic year filter for current year and previous year."""
+    current_year = datetime.now().year
+    return f"({current_year - 1}[pdat] OR {current_year}[pdat])"
+
+# Full queries with dynamic year filter (for backwards compatibility)
 TRENDING_CATEGORIES = {
-    "oncology": "(cancer[Title] OR tumor[Title] OR oncology[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "immunotherapy": "(immunotherapy[Title] OR CAR-T[Title] OR checkpoint inhibitor[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "gene_therapy": "(gene therapy[Title] OR CRISPR[Title] OR gene editing[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "neurology": "(Alzheimer[Title] OR Parkinson[Title] OR neurodegenerative[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "infectious_disease": "(COVID-19[Title] OR SARS-CoV-2[Title] OR pandemic[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "ai_medicine": "(artificial intelligence[Title] OR machine learning[Title] OR deep learning[Title]) AND medicine AND (2024[pdat] OR 2025[pdat])",
-    "genomics": "(single-cell[Title] OR RNA-seq[Title] OR genomics[Title]) AND (2024[pdat] OR 2025[pdat])",
-    "drug_discovery": "(drug discovery[Title] OR pharmaceutical[Title] OR clinical trial[Title]) AND (2024[pdat] OR 2025[pdat])",
+    key: f"{base} AND {_get_year_filter()}"
+    for key, base in TRENDING_CATEGORY_BASES.items()
 }
 
 
@@ -141,27 +156,99 @@ class FetchedPaper:
     trend_score: float = 0.0  # 0-100
     recency_score: float = 0.0  # Based on publication date
 
+    # NEW: Advanced trend metrics
+    citation_velocity: float = 0.0  # Citation growth rate (recent vs older)
+    citations_by_year: Dict[str, int] = field(default_factory=dict)  # Year -> count
+    influential_citation_count: int = 0  # Citations from influential papers
+    publication_surge: float = 0.0  # Topic publication growth rate
+
+    # Core paper ranking fields
+    article_type: str = ""  # "Review", "Clinical Trial", "Original Research", etc.
+    core_score: float = 0.0  # 0-100 (higher = more representative of field)
+    is_core_paper: bool = False  # True if core_score >= 60
+    pubmed_article_types: List[str] = field(default_factory=list)  # Raw PubMed types
+
+    # Lens classification fields
+    primary_lens: str = ""  # "overview", "trend", "mechanism", "clinical"
+    lens_scores: Dict[str, Dict] = field(default_factory=dict)  # Scores for each lens
+    lens_explanation: str = ""  # Human-readable explanation
+
     def __post_init__(self):
         if not self.fetched_at:
             self.fetched_at = datetime.now().isoformat()
         self._calculate_scores()
 
     def _calculate_scores(self):
-        """Calculate trend and recency scores."""
-        # Recency score (papers from last 2 years get higher scores)
+        """Calculate trend and recency scores with citation velocity."""
+        import math
         current_year = datetime.now().year
+
+        # 1. Recency score (papers from last 2 years get higher scores)
         if self.year:
             years_old = current_year - self.year
             self.recency_score = max(0, 100 - (years_old * 20))
 
-        # Trend score (combination of citations and recency)
+        # 2. Calculate citation velocity from citations_by_year
+        if self.citations_by_year:
+            self._calculate_citation_velocity(current_year)
+
+        # 3. Calculate trend score with NEW formula
+        # Components: citation_velocity (35%) + publication_surge (25%) + citation_score (20%) + recency (20%)
+        citation_score = 0
         if self.citation_count > 0:
-            # Normalize citations (log scale)
-            import math
             citation_score = min(100, math.log10(self.citation_count + 1) * 30)
+
+        velocity_score = min(100, self.citation_velocity * 20)  # Scale velocity to 0-100
+        surge_score = min(100, self.publication_surge * 25)  # Scale surge to 0-100
+
+        if self.citation_velocity > 0 or self.publication_surge > 0:
+            # NEW: Multi-factor trend formula
+            self.trend_score = (
+                velocity_score * 0.35 +      # Citation velocity (most important)
+                surge_score * 0.25 +          # Publication surge
+                citation_score * 0.20 +       # Total citations
+                self.recency_score * 0.20     # Recency
+            )
+        elif self.citation_count > 0:
+            # Fallback: old formula if no velocity/surge data
             self.trend_score = (citation_score * 0.6) + (self.recency_score * 0.4)
         else:
             self.trend_score = self.recency_score * 0.5
+
+    def _calculate_citation_velocity(self, current_year: int):
+        """
+        Calculate citation velocity (recent citations / older citations).
+
+        Velocity > 1.0 means accelerating citations (trending up)
+        Velocity < 1.0 means decelerating citations (cooling down)
+        """
+        if not self.citations_by_year:
+            self.citation_velocity = 0.0
+            return
+
+        # Get citations for recent years (last 2 years) vs older years
+        recent_citations = 0
+        older_citations = 0
+
+        for year_str, count in self.citations_by_year.items():
+            try:
+                year = int(year_str)
+                if year >= current_year - 1:  # Last 2 years (2024, 2025)
+                    recent_citations += count
+                elif year >= current_year - 3:  # Previous 2 years (2022, 2023)
+                    older_citations += count
+            except ValueError:
+                continue
+
+        # Calculate velocity ratio
+        if older_citations > 0:
+            # Ratio of recent to older citations
+            self.citation_velocity = recent_citations / older_citations
+        elif recent_citations > 0:
+            # Only recent citations = very hot (new paper getting attention)
+            self.citation_velocity = 5.0  # High velocity for new trending papers
+        else:
+            self.citation_velocity = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -202,6 +289,9 @@ class WebCrawlerAgent:
         self._trending_cache = {}
         self._cache_expiry = timedelta(hours=1)
 
+        # Cache for publication surge by category
+        self._surge_cache: Dict[str, tuple] = {}
+
     async def _rate_limit(self, api: str):
         """Apply rate limiting for API calls."""
         now = time.time()
@@ -224,6 +314,101 @@ class WebCrawlerAgent:
         async with session.get(url, params=params) as response:
             response.raise_for_status()
             return await response.text()
+
+    # ==================== Publication Surge Calculation ====================
+
+    async def _get_pubmed_count(self, session: aiohttp.ClientSession, query: str) -> int:
+        """Get publication count from PubMed for a query."""
+        params = {
+            "db": "pubmed",
+            "term": query,
+            "rettype": "count",
+            "retmode": "json"
+        }
+        if self.ncbi_api_key:
+            params["api_key"] = self.ncbi_api_key
+
+        try:
+            data = await self._fetch_json(session, PUBMED_SEARCH_URL, params)
+            return int(data.get("esearchresult", {}).get("count", 0))
+        except:
+            return 0
+
+    async def calculate_publication_surge(
+        self,
+        session: aiohttp.ClientSession,
+        keywords: List[str]
+    ) -> float:
+        """
+        Calculate publication surge for a set of keywords.
+
+        Uses a SINGLE API call approach to minimize rate limiting.
+        Publication Surge = (papers in 2024-2026) / (papers in 2021-2023) * adjustment
+
+        Returns:
+            Surge ratio (>1 = growing field, <1 = declining)
+        """
+        if not keywords:
+            return 0.0
+
+        current_year = datetime.now().year
+
+        # Build search term from keywords (limit to 3 keywords to keep query simple)
+        search_terms = " OR ".join([f'{kw}[Title]' for kw in keywords[:3]])
+
+        # SINGLE API call: count recent papers (last 2 years)
+        recent_query = f"({search_terms}) AND ({current_year - 1}:{current_year}[pdat])"
+        await self._rate_limit("pubmed")
+        recent_count = await self._get_pubmed_count(session, recent_query)
+
+        # SINGLE API call: count older papers (previous 3 years)
+        older_query = f"({search_terms}) AND ({current_year - 4}:{current_year - 2}[pdat])"
+        await self._rate_limit("pubmed")
+        older_count = await self._get_pubmed_count(session, older_query)
+
+        # Calculate surge ratio
+        if older_count > 0:
+            # Normalize: recent is 2 years, older is 3 years
+            recent_yearly = recent_count / 2
+            older_yearly = older_count / 3
+            if older_yearly > 0:
+                return recent_yearly / older_yearly
+        elif recent_count > 10:
+            # New emerging topic with significant recent activity
+            return 3.0
+
+        return 0.0
+
+    async def get_category_surge(self, session: aiohttp.ClientSession, category: str) -> float:
+        """Get publication surge for a category with caching (6 hour cache)."""
+        # Check cache (6 hour expiry to reduce API calls)
+        if category in self._surge_cache:
+            cached_surge, cached_time = self._surge_cache[category]
+            if datetime.now() - cached_time < timedelta(hours=6):
+                return cached_surge
+
+        # Extract keywords from category query
+        category_query = TRENDING_CATEGORIES.get(category, "")
+        keywords = self._extract_keywords_from_query(category_query)
+
+        try:
+            surge = await self.calculate_publication_surge(session, keywords)
+        except Exception as e:
+            print(f"Surge calculation failed for {category}: {e}")
+            surge = 1.0  # Default to neutral surge
+
+        # Cache the result
+        self._surge_cache[category] = (surge, datetime.now())
+
+        return surge
+
+    def _extract_keywords_from_query(self, query: str) -> List[str]:
+        """Extract keywords from a PubMed query string."""
+        import re
+        # Find terms in [Title] or plain terms
+        pattern = r'(\w+(?:\s+\w+)?)\[Title\]'
+        matches = re.findall(pattern, query)
+        return matches if matches else []
 
     # ==================== DOI/URL Fetching ====================
 
@@ -348,24 +533,39 @@ class WebCrawlerAgent:
         )
 
     async def _enrich_with_semantic_scholar(self, session: aiohttp.ClientSession, paper: FetchedPaper) -> FetchedPaper:
-        """Enrich paper with Semantic Scholar data."""
+        """Enrich paper with Semantic Scholar data including citation velocity."""
         if not paper.doi:
             return paper
 
         url = f"{SEMANTIC_SCHOLAR_API}/paper/DOI:{paper.doi}"
-        params = {"fields": "citationCount,referenceCount,references.title"}
+        # Request citations with year info for velocity calculation
+        params = {"fields": "citationCount,influentialCitationCount,citations.year,referenceCount,references.title"}
 
         try:
             data = await self._fetch_json(session, url, params)
 
             paper.citation_count = data.get("citationCount", paper.citation_count)
+            paper.influential_citation_count = data.get("influentialCitationCount", 0)
+
+            # NEW: Aggregate citations by year from citations list
+            citations = data.get("citations", [])
+            if citations:
+                year_counts: Dict[str, int] = {}
+                for citation in citations:
+                    year = citation.get("year")
+                    if year:
+                        year_str = str(year)
+                        year_counts[year_str] = year_counts.get(year_str, 0) + 1
+                paper.citations_by_year = year_counts
 
             # Get reference titles
             refs = data.get("references", [])
             paper.references = [r.get("title", "") for r in refs[:10] if r.get("title")]
 
+            # Recalculate scores with new data
             paper._calculate_scores()
-        except:
+        except Exception as e:
+            # Silently fail - citation data is optional
             pass
 
         return paper
@@ -498,8 +698,42 @@ class WebCrawlerAgent:
                 if paper.pmid in latest_set:
                     paper.trend_score += 20
 
-            # Sort by (year, trend_score)
-            filtered_papers.sort(key=lambda p: (p.year, p.trend_score), reverse=True)
+            # Apply Core Paper Reranking
+            reranker = get_reranker(domain="oncology")
+            for paper in filtered_papers:
+                score = reranker.score_paper(
+                    title=paper.title,
+                    abstract=paper.abstract,
+                    year=paper.year,
+                    journal=paper.journal,
+                    citation_count=paper.citation_count
+                )
+                paper.core_score = score.total_score
+                paper.article_type = score.article_type
+                paper.is_core_paper = score.is_core_paper
+
+            # Apply Lens Classification
+            lens_classifier = get_lens_classifier()
+            for paper in filtered_papers:
+                classification = lens_classifier.classify(
+                    title=paper.title,
+                    abstract=paper.abstract,
+                    year=paper.year,
+                    article_type=paper.article_type,
+                    citation_count=paper.citation_count
+                )
+                paper.primary_lens = classification.primary_lens.value
+                paper.lens_scores = {
+                    lens.value: {
+                        "score": score.score,
+                        "confidence": score.confidence
+                    }
+                    for lens, score in classification.all_scores.items()
+                }
+                paper.lens_explanation = classification.explanation
+
+            # Sort by core_score (primary), then year (secondary)
+            filtered_papers.sort(key=lambda p: (p.core_score, p.year), reverse=True)
 
             return filtered_papers[:max_results]
 
@@ -633,6 +867,12 @@ class WebCrawlerAgent:
             if kw.text:
                 keywords.append(kw.text)
 
+        # Publication Types (Article Type)
+        pub_types = []
+        for pt in article_elem.findall(".//PublicationTypeList/PublicationType"):
+            if pt.text:
+                pub_types.append(pt.text)
+
         return FetchedPaper(
             id=pmid,
             source="pubmed",
@@ -646,6 +886,7 @@ class WebCrawlerAgent:
             pmcid=pmcid,
             url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
             keywords=keywords,
+            pubmed_article_types=pub_types,
         )
 
     # ==================== Trending Papers ====================
@@ -726,19 +967,28 @@ class WebCrawlerAgent:
                     seen_pmids.add(paper.pmid)
                     all_papers.append(paper)
 
+            # Get publication surge for this category (shared across all papers)
+            category_surge = await self.get_category_surge(session, category)
+
             # Try to enrich with citation data from Semantic Scholar
             enriched_papers = []
             for paper in all_papers[:max_results + 2]:
+                # Apply category-wide publication surge
+                paper.publication_surge = category_surge
+
                 if paper.doi:
                     try:
                         await self._rate_limit("semantic_scholar")
                         paper = await self._enrich_with_semantic_scholar(session, paper)
                     except:
                         pass
+
+                # Recalculate scores with new data (velocity + surge)
+                paper._calculate_scores()
                 enriched_papers.append(paper)
 
-            # Sort by combined score (trend_score already includes recency)
-            enriched_papers.sort(key=lambda p: (p.year, p.trend_score), reverse=True)
+            # Sort by trend_score (now includes velocity + surge)
+            enriched_papers.sort(key=lambda p: (p.trend_score, p.year), reverse=True)
             result = enriched_papers[:max_results]
 
             # Cache results
@@ -946,6 +1196,7 @@ class WebCrawlerAgent:
         Fetch full text content from various sources.
 
         Tries multiple methods in order:
+        0. PubMed Full Text Crawler (HTML scraping - most robust for OA papers)
         1. PMC OA API for open access papers (if pmcid available)
         2. Europe PMC for full text XML
         3. Unpaywall API (finds legal free versions by DOI)
@@ -960,6 +1211,17 @@ class WebCrawlerAgent:
         Returns:
             Full text string or None if not available
         """
+        # Method 0: Try PubMed Full Text Crawler (most robust for OA papers)
+        if pmid:
+            try:
+                crawler = get_fulltext_crawler()
+                full_text = await crawler.crawl(pmid)
+                if full_text and len(full_text) > 500:  # Ensure we got meaningful content
+                    print(f"Successfully fetched full text via PubMedFullTextCrawler for PMID {pmid}")
+                    return full_text
+            except Exception as e:
+                print(f"PubMedFullTextCrawler failed for PMID {pmid}: {e}")
+
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
             # Method 1: Try PMC OA API (for open access papers)
             if pmcid:

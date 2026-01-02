@@ -19,6 +19,9 @@ CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GOOGLE_API_KEY = GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY")
 
+# API Keys - Anthropic Claude
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
 # Embedding Model - PubMedBERT variants
 EMBEDDING_MODEL = os.getenv(
     "EMBEDDING_MODEL",
@@ -30,8 +33,14 @@ EMBEDDING_MODEL = os.getenv(
 # - "NeuML/pubmedbert-base-embeddings"
 # - "pritamdeka/S-PubMedBert-MS-MARCO" (recommended for retrieval)
 
-# Gemini Model - .env의 GEMINI_TEXT_MODEL 사용
-GEMINI_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.0-flash")
+# Gemini Model - 2.5 Pro for better reasoning
+GEMINI_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-2.5-pro")
+
+# Claude Model - Default to Claude 3.5 Sonnet
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+
+# LLM Provider Selection (claude or gemini)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude")
 
 # Text Splitting Settings
 CHUNK_SIZE = 1000
@@ -94,3 +103,19 @@ SIMILARITY_THRESHOLD = 0.7
 ENABLE_HYBRID_SEARCH = True  # Enable Dense + BM25 hybrid search
 DENSE_WEIGHT = 0.6  # Weight for dense (semantic) search (0-1)
 SPARSE_WEIGHT = 0.4  # Weight for sparse (BM25 keyword) search (0-1)
+
+# Re-ranker Settings (Cross-encoder for improved relevance)
+ENABLE_RERANKER = os.getenv("ENABLE_RERANKER", "true").lower() == "true"
+RERANKER_MODEL = os.getenv(
+    "RERANKER_MODEL",
+    "cross-encoder/ms-marco-MiniLM-L-6-v2"  # Fast, good quality
+)
+# Alternative reranker models:
+# - "cross-encoder/ms-marco-MiniLM-L-6-v2" (fast, 22M params)
+# - "cross-encoder/ms-marco-MiniLM-L-12-v2" (balanced, 33M params)
+# - "BAAI/bge-reranker-base" (scientific text, 278M params)
+# - "BAAI/bge-reranker-large" (best quality, 560M params)
+
+RERANKER_ORIGINAL_WEIGHT = float(os.getenv("RERANKER_ORIGINAL_WEIGHT", "0.3"))
+RERANKER_WEIGHT = float(os.getenv("RERANKER_RERANK_WEIGHT", "0.7"))
+RERANKER_TOP_K = int(os.getenv("RERANKER_TOP_K", "20"))  # Candidates to rerank

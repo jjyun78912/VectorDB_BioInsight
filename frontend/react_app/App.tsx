@@ -9,11 +9,12 @@ import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
+import BioResearchDaily from './components/BioResearchDaily';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
-  Library, FileSearch, Zap
+  Library, FileSearch, Zap, Newspaper
 } from 'lucide-react';
 
 // Paper type for Literature Review
@@ -34,6 +35,18 @@ const AppContent: React.FC = () => {
   const [showLiteratureReview, setShowLiteratureReview] = useState(false);
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showBioDaily, setShowBioDaily] = useState(false);
+
+  // ESC key handler for BioResearchDaily
+  React.useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showBioDaily) {
+        setShowBioDaily(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showBioDaily]);
 
   // Papers for Literature Review (collected from Hero search)
   const [reviewPapers, setReviewPapers] = useState<ReviewPaper[]>([]);
@@ -102,7 +115,24 @@ const AppContent: React.FC = () => {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
+              {/* BIO Research Daily */}
+              <button
+                onClick={() => setShowBioDaily(true)}
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Newspaper className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="font-bold text-gray-900 mb-2">BIO 연구 데일리</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  매일 업데이트되는 생명과학 연구 동향과 트렌드 분석
+                </p>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 group-hover:gap-2 transition-all">
+                  Open Tool <ArrowRight className="w-4 h-4" />
+                </span>
+              </button>
+
               {/* Literature Review */}
               <button
                 onClick={() => setShowLiteratureReview(true)}
@@ -237,6 +267,20 @@ const AppContent: React.FC = () => {
       />
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
+
+      {/* BIO Research Daily - Full Screen */}
+      {showBioDaily && (
+        <div className="fixed inset-0 z-50 bg-white overflow-hidden">
+          <button
+            onClick={() => setShowBioDaily(false)}
+            className="fixed top-4 right-4 z-[60] px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors shadow-lg flex items-center gap-2"
+          >
+            <span>Close</span>
+            <span className="text-slate-400">ESC</span>
+          </button>
+          <BioResearchDaily />
+        </div>
+      )}
     </div>
   );
 };

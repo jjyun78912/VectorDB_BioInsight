@@ -111,8 +111,10 @@ export interface CrawlerPaper {
   id: string;
   source: string;
   title: string;
+  title_ko?: string;  // Korean translation
   authors: string[];
   abstract: string;
+  abstract_ko?: string;  // Korean translation
   journal: string;
   year: number;
   doi: string;
@@ -124,6 +126,10 @@ export interface CrawlerPaper {
   trend_score: number;
   recency_score: number;
   fetched_at: string;
+  // NEW: Advanced trend metrics
+  citation_velocity?: number;  // Citation growth rate
+  publication_surge?: number;  // Topic publication growth rate
+  influential_citation_count?: number;  // Citations from influential papers
 }
 
 export interface TrendingResponse {
@@ -132,8 +138,94 @@ export interface TrendingResponse {
   cached: boolean;
 }
 
+export interface DailyPapersResponse {
+  category: string;
+  date: string;  // YYYY-MM-DD
+  papers: CrawlerPaper[];
+  total: number;
+  cached: boolean;
+}
+
+// ============== Daily News Types ==============
+
+export interface NewsItem {
+  id: string;
+  headline: string;      // 뉴스 스타일 헤드라인
+  summary: string;       // 1-2문장 요약
+  significance: string;  // 왜 중요한지
+  category: string;
+  category_name: string;
+  source: string;        // 저널명
+  date: string;
+  pmid?: string;
+  doi?: string;
+}
+
+export interface DailyNewsResponse {
+  date: string;
+  news_items: NewsItem[];
+  total: number;
+  cached: boolean;
+  generated_at: string;
+}
+
+// ============== Enhanced Trending Types ==============
+
+export interface TrendMatch {
+  id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  why_trending: string;
+  clinical_relevance: string;
+  matched_terms: string[];
+}
+
+export interface EnhancedCrawlerPaper extends CrawlerPaper {
+  trend_match?: TrendMatch;
+}
+
+export interface TrendGroup {
+  trend_id: string;
+  trend_name: string;
+  emoji: string;
+  color: string;
+  why_trending: string;
+  papers: EnhancedCrawlerPaper[];
+  paper_count: number;
+}
+
+export interface CategoryGroup {
+  category_id: string;
+  category_name: string;
+  emoji: string;
+  trends: Record<string, TrendGroup>;
+  total_papers: number;
+}
+
+export interface TrendDefinition {
+  id: string;
+  name: string;
+  category: string;
+  keywords: string[];
+  why_trending: string;
+  clinical_relevance: string;
+  emoji: string;
+  color: string;
+}
+
+export interface EnhancedTrendingResponse {
+  domain: string;
+  total_papers: number;
+  categories: Record<string, CategoryGroup>;
+  all_trends: TrendDefinition[];
+  cached: boolean;
+}
+
 export interface CrawlerSearchResponse {
   query: string;
+  query_translated?: string;  // English translation of Korean query
+  was_translated?: boolean;  // Whether query was translated
   total_results: number;
   papers: CrawlerPaper[];
 }
@@ -274,6 +366,48 @@ export interface EnhancedHotTopicsResponse {
   analysis_period: string;
   methodology: string;
   last_updated: string;
+}
+
+// ============== Paper Insights Types ==============
+
+export interface BottomLineResponse {
+  summary: string | null;
+  clinical_relevance: string | null;  // "High", "Medium", "Low"
+  action_type: string | null;  // "Treatment", "Diagnosis", "Mechanism", etc.
+}
+
+export interface QualityResponse {
+  design: string | null;  // Study design name
+  design_score: number | null;  // 0-10 evidence score
+  sample_size: number | null;
+  quality_score: number | null;  // 0-10 overall quality
+  quality_label: string | null;  // "High", "Medium", "Low"
+  bias_risk: string | null;  // "Low", "Medium", "High", "Unclear"
+  strengths: string[];
+  limitations: string[];
+}
+
+export interface OutcomeResponse {
+  outcome: string;  // e.g., "Overall Survival"
+  metric: string;  // "HR", "OR", "RR"
+  value: number;
+  ci: string | null;  // e.g., "0.64-0.82"
+  interpretation: string | null;  // e.g., "36% reduced risk"
+}
+
+export interface PopulationResponse {
+  n: number | null;  // Sample size
+  condition: string | null;  // e.g., "Pancreatic Cancer"
+  age: string | null;  // e.g., "median 62" or "45-75"
+  female_percent: number | null;
+  setting: string | null;  // "Multicenter", "Single-center"
+}
+
+export interface PaperInsightsResponse {
+  bottom_line: BottomLineResponse | null;
+  quality: QualityResponse | null;
+  key_outcomes: OutcomeResponse[];
+  population: PopulationResponse | null;
 }
 
 class BioInsightAPI {
@@ -532,6 +666,23 @@ class BioInsightAPI {
   }
 
   /**
+   * Get enhanced trending papers grouped by defined trends
+   * Returns papers with "why this is trending" context
+   */
+  async getEnhancedTrendingPapers(
+    domain: string = 'oncology',
+    limit: number = 20
+  ): Promise<EnhancedTrendingResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/crawler/trending-enhanced/${domain}?limit=${limit}`
+    );
+    if (!response.ok) {
+      throw new Error(`Get enhanced trending failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
    * Get list of trending categories
    */
   async getTrendingCategories(): Promise<{ categories: string[] }> {
@@ -543,18 +694,64 @@ class BioInsightAPI {
   }
 
   /**
+   * Get today's papers (within last 3 days, sorted by recency)
+   * Cache refreshes at KST 07:00 daily
+   */
+  async getDailyPapers(
+    category: string = 'oncology',
+    limit: number = 10
+  ): Promise<DailyPapersResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/crawler/daily/${category}?limit=${limit}`
+    );
+    if (!response.ok) {
+      throw new Error(`Get daily papers failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get AI-generated daily news summaries
+   * Returns news-style content in Korean
+   * Cache refreshes at KST 07:00 daily
+   */
+  async getDailyNews(limit: number = 6, noCache: boolean = false): Promise<DailyNewsResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+    });
+    if (noCache) {
+      params.set('no_cache', 'true');
+    }
+
+    const response = await fetch(`${this.baseUrl}/crawler/daily-news?${params}`);
+    if (!response.ok) {
+      throw new Error(`Get daily news failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
    * Search PubMed in real-time (uses hybrid search by default)
    */
   async searchPubMed(
     query: string,
-    options?: { limit?: number; hybrid?: boolean; minYear?: number }
+    options?: {
+      limit?: number;
+      hybrid?: boolean;
+      minYear?: number;
+      sort?: 'relevance' | 'pub_date';
+    }
   ): Promise<CrawlerSearchResponse> {
     const params = new URLSearchParams({
       q: query,
-      limit: (options?.limit || 10).toString(),
+      limit: (options?.limit || 20).toString(),  // Default to 20 results
       hybrid: (options?.hybrid !== false).toString(), // default true
-      ...(options?.minYear && { min_year: options.minYear.toString() }),
+      sort: options?.sort || 'relevance',
     });
+
+    if (options?.minYear) {
+      params.set('min_year', options.minYear.toString());
+    }
 
     const response = await fetch(`${this.baseUrl}/crawler/search?${params}`);
     if (!response.ok) {
@@ -603,6 +800,7 @@ class BioInsightAPI {
     pmcid?: string;
     doi?: string;
     url?: string;
+    language?: string;  // "ko" for Korean, "en" for English (default)
   }): Promise<{
     success: boolean;
     session_id?: string;
@@ -633,8 +831,9 @@ class BioInsightAPI {
 
   /**
    * Summarize a paper from its abstract (for PubMed papers not in local DB)
+   * @param language - "ko" for Korean output, "en" for English (default)
    */
-  async summarizeAbstract(title: string, abstract: string): Promise<{
+  async summarizeAbstract(title: string, abstract: string, language: string = 'en'): Promise<{
     title: string;
     summary: string;
     key_points: string[];
@@ -642,7 +841,7 @@ class BioInsightAPI {
     const response = await fetch(`${this.baseUrl}/chat/summarize-abstract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, abstract }),
+      body: JSON.stringify({ title, abstract, language }),
     });
 
     if (!response.ok) {
@@ -698,6 +897,67 @@ class BioInsightAPI {
    */
   containsKorean(text: string): boolean {
     return /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(text);
+  }
+
+  // ============== Paper Insights API ==============
+
+  /**
+   * Get comprehensive paper insights (Bottom Line, Quality, Outcomes, Population)
+   */
+  async getPaperInsights(
+    title: string,
+    abstract: string,
+    fullText?: string
+  ): Promise<PaperInsightsResponse> {
+    const response = await fetch(`${this.baseUrl}/chat/insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, abstract, full_text: fullText }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Get insights failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get just the bottom line summary (fastest)
+   */
+  async getBottomLine(
+    title: string,
+    abstract: string
+  ): Promise<BottomLineResponse> {
+    const response = await fetch(`${this.baseUrl}/chat/insights/bottom-line`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, abstract }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Get bottom line failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Get just the quality assessment (fast, rule-based)
+   */
+  async getQualityScore(
+    title: string,
+    abstract: string,
+    fullText?: string
+  ): Promise<QualityResponse> {
+    const response = await fetch(`${this.baseUrl}/chat/insights/quality`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, abstract, full_text: fullText }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Get quality failed: ${response.statusText}`);
+    }
+    return response.json();
   }
 
   // ============== Trend Analysis API ==============

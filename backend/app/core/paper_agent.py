@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .vector_store import BioVectorStore, create_vector_store, SearchResult
 from .embeddings import get_embedder
-from .config import GOOGLE_API_KEY, CHROMA_DIR
+from .config import GOOGLE_API_KEY, GEMINI_MODEL, CHROMA_DIR
 
 
 @dataclass
@@ -92,7 +92,7 @@ class PaperAgent:
 
             from langchain_google_genai import ChatGoogleGenerativeAI
             self._llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model=GEMINI_MODEL,
                 google_api_key=GOOGLE_API_KEY,
                 temperature=0.3
             )
@@ -288,9 +288,12 @@ Answer (remember to cite sources using [1], [2], etc.):""")
 
         return max(0.0, min(1.0, confidence))
 
-    def summarize(self) -> dict:
+    def summarize(self, language: str = "en") -> dict:
         """
         Generate AI summary of the paper using the indexed chunks.
+
+        Args:
+            language: Output language - "en" for English, "ko" for Korean
 
         Returns:
             dict with summary, key_findings, methodology
@@ -314,31 +317,54 @@ Answer (remember to cite sources using [1], [2], etc.):""")
                 all_chunks.append(f"[{section}] {r.content}")
 
         if not all_chunks:
+            no_content_msg = "요약을 생성할 수 없습니다 - 인덱싱된 콘텐츠가 없습니다." if language == "ko" else "Unable to generate summary - no content indexed."
             return {
-                "summary": "Unable to generate summary - no content indexed.",
+                "summary": no_content_msg,
                 "key_findings": [],
                 "methodology": ""
             }
 
         context = "\n\n---\n\n".join(all_chunks[:8])  # Limit to 8 chunks
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a research paper summarizer. Analyze the paper content and provide a structured summary.
+        # Choose language-specific prompt
+        if language == "ko":
+            system_prompt = """당신은 연구 논문 요약 전문가입니다. 논문 내용을 분석하고 구조화된 요약을 제공하세요.
+
+출력 형식 (JSON):
+{{
+  "summary": "논문의 주제와 주요 기여에 대한 2-3문장 개요",
+  "key_findings": ["핵심 발견 1", "핵심 발견 2", "핵심 발견 3"],
+  "methodology": "연구 방법론에 대한 간략한 설명"
+}}
+
+중요: 반드시 한국어로 작성하세요. 핵심적인 내용에 집중하고 간결하게 작성하세요."""
+            human_prompt = """논문: {title}
+
+논문 내용:
+{context}
+
+JSON 형식으로 구조화된 요약을 한국어로 제공하세요:"""
+        else:
+            system_prompt = """You are a research paper summarizer. Analyze the paper content and provide a structured summary.
 
 Output format (JSON):
-{
+{{
   "summary": "2-3 sentence overview of what the paper is about and its main contribution",
   "key_findings": ["finding 1", "finding 2", "finding 3"],
   "methodology": "Brief description of the research approach/methods used"
-}
+}}
 
-Be concise and focus on the most important aspects."""),
-            ("human", """Paper: {title}
+Be concise and focus on the most important aspects."""
+            human_prompt = """Paper: {title}
 
 Content from paper:
 {context}
 
-Provide a structured summary in JSON format:""")
+Provide a structured summary in JSON format:"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", human_prompt)
         ])
 
         chain = prompt | self.llm

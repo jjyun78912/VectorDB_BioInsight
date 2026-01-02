@@ -15,7 +15,10 @@ import chromadb
 from chromadb.config import Settings
 from tqdm import tqdm
 
-from .config import CHROMA_DIR, COLLECTION_NAME, TOP_K_RESULTS, SIMILARITY_THRESHOLD
+from .config import (
+    CHROMA_DIR, COLLECTION_NAME, TOP_K_RESULTS, SIMILARITY_THRESHOLD,
+    ENABLE_RERANKER, RERANKER_TOP_K
+)
 from .embeddings import PubMedBertEmbedder, get_embedder, BM25Index, HybridSearcher
 from .text_splitter import TextChunk
 
@@ -49,7 +52,8 @@ class BioVectorStore:
         disease_domain: str | None = None,
         enable_hybrid: bool = True,
         dense_weight: float = 0.6,
-        sparse_weight: float = 0.4
+        sparse_weight: float = 0.4,
+        enable_reranker: bool = ENABLE_RERANKER
     ):
         """
         Initialize the vector store.
@@ -62,6 +66,7 @@ class BioVectorStore:
             enable_hybrid: Enable hybrid search (Dense + BM25)
             dense_weight: Weight for dense search results (0-1)
             sparse_weight: Weight for sparse/BM25 results (0-1)
+            enable_reranker: Enable cross-encoder re-ranking for improved relevance
         """
         self.persist_directory = Path(persist_directory)
         self.persist_directory.mkdir(parents=True, exist_ok=True)
@@ -78,6 +83,10 @@ class BioVectorStore:
         self.enable_hybrid = enable_hybrid
         self.dense_weight = dense_weight
         self.sparse_weight = sparse_weight
+
+        # Re-ranker settings
+        self.enable_reranker = enable_reranker
+        self._reranker = None  # Lazy loaded
 
         # Initialize BM25 index for hybrid search
         self._bm25_index: Optional[BM25Index] = None
@@ -115,6 +124,14 @@ class BioVectorStore:
     def count(self) -> int:
         """Get the number of documents in the collection."""
         return self._collection.count()
+
+    @property
+    def reranker(self):
+        """Lazy load the cross-encoder reranker."""
+        if self._reranker is None and self.enable_reranker:
+            from .reranker import get_reranker
+            self._reranker = get_reranker()
+        return self._reranker
 
     def add_chunks(
         self,
@@ -216,10 +233,11 @@ class BioVectorStore:
         where: dict | None = None,
         where_document: dict | None = None,
         include_embeddings: bool = False,
-        use_hybrid: bool = True
+        use_hybrid: bool = True,
+        use_reranker: bool = True
     ) -> list[SearchResult]:
         """
-        Search for similar documents using hybrid search (Dense + BM25).
+        Search for similar documents using hybrid search (Dense + BM25) with optional re-ranking.
 
         Args:
             query: Search query text
@@ -228,16 +246,28 @@ class BioVectorStore:
             where_document: Document content filter
             include_embeddings: Whether to include embeddings in results
             use_hybrid: Use hybrid search if enabled (default True)
+            use_reranker: Apply cross-encoder re-ranking if enabled (default True)
 
         Returns:
             List of SearchResult objects
         """
+        # Determine how many candidates to fetch for reranking
+        fetch_k = top_k
+        if use_reranker and self.enable_reranker and self.reranker:
+            fetch_k = max(top_k, RERANKER_TOP_K)
+
         # Use hybrid search if enabled and no filters
         if use_hybrid and self.enable_hybrid and self._bm25_index and where is None:
-            return self._hybrid_search(query, top_k)
+            results = self._hybrid_search(query, fetch_k)
+        else:
+            # Fall back to dense-only search
+            results = self._dense_search(query, fetch_k, where, where_document, include_embeddings)
 
-        # Fall back to dense-only search
-        return self._dense_search(query, top_k, where, where_document, include_embeddings)
+        # Apply re-ranking if enabled
+        if use_reranker and self.enable_reranker and self.reranker and results:
+            results = self.reranker.rerank_search_results(query, results, top_k=top_k)
+
+        return results[:top_k]
 
     def _dense_search(
         self,

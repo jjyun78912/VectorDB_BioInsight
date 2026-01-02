@@ -11,11 +11,18 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import asyncio
+import os
+from datetime import datetime, timedelta
 
 import sys
 from pathlib import Path
 
-from backend.app.core.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES, MAJOR_JOURNALS
+from backend.app.core.web_crawler_agent import WebCrawlerAgent, FetchedPaper, TRENDING_CATEGORIES, TRENDING_CATEGORY_BASES, MAJOR_JOURNALS
+from backend.app.core.translator import get_translator
+from backend.app.core.oncology_trends import get_trend_matcher, ONCOLOGY_TRENDS
+
+# Get NCBI API key for higher rate limits
+NCBI_API_KEY = os.getenv("NCBI_API_KEY")
 
 # Try to import Playwright crawler (optional dependency)
 try:
@@ -27,8 +34,8 @@ except ImportError:
 
 router = APIRouter()
 
-# Initialize agent
-crawler_agent = WebCrawlerAgent()
+# Initialize agent with NCBI API key for higher rate limits (10 req/sec vs 3 req/sec)
+crawler_agent = WebCrawlerAgent(ncbi_api_key=NCBI_API_KEY)
 
 
 # ==================== Request/Response Models ====================
@@ -48,12 +55,19 @@ class SearchRequest(BaseModel):
     min_year: Optional[int] = Field(default=None, description="Minimum publication year")
 
 
+class LensScoreDetail(BaseModel):
+    score: float = 0.0
+    confidence: str = "low"
+
+
 class PaperResponse(BaseModel):
     id: str
     source: str
     title: str
+    title_ko: Optional[str] = None  # Korean translation
     authors: List[str]
     abstract: str
+    abstract_ko: Optional[str] = None  # Korean translation
     journal: str
     year: int
     doi: str
@@ -65,17 +79,93 @@ class PaperResponse(BaseModel):
     trend_score: float
     recency_score: float
     fetched_at: str
+    # Advanced trend metrics
+    citation_velocity: Optional[float] = None  # Citation growth rate
+    publication_surge: Optional[float] = None  # Topic publication growth rate
+    influential_citation_count: Optional[int] = None  # Citations from influential papers
+    # Core Paper Ranking fields
+    article_type: Optional[str] = None  # "Review", "Clinical Trial", etc.
+    core_score: float = 0.0  # 0-100 (higher = more representative of field)
+    is_core_paper: bool = False  # True if core_score >= 60
+    # Lens Classification fields
+    primary_lens: str = ""  # "overview", "trend", "mechanism", "clinical"
+    lens_scores: Optional[Dict[str, LensScoreDetail]] = None
+    lens_explanation: str = ""
+
+
+class LensGroup(BaseModel):
+    """Papers grouped under a specific lens."""
+    lens: str  # "overview", "trend", "mechanism", "clinical"
+    label: str  # Human-readable label
+    description: str  # What this lens represents
+    papers: List[PaperResponse]
+    count: int
 
 
 class SearchResponse(BaseModel):
     query: str
+    query_translated: Optional[str] = None  # English translation of Korean query
+    was_translated: bool = False  # Whether query was translated
     total_results: int
     papers: List[PaperResponse]
+    # Lens-grouped results
+    lens_groups: Optional[Dict[str, LensGroup]] = None
 
 
 class TrendingResponse(BaseModel):
     category: str
     papers: List[PaperResponse]
+    cached: bool
+
+
+# Enhanced Trending with Trend Context
+class TrendInfo(BaseModel):
+    """Information about a defined trend."""
+    id: str
+    name: str
+    emoji: str
+    color: str
+    why_trending: str  # "왜 지금 이게 중요한지"
+    clinical_relevance: Optional[str] = None
+    matched_terms: List[str] = []  # Keywords that matched
+
+
+class TrendedPaper(PaperResponse):
+    """Paper with trend matching information."""
+    trend_match: Optional[TrendInfo] = None
+
+
+class TrendGroup(BaseModel):
+    """Papers grouped under a specific trend."""
+    trend_id: str
+    trend_name: str
+    emoji: str
+    color: str
+    why_trending: str
+    papers: List[TrendedPaper]
+    paper_count: int
+
+
+class TrendCategory(BaseModel):
+    """A category containing multiple trends."""
+    category_id: str
+    category_name: str
+    emoji: str
+    trends: Dict[str, TrendGroup]
+    total_papers: int
+
+
+class EnhancedTrendingResponse(BaseModel):
+    """
+    Enhanced trending response with:
+    - Trend-first structure (trends defined, then papers mapped)
+    - Why each trend matters
+    - Papers grouped by sub-trends
+    """
+    domain: str  # "oncology"
+    total_papers: int
+    categories: Dict[str, TrendCategory]
+    all_trends: List[Dict]  # All defined trends for reference
     cached: bool
 
 
@@ -95,14 +185,24 @@ class BatchResponse(BaseModel):
 
 # ==================== Helper Functions ====================
 
-def paper_to_response(paper: FetchedPaper) -> PaperResponse:
+def paper_to_response(paper: FetchedPaper, title_ko: str = None, abstract_ko: str = None) -> PaperResponse:
     """Convert FetchedPaper to API response."""
+    # Convert lens_scores dict to LensScoreDetail objects
+    lens_scores_response = None
+    if paper.lens_scores:
+        lens_scores_response = {
+            lens: LensScoreDetail(score=data.get("score", 0), confidence=data.get("confidence", "low"))
+            for lens, data in paper.lens_scores.items()
+        }
+
     return PaperResponse(
         id=paper.id,
         source=paper.source,
         title=paper.title,
+        title_ko=title_ko,
         authors=paper.authors,
         abstract=paper.abstract,
+        abstract_ko=abstract_ko,
         journal=paper.journal,
         year=paper.year,
         doi=paper.doi,
@@ -113,8 +213,65 @@ def paper_to_response(paper: FetchedPaper) -> PaperResponse:
         citation_count=paper.citation_count,
         trend_score=paper.trend_score,
         recency_score=paper.recency_score,
-        fetched_at=paper.fetched_at
+        fetched_at=paper.fetched_at,
+        # Advanced trend metrics
+        citation_velocity=paper.citation_velocity if paper.citation_velocity > 0 else None,
+        publication_surge=paper.publication_surge if paper.publication_surge > 0 else None,
+        influential_citation_count=paper.influential_citation_count if paper.influential_citation_count > 0 else None,
+        # Core Paper Ranking
+        article_type=paper.article_type or None,
+        core_score=paper.core_score,
+        is_core_paper=paper.is_core_paper,
+        # Lens Classification
+        primary_lens=paper.primary_lens,
+        lens_scores=lens_scores_response,
+        lens_explanation=paper.lens_explanation,
     )
+
+
+# Lens metadata for grouping
+LENS_METADATA = {
+    "overview": {
+        "label": "Overview",
+        "description": "Reviews, summaries, and foundational concepts to understand the topic"
+    },
+    "trend": {
+        "label": "Trending",
+        "description": "Recent high-impact research and emerging developments"
+    },
+    "mechanism": {
+        "label": "Mechanism",
+        "description": "Molecular pathways, gene functions, and experimental findings"
+    },
+    "clinical": {
+        "label": "Clinical",
+        "description": "Clinical trials, treatments, biomarkers, and translational research"
+    }
+}
+
+
+def group_papers_by_lens(papers: List[PaperResponse]) -> Dict[str, LensGroup]:
+    """Group papers by their primary lens."""
+    groups = {lens: [] for lens in LENS_METADATA.keys()}
+
+    for paper in papers:
+        if paper.primary_lens in groups:
+            groups[paper.primary_lens].append(paper)
+
+    # Convert to LensGroup objects
+    result = {}
+    for lens, paper_list in groups.items():
+        if paper_list:  # Only include non-empty groups
+            meta = LENS_METADATA[lens]
+            result[lens] = LensGroup(
+                lens=lens,
+                label=meta["label"],
+                description=meta["description"],
+                papers=paper_list,
+                count=len(paper_list)
+            )
+
+    return result
 
 
 # ==================== Endpoints ====================
@@ -205,10 +362,34 @@ async def search_pubmed_get(
     limit: int = Query(default=10, ge=1, le=50, description="Max results"),
     sort: str = Query(default="relevance", description="Sort: relevance or pub_date"),
     min_year: Optional[int] = Query(default=None, description="Min year"),
-    hybrid: bool = Query(default=True, description="Use hybrid search (latest + high-impact)")
+    hybrid: bool = Query(default=True, description="Use hybrid search (latest + high-impact)"),
+    translate: bool = Query(default=True, description="Enable Korean translation")
 ):
-    """Search PubMed via GET request. Uses hybrid search by default."""
+    """
+    Search PubMed via GET request. Uses hybrid search by default.
+
+    Korean language support:
+    - If query is in Korean, automatically translates to English for search
+    - Results can be translated back to Korean (title_ko, abstract_ko fields)
+    """
     try:
+        # Check if query needs translation (Korean -> English)
+        original_query = q
+        query_translated = None
+        was_translated = False
+        translate_results = False
+
+        if translate:
+            try:
+                translator = get_translator()
+                query_translated, was_translated = translator.translate_search_query(q)
+                if was_translated:
+                    q = query_translated  # Use English query for search
+                    translate_results = True  # Translate results back to Korean
+            except Exception as e:
+                print(f"Translation service error: {e}")
+                # Continue with original query if translation fails
+
         if hybrid:
             # Use hybrid search (latest + high-impact)
             papers = await crawler_agent.search_pubmed_hybrid(
@@ -225,10 +406,36 @@ async def search_pubmed_get(
                 min_date=min_date
             )
 
+        # Translate results to Korean if original query was Korean
+        paper_responses = []
+        if translate_results and papers:
+            try:
+                translator = get_translator()
+                for p in papers:
+                    # Translate title and abstract to Korean
+                    title_ko = translator.translate_to_korean(p.title) if p.title else None
+                    # Only translate abstract if not too long (to save API calls)
+                    abstract_ko = None
+                    if p.abstract and len(p.abstract) < 2000:
+                        abstract_ko = translator.translate_to_korean(p.abstract)
+                    paper_responses.append(paper_to_response(p, title_ko=title_ko, abstract_ko=abstract_ko))
+            except Exception as e:
+                print(f"Result translation error: {e}")
+                # Fallback to non-translated results
+                paper_responses = [paper_to_response(p) for p in papers]
+        else:
+            paper_responses = [paper_to_response(p) for p in papers]
+
+        # Group papers by lens
+        lens_groups = group_papers_by_lens(paper_responses) if paper_responses else None
+
         return SearchResponse(
-            query=q,
+            query=original_query,
+            query_translated=query_translated if was_translated else None,
+            was_translated=was_translated,
             total_results=len(papers),
-            papers=[paper_to_response(p) for p in papers]
+            papers=paper_responses,
+            lens_groups=lens_groups
         )
 
     except Exception as e:
@@ -310,6 +517,164 @@ async def list_major_journals():
     }
 
 
+@router.get("/trending-enhanced/{domain}", response_model=EnhancedTrendingResponse, summary="Enhanced trending with trend context")
+async def get_enhanced_trending(
+    domain: str = "oncology",
+    limit: int = Query(default=20, ge=5, le=50, description="Total papers to fetch"),
+    major_only: bool = Query(default=True, description="Filter to major journals")
+):
+    """
+    Enhanced trending endpoint with proper trend grouping.
+
+    Key differences from /trending:
+    1. Trends are DEFINED FIRST (not inferred from papers)
+    2. Papers are MAPPED TO trends (with match scores)
+    3. Each trend includes "why it matters" context
+    4. Papers grouped by sub-trends within categories
+
+    Structure:
+    - domain: "oncology"
+    - categories:
+      - tumor_evolution:
+        - trends:
+          - lineage_plasticity: [papers with why_trending context]
+          - ecdna: [papers with why_trending context]
+      - immunotherapy:
+        - trends:
+          - immunotherapy_resistance: [papers]
+          - tumor_microenvironment: [papers]
+    """
+    if domain != "oncology":
+        raise HTTPException(
+            status_code=400,
+            detail="Currently only 'oncology' domain is supported for enhanced trending"
+        )
+
+    try:
+        # Fetch trending papers using existing logic
+        papers = await crawler_agent.get_trending_papers(
+            category="oncology",
+            max_results=limit,
+            use_cache=True,
+            major_journals_only=major_only
+        )
+
+        # Convert to response format with lens classification
+        paper_responses = [paper_to_response(p) for p in papers]
+
+        # Match papers to defined trends
+        trend_matcher = get_trend_matcher()
+
+        # Group papers by trend
+        categories: Dict[str, TrendCategory] = {}
+        unmatched_count = 0
+
+        for paper_resp in paper_responses:
+            # Get paper details for matching
+            title = paper_resp.title
+            abstract = paper_resp.abstract
+            keywords = paper_resp.keywords
+
+            # Find matching trends
+            matches = trend_matcher.match_paper(title, abstract, keywords)
+
+            if matches:
+                primary_match = matches[0]
+                cat_id = primary_match.category
+
+                # Initialize category if needed
+                if cat_id not in categories:
+                    # Get category display info
+                    cat_names = {
+                        "tumor_evolution": ("🧬 Cancer Evolution & Plasticity", "🧬"),
+                        "immunotherapy": ("🛡️ Immunotherapy & TME", "🛡️"),
+                        "precision_medicine": ("🎯 Precision Medicine", "🎯"),
+                        "cancer_prevention": ("🛡️ Cancer Prevention", "🛡️"),
+                        "treatment_resistance": ("💊 Treatment Resistance", "💊"),
+                        "emerging_targets": ("🎯 Emerging Targets", "🎯"),
+                    }
+                    cat_name, cat_emoji = cat_names.get(cat_id, (cat_id, "🔬"))
+
+                    categories[cat_id] = TrendCategory(
+                        category_id=cat_id,
+                        category_name=cat_name,
+                        emoji=cat_emoji,
+                        trends={},
+                        total_papers=0
+                    )
+
+                # Initialize trend if needed
+                trend_id = primary_match.trend_id
+                if trend_id not in categories[cat_id].trends:
+                    trend_def = ONCOLOGY_TRENDS.get(trend_id)
+                    categories[cat_id].trends[trend_id] = TrendGroup(
+                        trend_id=trend_id,
+                        trend_name=primary_match.trend_name,
+                        emoji=primary_match.emoji,
+                        color=primary_match.color,
+                        why_trending=primary_match.why_trending,
+                        papers=[],
+                        paper_count=0
+                    )
+
+                # Create TrendedPaper with trend info
+                trended_paper = TrendedPaper(
+                    **paper_resp.model_dump(),
+                    trend_match=TrendInfo(
+                        id=primary_match.trend_id,
+                        name=primary_match.trend_name,
+                        emoji=primary_match.emoji,
+                        color=primary_match.color,
+                        why_trending=primary_match.why_trending,
+                        clinical_relevance=ONCOLOGY_TRENDS[trend_id].clinical_relevance if trend_id in ONCOLOGY_TRENDS else None,
+                        matched_terms=primary_match.matched_terms[:5]
+                    )
+                )
+
+                categories[cat_id].trends[trend_id].papers.append(trended_paper)
+                categories[cat_id].trends[trend_id].paper_count += 1
+                categories[cat_id].total_papers += 1
+            else:
+                unmatched_count += 1
+
+        # Get all defined trends for reference
+        all_trends = trend_matcher.get_all_trends()
+
+        # Calculate total
+        total_papers = sum(cat.total_papers for cat in categories.values())
+
+        return EnhancedTrendingResponse(
+            domain=domain,
+            total_papers=total_papers,
+            categories=categories,
+            all_trends=all_trends,
+            cached=True
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching enhanced trending: {str(e)}")
+
+
+@router.get("/trends/defined", summary="Get all defined oncology trends")
+async def get_defined_trends():
+    """
+    Get all defined oncology trends with context.
+
+    Returns the trend definitions (not papers) including:
+    - Why each trend is important
+    - Clinical relevance
+    - Key keywords
+    """
+    trend_matcher = get_trend_matcher()
+    return {
+        "domain": "oncology",
+        "trends": trend_matcher.get_all_trends(),
+        "total_trends": len(ONCOLOGY_TRENDS)
+    }
+
+
 @router.post("/batch/doi", response_model=BatchResponse, summary="Batch fetch by DOIs")
 async def batch_fetch_dois(request: BatchDOIRequest):
     """
@@ -364,6 +729,387 @@ async def health_check():
         "cache_size": len(crawler_agent._trending_cache),
         "playwright_available": PLAYWRIGHT_AVAILABLE
     }
+
+
+# ==================== Daily Papers Endpoint ====================
+
+class DailyPapersResponse(BaseModel):
+    """Response for daily papers."""
+    category: str
+    date: str  # YYYY-MM-DD
+    papers: List[PaperResponse]
+    total: int
+    cached: bool
+
+
+# Cache for daily papers (refreshed at KST 07:00)
+_daily_cache: Dict[str, Dict] = {}
+_daily_cache_time: Dict[str, datetime] = {}
+
+
+def _is_daily_cache_valid(cache_key: str) -> bool:
+    """Check if daily cache is valid (before next KST 07:00)."""
+    if cache_key not in _daily_cache_time:
+        return False
+
+    from datetime import timezone
+    cached_at = _daily_cache_time[cache_key]
+    now = datetime.now(timezone.utc)
+
+    # KST 07:00 = UTC 22:00 (previous day)
+    kst_offset = timedelta(hours=9)
+    now_kst = now + kst_offset
+
+    # Calculate today's KST 07:00 in UTC
+    today_7am_kst = now_kst.replace(hour=7, minute=0, second=0, microsecond=0)
+    if now_kst.hour < 7:
+        today_7am_kst -= timedelta(days=1)
+    today_7am_utc = today_7am_kst - kst_offset
+
+    # Cache is valid if it was created after today's 7AM KST
+    return cached_at.replace(tzinfo=timezone.utc) >= today_7am_utc
+
+
+@router.get("/daily/{category}", response_model=DailyPapersResponse, summary="Get today's papers")
+async def get_daily_papers(
+    category: str,
+    limit: int = Query(default=10, ge=1, le=30, description="Number of papers"),
+    no_cache: bool = Query(default=False, description="Bypass cache")
+):
+    """
+    Get papers published today (or within last 24 hours).
+
+    Uses PubMed's entrez_date (date added to PubMed) or pdat (publication date).
+    Cache refreshes at KST 07:00 daily.
+
+    Categories: oncology, immunotherapy, gene_therapy, neurology, infectious_disease, ai_medicine, genomics, drug_discovery
+    """
+    from datetime import timezone
+
+    if category not in TRENDING_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category. Available: {list(TRENDING_CATEGORIES.keys())}"
+        )
+
+    cache_key = f"daily_{category}_{limit}"
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Check cache
+    if not no_cache and _is_daily_cache_valid(cache_key):
+        cached = _daily_cache[cache_key]
+        return DailyPapersResponse(
+            category=category,
+            date=cached["date"],
+            papers=cached["papers"],
+            total=len(cached["papers"]),
+            cached=True
+        )
+
+    try:
+        # Build query for today's papers using base query (without year filter)
+        # Use last 7 days to ensure we get enough papers (PubMed indexing can be delayed)
+        base_query = TRENDING_CATEGORY_BASES[category]
+
+        # Get current date for filtering
+        now = datetime.now()
+        min_date = (now - timedelta(days=7)).strftime("%Y/%m/%d")
+        max_date = now.strftime("%Y/%m/%d")
+
+        papers = await crawler_agent.search_pubmed(
+            query=base_query,
+            max_results=limit * 3,  # Fetch more to filter
+            sort="pub_date",  # Most recent first
+            min_date=min_date,
+            max_date=max_date
+        )
+
+        # Filter to major journals for quality
+        filtered_papers = []
+        for p in papers:
+            # Check if from major journal
+            is_major = any(mj.lower() in p.journal.lower() for mj in MAJOR_JOURNALS[:20])
+            if is_major or len(filtered_papers) < limit // 2:
+                filtered_papers.append(p)
+            if len(filtered_papers) >= limit:
+                break
+
+        paper_responses = [paper_to_response(p) for p in filtered_papers[:limit]]
+
+        # Update cache
+        _daily_cache[cache_key] = {
+            "date": today,
+            "papers": paper_responses
+        }
+        _daily_cache_time[cache_key] = datetime.now(timezone.utc)
+
+        return DailyPapersResponse(
+            category=category,
+            date=today,
+            papers=paper_responses,
+            total=len(paper_responses),
+            cached=False
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching daily papers: {str(e)}")
+
+
+# ==================== Daily News Generation ====================
+
+class NewsItem(BaseModel):
+    """A single news item generated from a paper."""
+    id: str
+    headline: str  # 뉴스 스타일 헤드라인
+    summary: str   # 1-2문장 요약
+    significance: str  # 왜 중요한지
+    category: str
+    category_name: str
+    source: str  # 저널명
+    date: str
+    pmid: Optional[str] = None
+    doi: Optional[str] = None
+
+
+class DailyNewsResponse(BaseModel):
+    """Response for daily news."""
+    date: str
+    news_items: List[NewsItem]
+    total: int
+    cached: bool
+    generated_at: str
+
+
+# Cache for generated news
+_news_cache: Dict[str, Dict] = {}
+_news_cache_time: Dict[str, datetime] = {}
+
+
+def _is_news_cache_valid(cache_key: str) -> bool:
+    """Check if news cache is valid (before next KST 07:00)."""
+    if cache_key not in _news_cache_time:
+        return False
+
+    from datetime import timezone
+    cached_at = _news_cache_time[cache_key]
+    now = datetime.now(timezone.utc)
+
+    kst_offset = timedelta(hours=9)
+    now_kst = now + kst_offset
+
+    today_7am_kst = now_kst.replace(hour=7, minute=0, second=0, microsecond=0)
+    if now_kst.hour < 7:
+        today_7am_kst -= timedelta(days=1)
+    today_7am_utc = today_7am_kst - kst_offset
+
+    return cached_at.replace(tzinfo=timezone.utc) >= today_7am_utc
+
+
+async def _generate_news_from_paper(paper: dict, category: str, category_name: str) -> Optional[NewsItem]:
+    """Generate a news item from a paper using AI."""
+    try:
+        from backend.app.core.config import GOOGLE_API_KEY
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.prompts import ChatPromptTemplate
+
+        if not GOOGLE_API_KEY or not paper.get("abstract"):
+            # Fallback: create simple news without AI
+            return NewsItem(
+                id=paper.get("pmid", paper.get("id", "")),
+                headline=paper.get("title", "")[:100],
+                summary=paper.get("abstract", "")[:200] + "..." if paper.get("abstract") else "",
+                significance="최신 연구 결과입니다.",
+                category=category,
+                category_name=category_name,
+                source=paper.get("journal", "PubMed"),
+                date=datetime.now().strftime("%Y-%m-%d"),
+                pmid=paper.get("pmid"),
+                doi=paper.get("doi")
+            )
+
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.7
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """당신은 생명과학 뉴스 기자입니다. 학술 논문을 일반 독자도 이해할 수 있는 뉴스 기사 형태로 변환해주세요.
+
+다음 형식으로 정확히 응답해주세요:
+HEADLINE: [흥미를 끄는 한글 헤드라인, 20자 이내]
+SUMMARY: [핵심 발견을 1-2문장으로 쉽게 설명]
+SIGNIFICANCE: [이 연구가 왜 중요한지 1문장으로 설명]
+
+예시:
+HEADLINE: 새로운 암 면역치료법 효과 입증
+SUMMARY: 연구팀이 개발한 새로운 면역치료제가 기존 치료법 대비 30% 높은 생존율을 보였습니다.
+SIGNIFICANCE: 난치성 암 환자들에게 새로운 치료 옵션을 제공할 수 있습니다."""),
+            ("human", """논문 제목: {title}
+
+초록: {abstract}
+
+분야: {category}""")
+        ])
+
+        chain = prompt | llm
+        result = chain.invoke({
+            "title": paper.get("title", ""),
+            "abstract": paper.get("abstract", "")[:1500],  # Limit abstract length
+            "category": category_name
+        })
+
+        response_text = result.content
+
+        # Parse response
+        headline = ""
+        summary = ""
+        significance = ""
+
+        for line in response_text.split("\n"):
+            line = line.strip()
+            if line.startswith("HEADLINE:"):
+                headline = line.replace("HEADLINE:", "").strip()
+            elif line.startswith("SUMMARY:"):
+                summary = line.replace("SUMMARY:", "").strip()
+            elif line.startswith("SIGNIFICANCE:"):
+                significance = line.replace("SIGNIFICANCE:", "").strip()
+
+        # Fallback if parsing fails
+        if not headline:
+            headline = paper.get("title", "")[:50]
+        if not summary:
+            summary = paper.get("abstract", "")[:150] + "..."
+        if not significance:
+            significance = "최신 연구 동향입니다."
+
+        return NewsItem(
+            id=paper.get("pmid", paper.get("id", "")),
+            headline=headline,
+            summary=summary,
+            significance=significance,
+            category=category,
+            category_name=category_name,
+            source=paper.get("journal", "PubMed"),
+            date=datetime.now().strftime("%Y-%m-%d"),
+            pmid=paper.get("pmid"),
+            doi=paper.get("doi")
+        )
+
+    except Exception as e:
+        print(f"Error generating news for paper: {e}")
+        return None
+
+
+CATEGORY_NAMES = {
+    "oncology": "종양학",
+    "immunotherapy": "면역치료",
+    "gene_therapy": "유전자치료",
+    "neurology": "신경과학",
+    "infectious_disease": "감염병",
+    "ai_medicine": "AI의학",
+    "genomics": "유전체학",
+    "drug_discovery": "신약개발",
+}
+
+
+@router.get("/daily-news", response_model=DailyNewsResponse, summary="Get AI-generated daily news")
+async def get_daily_news(
+    limit: int = Query(default=6, ge=1, le=20, description="Number of news items"),
+    no_cache: bool = Query(default=False, description="Bypass cache")
+):
+    """
+    Get AI-generated news summaries from today's papers.
+
+    Returns news-style summaries in Korean, suitable for a daily digest.
+    Cache refreshes at KST 07:00 daily.
+    """
+    from datetime import timezone
+
+    cache_key = f"daily_news_{limit}"
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Check cache
+    if not no_cache and _is_news_cache_valid(cache_key):
+        cached = _news_cache[cache_key]
+        return DailyNewsResponse(
+            date=cached["date"],
+            news_items=cached["news_items"],
+            total=len(cached["news_items"]),
+            cached=True,
+            generated_at=cached["generated_at"]
+        )
+
+    try:
+        # Fetch papers from multiple categories
+        categories_to_fetch = ["oncology", "gene_therapy", "neurology", "immunotherapy", "ai_medicine", "drug_discovery"]
+        papers_per_category = max(1, limit // len(categories_to_fetch))
+
+        all_news: List[NewsItem] = []
+
+        for category in categories_to_fetch:
+            if len(all_news) >= limit:
+                break
+
+            try:
+                base_query = TRENDING_CATEGORY_BASES.get(category, TRENDING_CATEGORY_BASES["oncology"])
+                now = datetime.now()
+                min_date = (now - timedelta(days=7)).strftime("%Y/%m/%d")
+                max_date = now.strftime("%Y/%m/%d")
+
+                papers = await crawler_agent.search_pubmed(
+                    query=base_query,
+                    max_results=papers_per_category + 2,
+                    sort="pub_date",
+                    min_date=min_date,
+                    max_date=max_date
+                )
+
+                for paper in papers[:papers_per_category]:
+                    if len(all_news) >= limit:
+                        break
+
+                    paper_dict = {
+                        "id": paper.pmid or paper.id,
+                        "title": paper.title,
+                        "abstract": paper.abstract,
+                        "journal": paper.journal,
+                        "pmid": paper.pmid,
+                        "doi": paper.doi,
+                    }
+
+                    news_item = await _generate_news_from_paper(
+                        paper_dict,
+                        category,
+                        CATEGORY_NAMES.get(category, category)
+                    )
+                    if news_item:
+                        all_news.append(news_item)
+
+            except Exception as e:
+                print(f"Error fetching {category} for news: {e}")
+                continue
+
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+        # Update cache
+        _news_cache[cache_key] = {
+            "date": today,
+            "news_items": all_news,
+            "generated_at": generated_at
+        }
+        _news_cache_time[cache_key] = datetime.now(timezone.utc)
+
+        return DailyNewsResponse(
+            date=today,
+            news_items=all_news,
+            total=len(all_news),
+            cached=False,
+            generated_at=generated_at
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating daily news: {str(e)}")
 
 
 # ==================== Playwright Deep Crawler Endpoints ====================
@@ -539,6 +1285,7 @@ class FullTextRequest(BaseModel):
     doi: Optional[str] = Field(default=None, description="DOI")
     title: str = Field(..., description="Paper title for session")
     url: Optional[str] = Field(default=None, description="Publisher URL for Playwright fallback")
+    language: Optional[str] = Field(default="en", description="Output language for AI summary: 'en' or 'ko'")
 
 
 class FullTextSummary(BaseModel):
@@ -647,7 +1394,7 @@ async def get_full_text(request: FullTextRequest):
         # Generate AI summary from the indexed content
         ai_summary = None
         try:
-            summary_result = agent.summarize()
+            summary_result = agent.summarize(language=request.language or "en")
             ai_summary = FullTextSummary(
                 summary=summary_result.get("summary", ""),
                 key_findings=summary_result.get("key_findings", []),

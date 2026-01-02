@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Flame, Plus, FolderPlus } from 'lucide-react';
-import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
+import { Search, FileText, Dna, ArrowRight, Loader2, X, Sparkles, BookOpen, ExternalLink, ChevronRight, MessageSquare, Layers, Send, Globe, Link2, Database, Telescope, Target, Info, Flame, Plus, FolderPlus, SlidersHorizontal, Calendar, ArrowUpDown, Hash, Lightbulb, Award, Users as UsersIcon } from 'lucide-react';
+import api, { SearchResult, ChatResponse, CrawlerPaper, PrecisionSearchResult, SearchDiagnostics, PaperInsightsResponse } from '../services/client';
+import { PaperInsightsCard } from './PaperInsightsCard';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import ResearchTrends from './ResearchTrends';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -19,6 +20,13 @@ type NextAction = 'chat' | 'similar' | null;
 // Search modes
 type SearchMode = 'local' | 'pubmed' | 'doi';
 
+// Search filter options
+interface SearchFilters {
+  sort: 'relevance' | 'pub_date';
+  yearRange: 'all' | '1' | '3' | '5';
+  limit: number;
+}
+
 // PubMed Search Results Component with Preview Panel
 interface PubMedResultsProps {
   papers: CrawlerPaper[];
@@ -26,6 +34,10 @@ interface PubMedResultsProps {
   isLoading?: boolean;
   onAddToReview?: (paper: ReviewPaper) => void;
   onAddAllToReview?: (papers: ReviewPaper[]) => void;
+  useKorean?: boolean;  // Output AI summary in Korean
+  query?: string;  // Current search query for re-search
+  onSearch?: (filters: SearchFilters) => void;  // Callback to re-search with filters
+  filters?: SearchFilters;
 }
 
 // Chat message interface for history
@@ -36,7 +48,17 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoading, onAddToReview, onAddAllToReview }) => {
+const PubMedResults: React.FC<PubMedResultsProps> = ({
+  papers,
+  onClose,
+  isLoading,
+  onAddToReview,
+  onAddAllToReview,
+  useKorean = false,
+  query,
+  onSearch,
+  filters
+}) => {
   const [selectedPaper, setSelectedPaper] = useState<CrawlerPaper | null>(null);
   const [showGalaxy, setShowGalaxy] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
@@ -83,7 +105,8 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
         pmid: paper.pmid,
         pmcid: paper.pmcid,
         doi: paper.doi,
-        url: paper.url
+        url: paper.url,
+        language: useKorean ? 'ko' : 'en'
       });
 
       if (fullTextResult.success && fullTextResult.session_id) {
@@ -106,7 +129,7 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
     // Fallback: use abstract-based summary
     if (paper.abstract) {
       try {
-        const response = await api.summarizeAbstract(paper.title, paper.abstract);
+        const response = await api.summarizeAbstract(paper.title, paper.abstract, useKorean ? 'ko' : 'en');
         setAiSummary(response.summary);
         setKeyPoints(response.key_points || []);
       } catch (err) {
@@ -134,7 +157,8 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
         pmid: selectedPaper.pmid,
         pmcid: selectedPaper.pmcid,
         doi: selectedPaper.doi,
-        url: selectedPaper.url
+        url: selectedPaper.url,
+        language: useKorean ? 'ko' : 'en'
       });
 
       if (result.success && result.session_id) {
@@ -241,40 +265,93 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
           {/* Left: Paper List */}
           <div className={`${selectedPaper ? 'w-2/5' : 'w-full'} flex flex-col border-r border-purple-100/50 transition-all min-h-0`}>
             {/* Header */}
-            <div className="flex-shrink-0 bg-white/80 backdrop-blur border-b border-purple-100/50 px-5 py-4 flex justify-between items-center rounded-tl-2xl">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-500" />
-                <span className="text-sm font-semibold text-gray-700">
-                  {isLoading ? 'Searching...' : `${papers.length} papers`}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {onAddAllToReview && papers.length > 0 && !isLoading && (
-                  <button
-                    onClick={() => {
-                      const reviewPapers: ReviewPaper[] = papers.map(p => ({
-                        id: p.pmid || p.id,
-                        title: p.title,
-                        authors: p.authors,
-                        year: p.year,
-                        journal: p.journal,
-                        abstract: p.abstract,
-                        doi: p.doi,
-                        pmid: p.pmid,
-                        relevance: p.trend_score
-                      }));
-                      onAddAllToReview(reviewPapers);
-                    }}
-                    className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-xs font-medium rounded-lg hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-1.5"
-                  >
-                    <FolderPlus className="w-3.5 h-3.5" />
-                    Add All to Review
+            <div className="flex-shrink-0 bg-white/80 backdrop-blur border-b border-purple-100/50 px-5 py-3 rounded-tl-2xl">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-emerald-500" />
+                  <span className="text-sm font-semibold text-gray-700">
+                    {isLoading ? 'Searching...' : `${papers.length} papers`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {onAddAllToReview && papers.length > 0 && !isLoading && (
+                    <button
+                      onClick={() => {
+                        const reviewPapers: ReviewPaper[] = papers.map(p => ({
+                          id: p.pmid || p.id,
+                          title: p.title,
+                          authors: p.authors,
+                          year: p.year,
+                          journal: p.journal,
+                          abstract: p.abstract,
+                          doi: p.doi,
+                          pmid: p.pmid,
+                          relevance: p.trend_score
+                        }));
+                        onAddAllToReview(reviewPapers);
+                      }}
+                      className="px-3 py-1.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-xs font-medium rounded-lg hover:from-violet-700 hover:to-purple-700 transition-all flex items-center gap-1.5"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      Add All
+                    </button>
+                  )}
+                  <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
+                    <X className="w-4 h-4 text-gray-500" />
                   </button>
-                )}
-                <button onClick={onClose} className="p-1.5 hover:bg-purple-100/50 rounded-full transition-colors">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
+                </div>
               </div>
+
+              {/* Filter Bar */}
+              {onSearch && filters && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-purple-100/30">
+                  {/* Sort */}
+                  <div className="flex items-center gap-1">
+                    <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={filters.sort}
+                      onChange={(e) => onSearch({ ...filters, sort: e.target.value as 'relevance' | 'pub_date' })}
+                      disabled={isLoading}
+                      className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-purple-400 focus:border-purple-400 disabled:opacity-50"
+                    >
+                      <option value="relevance">Relevance</option>
+                      <option value="pub_date">Newest First</option>
+                    </select>
+                  </div>
+
+                  {/* Year Range */}
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={filters.yearRange}
+                      onChange={(e) => onSearch({ ...filters, yearRange: e.target.value as 'all' | '1' | '3' | '5' })}
+                      disabled={isLoading}
+                      className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-purple-400 focus:border-purple-400 disabled:opacity-50"
+                    >
+                      <option value="all">All Years</option>
+                      <option value="1">Last 1 Year</option>
+                      <option value="3">Last 3 Years</option>
+                      <option value="5">Last 5 Years</option>
+                    </select>
+                  </div>
+
+                  {/* Result Count */}
+                  <div className="flex items-center gap-1">
+                    <Hash className="w-3.5 h-3.5 text-gray-400" />
+                    <select
+                      value={filters.limit}
+                      onChange={(e) => onSearch({ ...filters, limit: parseInt(e.target.value) })}
+                      disabled={isLoading}
+                      className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-1 focus:ring-purple-400 focus:border-purple-400 disabled:opacity-50"
+                    >
+                      <option value="10">10 papers</option>
+                      <option value="20">20 papers</option>
+                      <option value="30">30 papers</option>
+                      <option value="50">50 papers</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Paper List */}
@@ -313,7 +390,12 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                           <span className="text-xs text-blue-600">{paper.citation_count} citations</span>
                         )}
                       </div>
-                      <h4 className="text-sm font-medium text-gray-800 line-clamp-2">{paper.title}</h4>
+                      <h4 className="text-sm font-medium text-gray-800 line-clamp-2">
+                        {paper.title_ko || paper.title}
+                      </h4>
+                      {paper.title_ko && (
+                        <p className="text-xs text-gray-400 line-clamp-1 mt-0.5">{paper.title}</p>
+                      )}
                       <div className="flex items-center justify-between mt-1">
                         {paper.authors.length > 0 && (
                           <p className="text-xs text-gray-500 line-clamp-1 flex-1">
@@ -373,7 +455,12 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                     </span>
                   )}
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 leading-snug">{selectedPaper.title}</h3>
+                <h3 className="text-lg font-bold text-gray-900 leading-snug">
+                  {selectedPaper.title_ko || selectedPaper.title}
+                </h3>
+                {selectedPaper.title_ko && (
+                  <p className="text-sm text-gray-500 mt-1">{selectedPaper.title}</p>
+                )}
                 {selectedPaper.authors.length > 0 && (
                   <p className="text-sm text-gray-600 mt-1">
                     {selectedPaper.authors.slice(0, 5).join(', ')}{selectedPaper.authors.length > 5 && ' et al.'}
@@ -383,17 +470,6 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
 
               {/* Preview Content - Scrollable */}
               <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5">
-                {/* Abstract */}
-                {selectedPaper.abstract && (
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                      <BookOpen className="w-3.5 h-3.5" />
-                      Abstract
-                    </h4>
-                    <p className="text-sm text-gray-700 leading-relaxed">{selectedPaper.abstract}</p>
-                  </div>
-                )}
-
                 {/* AI Summary */}
                 <div className="glass-2 rounded-xl p-4 border border-purple-100/50">
                   <h4 className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -439,6 +515,15 @@ const PubMedResults: React.FC<PubMedResultsProps> = ({ papers, onClose, isLoadin
                     <p className="text-sm text-gray-400">No abstract available for summary.</p>
                   )}
                 </div>
+
+                {/* Paper Insights - Bottom Line, Quality Score, etc. */}
+                {selectedPaper.abstract && (
+                  <PaperInsightsCard
+                    title={selectedPaper.title}
+                    abstract={selectedPaper.abstract}
+                    compact={false}
+                  />
+                )}
 
                 {/* Q&A Section with Chat History */}
                 {chatMode && (
@@ -1393,6 +1478,13 @@ export const Hero: React.FC<HeroProps> = ({
   const [searchMode, setSearchMode] = useState<SearchMode>('local');
   const [pubmedResults, setPubmedResults] = useState<CrawlerPaper[] | null>(null);
   const [doiResult, setDoiResult] = useState<CrawlerPaper | null>(null);
+  const [wasQueryKorean, setWasQueryKorean] = useState(false);  // Track if original query was Korean
+  const [lastSearchQuery, setLastSearchQuery] = useState('');  // Store last search query for re-search
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({
+    sort: 'relevance',
+    yearRange: 'all',
+    limit: 20
+  });
 
   // Paper detail modal state
   const [selectedResult, setSelectedResult] = useState<PrecisionSearchResult | null>(null);
@@ -1408,6 +1500,33 @@ export const Hero: React.FC<HeroProps> = ({
     return /^10\.\d{4,}\//.test(text.trim()) || text.includes('doi.org/');
   };
 
+  // Calculate min year based on year range filter
+  const getMinYear = (yearRange: string): number | undefined => {
+    if (yearRange === 'all') return undefined;
+    const currentYear = new Date().getFullYear();
+    return currentYear - parseInt(yearRange);
+  };
+
+  // Re-search with new filters
+  const handleFilterChange = async (newFilters: SearchFilters) => {
+    setSearchFilters(newFilters);
+    if (!lastSearchQuery) return;
+
+    setIsLoading(true);
+    try {
+      const response = await api.searchPubMed(lastSearchQuery, {
+        limit: newFilters.limit,
+        sort: newFilters.sort,
+        minYear: getMinYear(newFilters.yearRange)
+      });
+      setPubmedResults(response.papers);
+    } catch (err) {
+      console.error('Filter search error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -1421,19 +1540,8 @@ export const Hero: React.FC<HeroProps> = ({
     setDoiResult(null);
 
     try {
-      // Translate Korean to English if needed
-      let searchQuery = query.trim();
-      if (api.containsKorean(searchQuery)) {
-        try {
-          const translated = await api.translateQuery(searchQuery);
-          if (translated.translated && translated.translated !== searchQuery) {
-            searchQuery = translated.translated;
-            console.log(`Translated: "${query}" → "${searchQuery}"`);
-          }
-        } catch (translateErr) {
-          console.warn('Translation failed, using original query:', translateErr);
-        }
-      }
+      const searchQuery = query.trim();
+      setLastSearchQuery(searchQuery);  // Store for filter re-search
 
       // Auto-detect DOI and switch mode
       if (isDOI(query)) {
@@ -1441,16 +1549,39 @@ export const Hero: React.FC<HeroProps> = ({
         setDoiResult(paper);
         setPubmedResults([paper]); // Show in results list
       } else if (searchMode === 'pubmed') {
-        // Real-time PubMed search
-        const response = await api.searchPubMed(searchQuery, { limit: 10 });
+        // Real-time PubMed search (backend handles Korean translation automatically)
+        const response = await api.searchPubMed(searchQuery, {
+          limit: searchFilters.limit,
+          sort: searchFilters.sort,
+          minYear: getMinYear(searchFilters.yearRange)
+        });
+        // Track if original query was Korean for summary language
+        const isKorean = api.containsKorean(searchQuery) || (response.was_translated ?? false);
+        setWasQueryKorean(isKorean);
+        // Show translation info if query was translated
+        if (response.was_translated && response.query_translated) {
+          console.log(`번역됨: "${searchQuery}" → "${response.query_translated}"`);
+        }
         setPubmedResults(response.papers);
       } else if (query.trim().endsWith('?')) {
-        // Question mode - use RAG (use original query for natural language)
+        // Question mode - use RAG
         const response = await api.ask(query);
         setChatResponse(response);
       } else {
-        // Local vector DB search with precision search
-        const response = await api.precisionSearch(searchQuery);
+        // Local vector DB search - translate Korean if needed
+        let localSearchQuery = searchQuery;
+        if (api.containsKorean(searchQuery)) {
+          try {
+            const translated = await api.translateQuery(searchQuery);
+            if (translated.translated && translated.translated !== searchQuery) {
+              localSearchQuery = translated.translated;
+              console.log(`번역됨: "${searchQuery}" → "${localSearchQuery}"`);
+            }
+          } catch (err) {
+            console.warn('Translation failed, using original:', err);
+          }
+        }
+        const response = await api.precisionSearch(localSearchQuery);
         setSearchResults(response.results);
         setSearchDiagnostics(response.diagnostics);
       }
@@ -1735,6 +1866,10 @@ export const Hero: React.FC<HeroProps> = ({
           isLoading={isLoading}
           onAddToReview={onAddToReview}
           onAddAllToReview={onAddMultipleToReview}
+          useKorean={wasQueryKorean}
+          query={lastSearchQuery}
+          onSearch={handleFilterChange}
+          filters={searchFilters}
         />
       )}
 
