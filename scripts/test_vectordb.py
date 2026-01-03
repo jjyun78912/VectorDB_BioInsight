@@ -8,17 +8,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.vector_store import BioVectorStore
-from src.config import CHROMA_DIR
+from backend.app.core.vector_store import BioVectorStore
+from backend.app.core.config import CHROMA_DIR
 
 # Disease collections to test
 DISEASES = [
+    # Original domains
     ("pancreatic_cancer", "췌장암", "pancreatic cancer treatment"),
     ("blood_cancer", "혈액암", "leukemia chemotherapy"),
     ("glioblastoma", "교모세포종", "glioblastoma temozolomide"),
     ("alzheimer", "알츠하이머", "amyloid beta tau protein"),
     ("pcos", "다낭성난소증후군", "polycystic ovary insulin resistance"),
     ("pheochromocytoma", "갈색세포종", "pheochromocytoma paraganglioma catecholamine"),
+    # New cancer domains
+    ("lung_cancer", "폐암", "lung adenocarcinoma EGFR mutation"),
+    ("breast_cancer", "유방암", "breast cancer HER2 BRCA1"),
+    ("colorectal_cancer", "대장암", "colorectal cancer KRAS APC mutation"),
+    ("liver_cancer", "간암", "hepatocellular carcinoma HCC AFP"),
+    # RNA-seq methodology
+    ("rnaseq_transcriptomics", "RNA-seq 전사체학", "RNA-seq differential expression transcriptome"),
 ]
 
 

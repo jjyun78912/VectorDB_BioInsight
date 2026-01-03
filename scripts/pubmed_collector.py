@@ -25,10 +25,10 @@ from urllib.parse import quote
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config import PAPERS_DIR, CHROMA_DIR
-from src.vector_store import BioVectorStore
-from src.embeddings import get_embedder
-from src.text_splitter import BioPaperSplitter, TextChunk
+from backend.app.core.config import PAPERS_DIR, CHROMA_DIR
+from backend.app.core.vector_store import BioVectorStore
+from backend.app.core.embeddings import get_embedder
+from backend.app.core.text_splitter import BioPaperSplitter, TextChunk
 
 # PubMed E-utilities base URLs
 PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
@@ -39,17 +39,17 @@ PMC_OA_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
 DISEASE_CONFIGS = {
     "pancreatic_cancer": {
         "name": "Pancreatic Cancer",
-        "query": "(pancreatic cancer[Title/Abstract] OR pancreatic adenocarcinoma[Title/Abstract] OR PDAC[Title/Abstract]) AND (treatment OR therapy OR prognosis OR biomarker OR gene expression)",
+        "query": "(pancreatic cancer[Title/Abstract] OR pancreatic adenocarcinoma[Title/Abstract] OR PDAC[Title/Abstract]) AND (treatment OR therapy OR prognosis OR biomarker OR gene expression OR KRAS OR transcriptomics)",
         "kr_name": "췌장암"
     },
     "blood_cancer": {
         "name": "Blood Cancer",
-        "query": "(leukemia[Title/Abstract] OR lymphoma[Title/Abstract] OR myeloma[Title/Abstract] OR hematological malignancy[Title/Abstract]) AND (treatment OR therapy OR gene OR molecular)",
+        "query": "(leukemia[Title/Abstract] OR lymphoma[Title/Abstract] OR myeloma[Title/Abstract] OR hematological malignancy[Title/Abstract]) AND (treatment OR therapy OR gene OR molecular OR RNA-seq)",
         "kr_name": "혈액암"
     },
     "glioblastoma": {
         "name": "Glioblastoma",
-        "query": "(glioblastoma[Title/Abstract] OR GBM[Title/Abstract] OR brain tumor[Title/Abstract]) AND (treatment OR therapy OR prognosis OR molecular OR MGMT OR IDH)",
+        "query": "(glioblastoma[Title/Abstract] OR GBM[Title/Abstract] OR brain tumor[Title/Abstract]) AND (treatment OR therapy OR prognosis OR molecular OR MGMT OR IDH OR transcriptome)",
         "kr_name": "교모세포종"
     },
     "alzheimer": {
@@ -61,6 +61,36 @@ DISEASE_CONFIGS = {
         "name": "Polycystic Ovary Syndrome",
         "query": "(polycystic ovary syndrome[Title/Abstract] OR PCOS[Title/Abstract]) AND (treatment OR therapy OR metabolism OR hormones OR insulin)",
         "kr_name": "다낭성난소증후군"
+    },
+    "pheochromocytoma": {
+        "name": "Pheochromocytoma",
+        "query": "(pheochromocytoma[Title/Abstract] OR paraganglioma[Title/Abstract] OR PPGL[Title/Abstract]) AND (genetics OR SDH OR catecholamine OR treatment OR diagnosis)",
+        "kr_name": "갈색세포종"
+    },
+    "lung_cancer": {
+        "name": "Lung Cancer",
+        "query": "(lung cancer[Title/Abstract] OR NSCLC[Title/Abstract] OR lung adenocarcinoma[Title/Abstract]) AND (EGFR OR ALK OR KRAS OR immunotherapy OR targeted therapy OR gene expression OR RNA-seq)",
+        "kr_name": "폐암"
+    },
+    "breast_cancer": {
+        "name": "Breast Cancer",
+        "query": "(breast cancer[Title/Abstract] OR breast carcinoma[Title/Abstract]) AND (BRCA1 OR BRCA2 OR HER2 OR ER OR PR OR triple negative OR gene expression OR transcriptomics)",
+        "kr_name": "유방암"
+    },
+    "colorectal_cancer": {
+        "name": "Colorectal Cancer",
+        "query": "(colorectal cancer[Title/Abstract] OR colon cancer[Title/Abstract] OR CRC[Title/Abstract]) AND (APC OR KRAS OR BRAF OR microsatellite OR gene expression OR RNA-seq)",
+        "kr_name": "대장암"
+    },
+    "liver_cancer": {
+        "name": "Liver Cancer",
+        "query": "(hepatocellular carcinoma[Title/Abstract] OR HCC[Title/Abstract] OR liver cancer[Title/Abstract]) AND (HBV OR HCV OR TP53 OR CTNNB1 OR gene expression OR transcriptome)",
+        "kr_name": "간암"
+    },
+    "rnaseq_transcriptomics": {
+        "name": "RNA-seq Transcriptomics",
+        "query": "(RNA-seq[Title/Abstract] OR RNA sequencing[Title/Abstract] OR transcriptomics[Title/Abstract]) AND (cancer OR tumor) AND (differential expression OR gene regulatory network OR hub gene OR driver gene)",
+        "kr_name": "RNA-seq 전사체학"
     }
 }
 

@@ -130,12 +130,20 @@ class SimilarPapersResponse(BaseModel):
 
 # Available disease domains
 DISEASE_DOMAINS = [
+    # Original domains
     {"key": "pancreatic_cancer", "name": "Pancreatic Cancer", "kr_name": "췌장암"},
     {"key": "blood_cancer", "name": "Blood Cancer", "kr_name": "혈액암"},
     {"key": "glioblastoma", "name": "Glioblastoma", "kr_name": "교모세포종"},
     {"key": "alzheimer", "name": "Alzheimer's Disease", "kr_name": "알츠하이머"},
     {"key": "pcos", "name": "Polycystic Ovary Syndrome", "kr_name": "다낭성난소증후군"},
     {"key": "pheochromocytoma", "name": "Pheochromocytoma", "kr_name": "갈색세포종"},
+    # New cancer domains
+    {"key": "lung_cancer", "name": "Lung Cancer", "kr_name": "폐암"},
+    {"key": "breast_cancer", "name": "Breast Cancer", "kr_name": "유방암"},
+    {"key": "colorectal_cancer", "name": "Colorectal Cancer", "kr_name": "대장암"},
+    {"key": "liver_cancer", "name": "Liver Cancer", "kr_name": "간암"},
+    # RNA-seq methodology
+    {"key": "rnaseq_transcriptomics", "name": "RNA-seq & Transcriptomics", "kr_name": "RNA-seq 전사체학"},
 ]
 
 
