@@ -135,6 +135,7 @@ DISEASE_DOMAINS = [
     {"key": "glioblastoma", "name": "Glioblastoma", "kr_name": "교모세포종"},
     {"key": "alzheimer", "name": "Alzheimer's Disease", "kr_name": "알츠하이머"},
     {"key": "pcos", "name": "Polycystic Ovary Syndrome", "kr_name": "다낭성난소증후군"},
+    {"key": "pheochromocytoma", "name": "Pheochromocytoma", "kr_name": "갈색세포종"},
 ]
 
 

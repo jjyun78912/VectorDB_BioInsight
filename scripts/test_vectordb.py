@@ -18,6 +18,7 @@ DISEASES = [
     ("glioblastoma", "교모세포종", "glioblastoma temozolomide"),
     ("alzheimer", "알츠하이머", "amyloid beta tau protein"),
     ("pcos", "다낭성난소증후군", "polycystic ovary insulin resistance"),
+    ("pheochromocytoma", "갈색세포종", "pheochromocytoma paraganglioma catecholamine"),
 ]
 
 

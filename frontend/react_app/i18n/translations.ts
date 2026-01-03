@@ -103,6 +103,11 @@ export interface Translations {
 
   // Footer
   poweredBy: string;
+
+  // Tools
+  bioResearchDaily: string;
+  bioResearchDailyDesc: string;
+  openTool: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -205,6 +210,11 @@ export const translations: Record<Language, Translations> = {
 
     // Footer
     poweredBy: 'Powered by PubMedBERT & Gemini AI',
+
+    // Tools
+    bioResearchDaily: 'BIO Research Daily',
+    bioResearchDailyDesc: 'Daily updates on life science research trends and analysis',
+    openTool: 'Open Tool',
   },
 
   ko: {
@@ -306,6 +316,11 @@ export const translations: Record<Language, Translations> = {
 
     // Footer
     poweredBy: 'PubMedBERT & Gemini AI 기반',
+
+    // Tools
+    bioResearchDaily: 'BIO 연구 데일리',
+    bioResearchDailyDesc: '매일 업데이트되는 생명과학 연구 동향과 트렌드 분석',
+    openTool: 'Open Tool',
   },
 };
 

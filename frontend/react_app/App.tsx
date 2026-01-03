@@ -37,6 +37,9 @@ const AppContent: React.FC = () => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [showBioDaily, setShowBioDaily] = useState(false);
 
+  // Language context
+  const { t } = useLanguage();
+
   // Papers for Literature Review (collected from Hero search)
   const [reviewPapers, setReviewPapers] = useState<ReviewPaper[]>([]);
 
@@ -113,12 +116,12 @@ const AppContent: React.FC = () => {
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <Newspaper className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">BIO 연구 데일리</h3>
+                <h3 className="font-bold text-gray-900 mb-2">{t.bioResearchDaily}</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  매일 업데이트되는 생명과학 연구 동향과 트렌드 분석
+                  {t.bioResearchDailyDesc}
                 </p>
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
 

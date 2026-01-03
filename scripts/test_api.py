@@ -56,8 +56,8 @@ def test_api():
 
     # 6. All Domain Stats
     print("\n✓ 6. 각 질병별 통계")
-    domains = ["pancreatic_cancer", "blood_cancer", "glioblastoma", "alzheimer", "pcos"]
-    kr_names = ["췌장암", "혈액암", "교모세포종", "알츠하이머", "다낭성난소증후군"]
+    domains = ["pancreatic_cancer", "blood_cancer", "glioblastoma", "alzheimer", "pcos", "pheochromocytoma"]
+    kr_names = ["췌장암", "혈액암", "교모세포종", "알츠하이머", "다낭성난소증후군", "갈색세포종"]
 
     total_papers = 0
     total_chunks = 0
