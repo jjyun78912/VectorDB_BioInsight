@@ -37,6 +37,58 @@ BioInsight AI is an AI-powered integrated research platform for bio/healthcare r
 
 ---
 
+## Disease Domains
+
+Supported disease domains for paper collection and analysis:
+
+| Key | Name | Korean | Status |
+|-----|------|--------|--------|
+| `pancreatic_cancer` | Pancreatic Cancer | 췌장암 | ✅ |
+| `blood_cancer` | Blood Cancer | 혈액암 | ✅ |
+| `glioblastoma` | Glioblastoma | 교모세포종 | ✅ |
+| `alzheimer` | Alzheimer's Disease | 알츠하이머 | ✅ |
+| `pcos` | Polycystic Ovary Syndrome | 다낭성난소증후군 | ✅ |
+| `pheochromocytoma` | Pheochromocytoma | 갈색세포종 | ✅ |
+| `lung_cancer` | Lung Cancer | 폐암 | ✅ NEW |
+| `breast_cancer` | Breast Cancer | 유방암 | ✅ NEW |
+| `colorectal_cancer` | Colorectal Cancer | 대장암 | ✅ NEW |
+| `liver_cancer` | Liver Cancer | 간암 | ✅ NEW |
+| `rnaseq_transcriptomics` | RNA-seq & Transcriptomics | RNA-seq 전사체학 | ✅ NEW |
+
+---
+
+## RNA-seq Analysis Stack
+
+### Python Packages
+
+| Category | Package | Version | Purpose |
+|----------|---------|---------|---------|
+| **Data Collection** | GEOparse | 2.0.4 | GEO dataset download |
+| | pysradb | 2.5.1 | SRA metadata query |
+| **Preprocessing** | scanpy | 1.11.5 | Single-cell analysis |
+| | anndata | 0.12.7 | Data structures |
+| | scvi-tools | 1.4.1 | Deep learning single-cell |
+| **Statistics** | rpy2 | 3.6.4 | R integration |
+| **GRN Inference** | arboreto | 0.1.6 | GENIE3 implementation |
+| | pyscenic | 0.12.1 | SCENIC pipeline |
+| **Network Analysis** | networkx | 3.6.1 | Graph algorithms |
+| | python-igraph | 1.0.0 | High-performance graphs |
+| **Functional Analysis** | gseapy | 1.1.11 | GSEA in Python |
+| | goatools | 1.5.2 | GO analysis |
+| **ML/Stats** | scikit-learn | 1.8.0 | Machine learning |
+| | scipy | 1.16.3 | Scientific computing |
+
+### R Packages (Bioconductor)
+
+| Package | Purpose |
+|---------|---------|
+| DESeq2 | Bulk RNA-seq differential expression |
+| edgeR | Alternative DEG analysis |
+| limma | Microarray/RNA-seq analysis |
+| clusterProfiler | GO/KEGG pathway enrichment |
+
+---
+
 ## Project Structure
 
 ```
@@ -44,12 +96,26 @@ VectorDB_BioInsight/
 ├── backend/
 │   └── app/
 │       ├── main.py                    # FastAPI entry point
-│       └── api/routes/
-│           ├── paper.py               # Paper analysis endpoints
-│           ├── search.py              # Vector search endpoints
-│           ├── chat.py                # AI chat endpoints (Gemini)
-│           ├── crawler.py             # Web crawler endpoints
-│           └── graph.py               # Knowledge graph endpoints
+│       ├── api/routes/
+│       │   ├── paper.py               # Paper analysis endpoints
+│       │   ├── search.py              # Vector search endpoints
+│       │   ├── chat.py                # AI chat endpoints (Gemini)
+│       │   ├── crawler.py             # Web crawler endpoints
+│       │   ├── news.py                # BIO Research Daily endpoints
+│       │   └── graph.py               # Knowledge graph endpoints
+│       └── core/                      # Core Python modules ✅
+│           ├── config.py              # Configuration (API keys)
+│           ├── pdf_parser.py          # PDF text extraction
+│           ├── text_splitter.py       # Bio-aware text chunking
+│           ├── embeddings.py          # PubMedBERT embeddings
+│           ├── vector_store.py        # ChromaDB operations
+│           ├── indexer.py             # Paper indexing
+│           ├── search.py              # Semantic search
+│           ├── reranker.py            # Cross-encoder reranking
+│           ├── rag_pipeline.py        # RAG pipeline
+│           ├── summarizer.py          # AI summarization
+│           ├── translator.py          # Korean ↔ English
+│           └── web_crawler_agent.py   # PubMed/CrossRef crawler ✅
 ├── frontend/
 │   └── react_app/                     # Production React app ✅
 │       ├── App.tsx                    # Main app component
@@ -57,29 +123,26 @@ VectorDB_BioInsight/
 │       │   ├── Hero.tsx               # Search + PubMedResults modal
 │       │   ├── KnowledgeGraph.tsx     # 3D Galaxy visualization
 │       │   ├── TrendingPapers.tsx     # Trending papers section
+│       │   ├── BioResearchDaily.tsx   # BIO 연구 데일리
 │       │   └── Glow.tsx               # UI effects
 │       ├── services/
 │       │   └── client.ts              # API client
 │       └── package.json
-├── src/                               # Core Python modules ✅
-│   ├── config.py                      # Configuration (API keys)
-│   ├── pdf_parser.py                  # PDF text extraction
-│   ├── text_splitter.py               # Bio-aware text chunking
-│   ├── embeddings.py                  # PubMedBERT embeddings
-│   ├── vector_store.py                # ChromaDB operations
-│   ├── indexer.py                     # Paper indexing
-│   ├── search.py                      # Semantic search
-│   └── web_crawler_agent.py           # PubMed/CrossRef crawler ✅
+├── scripts/
+│   └── pubmed_collector.py            # PubMed paper collection script
 ├── data/
 │   └── papers/                        # Disease domain folders
 │       └── {domain}/                  # JSON paper files
 ├── chroma_db/                         # Vector database storage
 ├── docs/
 │   ├── PRD.md
-│   └── API.md
+│   ├── API.md
+│   └── EMBEDDING_RAG_ANALYSIS.md      # RAG architecture analysis
 ├── .claude/
-│   ├── CLAUDE_1.md                    # This file
-│   └── PRD_1.md
+│   ├── CLAUDE.md                      # This file
+│   ├── PRD.md
+│   └── agents/
+│       └── rnaseq-cancer-analyst.md   # RNA-seq analysis agent
 ├── main.py                            # CLI entry point
 ├── requirements.txt
 └── .env                               # API keys (GEMINI_API_KEY, etc.)
@@ -194,19 +257,23 @@ GET    /api/graph/                        # Knowledge graph data
 PDF Upload → Parse → Chunk → Embed → Store → Summarize
 ```
 
-#### Implementation Status (2024-12-24)
+#### Implementation Status (2025-01-03)
 
-**Location**: `src/` directory
+**Location**: `backend/app/core/` directory
 
 | Component | File | Status |
 |-----------|------|--------|
-| PDF Parser | `src/pdf_parser.py` | ✅ Complete |
-| Text Splitter | `src/text_splitter.py` | ✅ Complete |
-| Embeddings | `src/embeddings.py` | ✅ Complete |
-| Vector Store | `src/vector_store.py` | ✅ Complete |
-| Indexer | `src/indexer.py` | ✅ Complete |
-| Search | `src/search.py` | ✅ Complete |
+| PDF Parser | `backend/app/core/pdf_parser.py` | ✅ Complete |
+| Text Splitter | `backend/app/core/text_splitter.py` | ✅ Complete |
+| Embeddings | `backend/app/core/embeddings.py` | ✅ Complete |
+| Vector Store | `backend/app/core/vector_store.py` | ✅ Complete |
+| Indexer | `backend/app/core/indexer.py` | ✅ Complete |
+| Search | `backend/app/core/search.py` | ✅ Complete |
+| Reranker | `backend/app/core/reranker.py` | ✅ Complete |
+| RAG Pipeline | `backend/app/core/rag_pipeline.py` | ✅ Complete |
 | CLI | `main.py` | ✅ Complete |
+
+> 📖 **See also**: `docs/EMBEDDING_RAG_ANALYSIS.md` for detailed RAG architecture analysis
 
 **Key Features Implemented**:
 
@@ -264,8 +331,8 @@ python main.py stats -d pheochromocytoma
 **Python API**:
 
 ```python
-from src.indexer import create_indexer
-from src.search import create_searcher
+from backend.app.core.indexer import create_indexer
+from backend.app.core.search import create_searcher
 
 # Indexing
 indexer = create_indexer(disease_domain="pheochromocytoma")
@@ -286,7 +353,7 @@ results = searcher.search_methods("RNA extraction protocol")
 
 **Purpose**: Real-time paper fetching from PubMed, CrossRef, Semantic Scholar
 
-**Location**: `src/web_crawler_agent.py`, `backend/app/api/routes/crawler.py`
+**Location**: `backend/app/core/web_crawler_agent.py`, `backend/app/api/routes/crawler.py`
 
 **Key Features**:
 
@@ -334,6 +401,49 @@ results = searcher.search_methods("RNA extraction protocol")
 - Ask questions about paper abstract
 - Summarize paper content
 - Perplexity-style inline citations
+
+### 1.7. BIO 연구 데일리 ✅ IMPLEMENTED (2025-01-02)
+
+**Purpose**: AI-powered daily research news digest for bio/healthcare researchers
+
+**Location**: `frontend/react_app/src/pages/BioResearchDaily.tsx`, `backend/app/api/routes/news.py`
+
+**Key Features**:
+
+| Feature | Description |
+|---------|-------------|
+| Multi-source News | PubMed, bioRxiv, medRxiv, Nature News |
+| AI Summarization | Gemini-powered Korean summaries |
+| Category Filtering | Oncology, Immunotherapy, Genomics, etc. |
+| i18n Support | Korean/English interface |
+| Real-time Updates | Daily automated collection |
+
+**API Endpoints**:
+```
+GET  /api/news/daily              # Get daily news digest
+GET  /api/news/trending           # Trending research topics
+POST /api/news/generate           # Generate AI summary
+```
+
+### 1.8. RNA-seq Cancer Analyst Agent ✅ CONFIGURED (2025-01-03)
+
+**Purpose**: Specialized Claude agent for RNA-seq cancer research analysis
+
+**Location**: `.claude/agents/rnaseq-cancer-analyst.md`
+
+**Capabilities**:
+
+| Feature | Tools/Methods |
+|---------|---------------|
+| Data Collection | GEO, TCGA, SRA via GEOparse, pysradb |
+| Preprocessing | Bulk: DESeq2 normalization, Single-cell: scanpy, scvi-tools |
+| Differential Expression | DESeq2, edgeR, Wilcoxon rank-sum |
+| GRN Inference | GRNformer, GENIE3, SCENIC |
+| Network Analysis | Hub gene detection, centrality metrics |
+| Functional Analysis | GO, KEGG, GSEA via gseapy, clusterProfiler |
+| Validation | DisGeNET, COSMIC, OMIM queries |
+
+**Usage**: Invoke via Claude Code with `subagent_type='rnaseq-cancer-analyst'`
 
 ### 2. RNA-seq Analysis Module
 
@@ -489,9 +599,10 @@ Different LLMs have different strengths. Supporting GPT-4o, Claude, and Gemini a
 
 ### Updating Embedding Model
 
-1. Update model in `ml/embeddings/`
+1. Update model in `backend/app/core/embeddings.py`
 2. Re-embed existing papers (migration script)
 3. Update ChromaDB collection
+4. See `docs/EMBEDDING_RAG_ANALYSIS.md` for model comparison
 
 ---
 
