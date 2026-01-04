@@ -445,6 +445,58 @@ POST /api/news/generate           # Generate AI summary
 
 **Usage**: Invoke via Claude Code with `subagent_type='rnaseq-cancer-analyst'`
 
+### 1.9. RNA-seq Full Pipeline ✅ IMPLEMENTED (2025-01-04)
+
+**Purpose**: Complete RNA-seq analysis pipeline with DESeq2 integration via rpy2
+
+**Location**: `rnaseq_test_results/rnaseq_full_pipeline.py`
+
+**Pipeline Steps**:
+
+| Step | Description | Tools |
+|------|-------------|-------|
+| 1. Data Collection | GEO/SRA download, synthetic data generation | GEOparse, pysradb |
+| 2. DESeq2 Analysis | Differential expression via rpy2 | DESeq2 (R), rpy2 |
+| 3. Network Analysis | Co-expression network, hub gene detection | networkx, Spearman correlation |
+| 4. Pathway Enrichment | GO/KEGG functional analysis | gseapy |
+| 5. Validation | Known cancer gene validation | Custom gene database |
+| 6. Report Generation | Comprehensive analysis report | pandas |
+
+**rpy2-DESeq2 Integration**:
+```python
+# Python에서 R의 DESeq2 호출
+from rpy2.robjects.packages import importr
+from rpy2.robjects.conversion import localconverter
+
+deseq2 = importr('DESeq2')
+with localconverter(ro.default_converter + pandas2ri.converter):
+    counts_r = ro.conversion.py2rpy(counts_df)  # pandas → R
+    # DESeq2 실행
+    results_r = run_deseq2(counts_r, metadata_r)
+    results_df = ro.conversion.rpy2py(results_r)  # R → pandas
+```
+
+**Output Files**:
+```
+rnaseq_test_results/test_run/
+├── analysis_report.txt      # 전체 분석 리포트
+├── deseq2_all_results.csv   # 전체 DESeq2 결과
+├── deseq2_significant.csv   # 유의미한 DEG
+├── hub_genes.csv            # Hub 유전자 + 중심성 점수
+├── normalized_counts.csv    # 정규화된 발현량
+├── pathway_enrichment.csv   # GO/Pathway 분석 결과
+├── raw_counts.csv           # 원본 count 데이터
+└── metadata.csv             # 샘플 메타데이터
+```
+
+**Usage**:
+```python
+from rnaseq_test_results.rnaseq_full_pipeline import RNAseqPipeline
+
+pipeline = RNAseqPipeline(output_dir='results')
+results = pipeline.run_full_pipeline(use_synthetic=True)
+```
+
 ### 2. RNA-seq Analysis Module
 
 **Purpose**: Automated differential expression analysis with visualizations

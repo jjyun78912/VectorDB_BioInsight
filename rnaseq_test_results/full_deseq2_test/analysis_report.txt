@@ -1,0 +1,66 @@
+
+================================================================================
+          RNA-seq ANALYSIS PIPELINE REPORT
+          Generated: 2026-01-04 22:44:19
+================================================================================
+
+1. DATA SUMMARY
+---------------
+Total genes analyzed: 3352
+Samples: 40
+
+2. DIFFERENTIAL EXPRESSION (DESeq2)
+-----------------------------------
+Significant DEGs (padj<0.05, |log2FC|>1): 30
+Up-regulated: 15
+Down-regulated: 15
+
+Top 10 DEGs:
+          gene  log2FoldChange          padj
+BIRC5    BIRC5        2.254552  7.408955e-25
+COL1A1  COL1A1       -2.278424  4.441310e-22
+CCND1    CCND1       -2.398613  2.365291e-21
+CCNB1    CCNB1        2.316395  5.365458e-21
+KRAS      KRAS       -2.206946  2.510121e-20
+SPP1      SPP1        2.481602  2.421927e-19
+RB1        RB1        2.310198  4.111157e-19
+TOP2A    TOP2A       -2.315468  6.681458e-19
+MYC        MYC        2.417654  1.603438e-17
+E2F1      E2F1       -2.037704  2.749948e-17
+
+3. NETWORK ANALYSIS
+-------------------
+Genes in network: 230
+
+Top 10 Hub Genes:
+      gene    degree  composite_score  log2FoldChange
+2    CCND1  0.091703         0.742803       -2.398613
+0    BIRC5  0.104803         0.736373        2.254552
+3    CCNB1  0.096070         0.666530        2.316395
+1   COL1A1  0.100437         0.665562       -2.278424
+17    EGFR  0.104803         0.656157        1.824071
+4     KRAS  0.096070         0.639813       -2.206946
+8      MYC  0.091703         0.624256        2.417654
+7    TOP2A  0.087336         0.593346       -2.315468
+6      RB1  0.087336         0.584348        2.310198
+16   VEGFA  0.087336         0.562113        1.979538
+
+4. VALIDATION
+-------------
+Known cancer genes identified: 30/50 (60.0%)
+Validated genes: ALK, AURKA, BIRC5, BRAF, BUB1, CCNB1, CCND1, CDC20, CDK4, CDKN2A, COL1A1, E2F1, EGFR, ERBB2, FOXM1, KRAS, MCM2, MET, MMP1, MMP9, MYC, PIK3CA, PTEN, RB1, SPP1, TOP2A, TP53, TYMS, UBE2C, VEGFA
+
+5. OUTPUT FILES
+---------------
+rnaseq_test_results/full_deseq2_test/
+├── raw_counts.csv (or normalized_counts.csv)
+├── metadata.csv
+├── deseq2_all_results.csv
+├── deseq2_significant.csv
+├── hub_genes.csv
+├── pathway_enrichment.csv
+└── analysis_report.txt
+
+================================================================================
+                    ANALYSIS COMPLETED SUCCESSFULLY
+================================================================================
