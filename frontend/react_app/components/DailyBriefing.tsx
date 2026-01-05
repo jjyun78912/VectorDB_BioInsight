@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X, Newspaper, TrendingUp, TrendingDown, Minus,
   ChevronRight, ExternalLink, Calendar, BarChart3,
-  Sparkles, RefreshCw, ChevronDown, ChevronUp, ArrowLeft
+  Sparkles, RefreshCw, ChevronDown, ChevronUp, ArrowLeft,
+  FileText, Download
 } from 'lucide-react';
 
 interface TrendItem {
@@ -45,15 +46,22 @@ interface DailyBriefingProps {
   onClose: () => void;
 }
 
+type ViewMode = 'topics' | 'newsletter';
+
 export const DailyBriefing: React.FC<DailyBriefingProps> = ({ isOpen, onClose }) => {
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedTrend, setExpandedTrend] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('newsletter');
+  const [newsletterHtml, setNewsletterHtml] = useState<string | null>(null);
+  const [newsletterInfo, setNewsletterInfo] = useState<{date: string; issue_number: number; version: string} | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchBriefing();
+      fetchNewsletterHtml();
     }
   }, [isOpen]);
 
@@ -75,6 +83,47 @@ export const DailyBriefing: React.FC<DailyBriefingProps> = ({ isOpen, onClose })
       setError(err instanceof Error ? err.message : 'Failed to load briefing');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchNewsletterHtml = async () => {
+    try {
+      const response = await fetch('/api/briefing/html/latest');
+      if (response.ok) {
+        const data = await response.json();
+        setNewsletterHtml(data.html);
+        setNewsletterInfo({
+          date: data.date,
+          issue_number: data.issue_number,
+          version: data.version
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch newsletter HTML:', err);
+    }
+  };
+
+  const downloadNewsletter = () => {
+    if (!newsletterHtml) return;
+
+    // Create a blob and download
+    const blob = new Blob([newsletterHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BIO_Daily_Briefing_${newsletterInfo?.issue_number || 'latest'}_${newsletterInfo?.date || 'today'}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const openInNewTab = () => {
+    if (!newsletterHtml) return;
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(newsletterHtml);
+      newWindow.document.close();
     }
   };
 
@@ -136,14 +185,58 @@ export const DailyBriefing: React.FC<DailyBriefingProps> = ({ isOpen, onClose })
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-white/10 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('newsletter')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'newsletter'
+                    ? 'bg-white text-purple-600'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                Newsletter
+              </button>
+              <button
+                onClick={() => setViewMode('topics')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'topics'
+                    ? 'bg-white text-purple-600'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                Topics
+              </button>
+            </div>
+
+            {viewMode === 'newsletter' && newsletterHtml && (
+              <>
+                <button
+                  onClick={openInNewTab}
+                  className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white text-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open
+                </button>
+                <button
+                  onClick={downloadNewsletter}
+                  className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Download
+                </button>
+              </>
+            )}
+
             <button
-              onClick={fetchBriefing}
+              onClick={() => { fetchBriefing(); fetchNewsletterHtml(); }}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white text-sm"
+              className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white text-sm"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
             </button>
             <button
               onClick={onClose}
@@ -177,7 +270,31 @@ export const DailyBriefing: React.FC<DailyBriefingProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {briefing && !loading && (
+          {/* Newsletter View */}
+          {viewMode === 'newsletter' && !loading && (
+            <div className="h-full">
+              {newsletterHtml ? (
+                <div className="bg-white rounded-2xl overflow-hidden shadow-2xl">
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={newsletterHtml}
+                    className="w-full min-h-[calc(100vh-180px)]"
+                    style={{ border: 'none' }}
+                    title="BIO Daily Briefing Newsletter"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-32 bg-slate-800/50 rounded-2xl border border-slate-700/50">
+                  <FileText className="w-16 h-16 text-gray-600 mb-4" />
+                  <p className="text-gray-400 text-lg mb-2">Newsletter not available</p>
+                  <p className="text-gray-500 text-sm">Generate a newsletter first or switch to Topics view</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Topics View */}
+          {viewMode === 'topics' && briefing && !loading && (
             <div className="space-y-8">
               {/* Stats Bar */}
               <div className="flex flex-wrap items-center gap-6 p-6 bg-slate-800/50 rounded-2xl border border-slate-700/50">

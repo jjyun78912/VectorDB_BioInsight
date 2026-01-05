@@ -124,6 +124,27 @@ async def get_latest_briefing_html():
     Returns the HTML content of the newsletter for embedding.
     """
     try:
+        # Try new v3 format first (in html/ subdirectory)
+        html_dir = BRIEFING_OUTPUT_DIR / "html"
+        if html_dir.exists():
+            html_files = sorted(html_dir.glob("bio_daily_briefing_*.html"), reverse=True)
+            if html_files:
+                latest_file = html_files[0]
+                with open(latest_file, "r", encoding="utf-8") as f:
+                    html_content = f.read()
+                # Extract issue number from filename
+                filename = latest_file.stem  # bio_daily_briefing_16_2026-01-05
+                parts = filename.split("_")
+                issue_num = parts[3] if len(parts) > 3 else "0"
+                date_str = parts[4] if len(parts) > 4 else ""
+                return {
+                    "html": html_content,
+                    "date": date_str,
+                    "issue_number": int(issue_num),
+                    "version": "v3"
+                }
+
+        # Fallback to old format
         html_files = sorted(BRIEFING_OUTPUT_DIR.glob("briefing_*.html"), reverse=True)
 
         if not html_files:
@@ -134,7 +155,55 @@ async def get_latest_briefing_html():
         with open(latest_file, "r", encoding="utf-8") as f:
             html_content = f.read()
 
-        return {"html": html_content, "date": latest_file.stem.replace("briefing_", "")}
+        return {"html": html_content, "date": latest_file.stem.replace("briefing_", ""), "version": "v2"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/newsletter/generate")
+async def generate_newsletter():
+    """
+    Generate a new newsletter with sample data (for testing).
+
+    Returns the path to the generated HTML file.
+    """
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent / "bio-daily-briefing"))
+
+        from src.newsletter_generator import NewsletterGenerator, create_sample_data
+
+        generator = NewsletterGenerator()
+        sample_data = create_sample_data()
+
+        # Get next issue number
+        html_dir = BRIEFING_OUTPUT_DIR / "html"
+        if html_dir.exists():
+            existing = list(html_dir.glob("bio_daily_briefing_*.html"))
+            issue_numbers = []
+            for f in existing:
+                parts = f.stem.split("_")
+                if len(parts) > 3:
+                    try:
+                        issue_numbers.append(int(parts[3]))
+                    except:
+                        pass
+            next_issue = max(issue_numbers) + 1 if issue_numbers else 1
+        else:
+            next_issue = 1
+
+        filepath = generator.generate_and_save(
+            data=sample_data,
+            issue_number=next_issue
+        )
+
+        return {
+            "success": True,
+            "issue_number": next_issue,
+            "filepath": filepath,
+            "message": f"Newsletter #{next_issue} generated successfully"
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
