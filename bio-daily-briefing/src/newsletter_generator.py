@@ -1,5 +1,10 @@
 """
 Newsletter Generator - HTML email template generation
+
+New format with hybrid hot topics:
+- Predefined hot topics with why_hot explanation
+- Emerging trends detection
+- Week-over-week change tracking
 """
 
 import os
@@ -26,7 +31,7 @@ class NewsletterData:
     total_papers_analyzed: int = 0
 
 
-# New HTML Template - Keyword-focused layout
+# New HTML Template - Hybrid Hot Topic Layout
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -69,16 +74,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     <tr>
                         <td style="padding: 25px 30px;">
                             <h2 style="margin: 0 0 8px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                📊 오늘의 핫 키워드 <span style="color: #6c757d; font-size: 12px; font-weight: 400;">(자동 추출)</span>
+                                📊 오늘의 핫 키워드
                             </h2>
-                            {% if total_papers_analyzed > 0 %}
                             <p style="margin: 0 0 20px 0; color: #a0a0a0; font-size: 13px;">
-                                최근 PubMed 논문 {{ total_papers_analyzed }}건을 분석했습니다.
+                                최근 48시간 PubMed 논문 {{ total_papers_analyzed }}건 분석 결과
                             </p>
-                            {% endif %}
 
+                            <!-- Predefined Hot Topics -->
+                            {% set predefined = trends | selectattr('is_predefined', 'equalto', true) | list %}
+                            {% if predefined %}
+                            <p style="margin: 0 0 10px 0; color: #4ecca3; font-size: 12px; font-weight: 600;">
+                                [업계 주목 키워드]
+                            </p>
                             <table width="100%" cellspacing="0" cellpadding="0">
-                                {% for trend in trends %}
+                                {% for trend in predefined %}
                                 <tr>
                                     <td style="padding: 10px 0; border-bottom: 1px solid #0f3460;">
                                         <table width="100%" cellspacing="0" cellpadding="0">
@@ -92,18 +101,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                                 <td width="60" align="right" style="color: #a0a0a0; font-size: 13px;">
                                                     {{ trend.count }}건
                                                 </td>
-                                                <td width="80" align="right">
-                                                    {% if trend.day_change >= 50 %}
-                                                    <span style="color: #ff6b6b; font-size: 13px; font-weight: 500;">
-                                                        🔥 급상승
-                                                    </span>
-                                                    {% elif trend.day_change >= 10 %}
+                                                <td width="100" align="right">
+                                                    {% if trend.is_first_tracking %}
                                                     <span style="color: #4ecca3; font-size: 13px;">
-                                                        ⬆️ +{{ trend.day_change|round|int }}%
+                                                        📊 추적 시작
                                                     </span>
-                                                    {% elif trend.day_change <= -10 %}
+                                                    {% elif trend.week_change >= 50 %}
+                                                    <span style="color: #ff6b6b; font-size: 13px; font-weight: 500;">
+                                                        🔥 +{{ trend.week_change|round|int }}%
+                                                    </span>
+                                                    {% elif trend.week_change >= 10 %}
+                                                    <span style="color: #4ecca3; font-size: 13px;">
+                                                        ⬆️ +{{ trend.week_change|round|int }}%
+                                                    </span>
+                                                    {% elif trend.week_change <= -10 %}
                                                     <span style="color: #ff6b6b; font-size: 13px;">
-                                                        ⬇️ {{ trend.day_change|round|int }}%
+                                                        ⬇️ {{ trend.week_change|round|int }}%
                                                     </span>
                                                     {% else %}
                                                     <span style="color: #6c757d; font-size: 13px;">
@@ -117,6 +130,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                 </tr>
                                 {% endfor %}
                             </table>
+                            {% endif %}
+
+                            <!-- Emerging Trends -->
+                            {% set emerging = trends | selectattr('is_emerging', 'equalto', true) | list %}
+                            {% if emerging %}
+                            <p style="margin: 20px 0 10px 0; color: #ff6b6b; font-size: 12px; font-weight: 600;">
+                                [🆕 급상승 감지]
+                            </p>
+                            <table width="100%" cellspacing="0" cellpadding="0">
+                                {% for trend in emerging %}
+                                <tr>
+                                    <td style="padding: 10px 0; border-bottom: 1px solid #0f3460;">
+                                        <table width="100%" cellspacing="0" cellpadding="0">
+                                            <tr>
+                                                <td width="20" style="color: #ff6b6b; font-size: 13px;">
+                                                    •
+                                                </td>
+                                                <td style="color: #ffffff; font-size: 14px; font-weight: 500;">
+                                                    {{ trend.keyword | title }}
+                                                </td>
+                                                <td width="60" align="right" style="color: #a0a0a0; font-size: 13px;">
+                                                    {{ trend.count }}건
+                                                </td>
+                                                <td width="100" align="right">
+                                                    <span style="color: #ff6b6b; font-size: 13px; font-weight: 500;">
+                                                        {{ trend.change_label }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        <p style="margin: 5px 0 0 20px; color: #6c757d; font-size: 11px;">
+                                            └ 고정 목록 외 키워드 중 상위 급상승 감지
+                                        </p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                            {% endif %}
                         </td>
                     </tr>
 
@@ -136,18 +187,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                 ✨ 오늘의 주요 연구
                             </h2>
                             <p style="margin: 0; color: #6c757d; font-size: 12px;">
-                                [핫 키워드 기반 자동 선정]
+                                [상위 핫토픽 기반 대표 논문]
                             </p>
                         </td>
                     </tr>
 
                     <!-- Articles by Trend -->
                     {% set article_num = namespace(value=1) %}
-                    {% for keyword, articles in articles_by_trend.items() %}
+                    {% for trend in trends %}
+                    {% set articles = articles_by_trend.get(trend.keyword, []) %}
                     {% if articles %}
                     <tr>
                         <td style="padding: 15px 30px;">
-                            <!-- Keyword Header -->
+                            <!-- Trend Header -->
                             <table width="100%" cellspacing="0" cellpadding="0" style="border-top: 1px solid #0f3460;">
                                 <tr>
                                     <td style="padding-top: 15px;">
@@ -155,7 +207,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                             ───────────────────────────────
                                         </p>
                                         <p style="margin: 8px 0; color: #ffffff; font-size: 14px; font-weight: 600;">
-                                            {{ "%02d"|format(article_num.value) }} | {{ keyword | title }}
+                                            {% if trend.is_emerging %}
+                                            🆕 | {{ trend.keyword | title }}
+                                            {% else %}
+                                            {{ "%02d"|format(article_num.value) }} | {{ trend.keyword | title }} ({{ trend.change_label }})
+                                            {% endif %}
                                         </p>
                                         <p style="margin: 0 0 15px 0; color: #4ecca3; font-size: 12px; font-weight: 600;">
                                             ───────────────────────────────
@@ -163,6 +219,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                                     </td>
                                 </tr>
                             </table>
+
+                            <!-- Why Hot -->
+                            {% if trend.why_hot %}
+                            <p style="margin: 0 0 15px 0; padding: 10px 15px; background-color: #0f3460; border-radius: 6px; color: #a0a0a0; font-size: 13px;">
+                                {% if trend.is_emerging %}
+                                <strong style="color: #ff6b6b;">왜 갑자기 급상승?</strong><br>
+                                {% else %}
+                                <strong style="color: #4ecca3;">이 키워드가 왜 요즘 핫한가요?</strong><br>
+                                {% endif %}
+                                → {{ trend.why_hot }}
+                            </p>
+                            {% endif %}
 
                             {% for article in articles[:1] %}
                             <!-- Article Content -->
@@ -244,9 +312,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                             <h2 style="margin: 0 0 15px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
                                 💬 AI 에디터 코멘트
                             </h2>
-                            <p style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">
-                                {{ editor_comment }}
-                            </p>
+                            <div style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">
+                                {{ editor_comment | replace('\n\n', '</p><p style="margin: 15px 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">') | replace('\n', '<br>') | safe }}
+                            </div>
                         </td>
                     </tr>
 
@@ -431,66 +499,91 @@ def main():
     from .trend_analyzer import Trend
     from .ai_summarizer import NewsArticle
 
-    # Sample data
+    # Sample data - new format with predefined/emerging
     trends = [
-        Trend(keyword="glp-1 receptor", count=87, previous_count=65),
-        Trend(keyword="car-t cell therapy", count=52, previous_count=46),
-        Trend(keyword="alphafold/ai", count=41, previous_count=15),
-        Trend(keyword="long covid", count=38, previous_count=38),
-        Trend(keyword="crispr", count=35, previous_count=38),
+        Trend(
+            keyword="GLP-1",
+            count=42,
+            previous_count=35,
+            week_ago_count=31,
+            category="치료제",
+            why_hot="비만→당뇨→심장→알츠하이머 적응증 확대 경쟁",
+            is_predefined=True,
+            is_emerging=False,
+        ),
+        Trend(
+            keyword="CAR-T",
+            count=28,
+            previous_count=25,
+            week_ago_count=25,
+            category="세포치료",
+            why_hot="고형암 적용, 자가면역질환 확장",
+            is_predefined=True,
+            is_emerging=False,
+        ),
+        Trend(
+            keyword="CRISPR",
+            count=25,
+            previous_count=25,
+            week_ago_count=26,
+            category="유전자편집",
+            why_hot="최초 유전자치료제 카스게비 승인",
+            is_predefined=True,
+            is_emerging=False,
+        ),
+        Trend(
+            keyword="Ferroptosis",
+            count=18,
+            previous_count=5,
+            week_ago_count=0,
+            category="",
+            why_hot="급상승 감지된 키워드",
+            is_predefined=False,
+            is_emerging=True,
+        ),
     ]
 
     articles_by_trend = {
-        "glp-1 receptor": [
+        "GLP-1": [
             NewsArticle(
                 pmid="12345678",
                 hook="왜 이 연구가 오늘 주목받나요?",
                 title="위고비, 심부전 환자에서도 심혈관 보호 효과 확인",
-                content="세마글루타이드(위고비)가 비만 동반 심부전 환자에서 심혈관 사건을 20% 감소시켰다는 대규모 임상 결과가 발표되었습니다. 기존에는 당뇨·비만 치료제로만 알려졌지만, 이제 심장 보호 효과까지 입증되면서 적응증 확대 경쟁이 가속화될 전망입니다.",
+                content="세마글루타이드(위고비)가 비만 동반 심부전 환자에서 심혈관 사건을 20% 감소시켰다는 대규모 임상 결과가 발표되었습니다.",
                 insight="GLP-1 적응증 확대 경쟁 가속화 예상",
                 source_journal="NEJM",
                 source_institution="Novo Nordisk",
             )
         ],
-        "alphafold/ai": [
-            NewsArticle(
-                pmid="87654321",
-                hook="왜 갑자기 급상승?",
-                title="구글 딥마인드, AlphaFold 3로 신약 타겟 12개 발굴",
-                content="AlphaFold 3가 기존에 구조를 알 수 없었던 단백질-리간드 복합체 구조를 예측하면서 신약 개발 파이프라인에 직접 활용 가능해졌습니다.",
-                insight="AI 신약개발 실용화 단계 진입",
-                source_journal="Nature",
-                source_institution="DeepMind",
-            )
-        ],
-        "car-t cell therapy": [
+        "CAR-T": [
             NewsArticle(
                 pmid="11111111",
                 hook="이번 주 계속 상승세",
                 title="고형암 침투력 높인 차세대 CAR-T 개발",
-                content="종양 미세환경을 뚫고 들어가는 새로운 CAR-T가 마우스 모델에서 기존 대비 3배 높은 종양 침투율을 보였습니다.",
+                content="종양 미세환경을 뚫고 들어가는 새로운 CAR-T가 개발되었습니다.",
                 insight="CAR-T의 고형암 적용 가능성 한 걸음 더",
                 source_journal="Cell",
                 source_institution="MIT",
             )
         ],
+        "Ferroptosis": [
+            NewsArticle(
+                pmid="99999999",
+                hook="왜 갑자기 급상승?",
+                title="페롭토시스 유도 항암제, 전임상 돌파",
+                content="기존 항암제 내성을 극복하는 새로운 세포사멸 메커니즘으로 주목받고 있습니다.",
+                insight="새로운 항암 전략으로 부상",
+                source_journal="Nature",
+                source_institution="Harvard",
+            )
+        ],
     }
 
-    quick_news = [
-        "💊 FDA, 릴리 알츠하이머 치료제 도나네맙 승인",
-        "🧪 삼성바이오로직스, ADC 위탁생산 5조원 수주",
-        "🏛️ EU, AI 의료기기 규제 가이드라인 초안 발표",
-        "📈 미국 바이오텍 지수 3일 연속 상승",
-    ]
-
-    editor_comment = """이번 주는 GLP-1의 주간이라 해도 과언이 아닙니다.
+    editor_comment = """이번 주는 **GLP-1의 주간**입니다.
 비만 → 당뇨 → 심장 → 알츠하이머까지, 적응증 확장 속도가 정말 빠르네요.
 
-AlphaFold 3 소식도 주목할 만합니다.
-"AI가 신약 발굴했다"가 이제 뉴스가 아니라 일상이 되어가는 느낌입니다.
-
-내일은 JP모건 헬스케어 컨퍼런스 첫날입니다.
-빅파마 CEO들의 2026년 전략 발표, 정리해드릴게요! 🏥"""
+**주목 포인트**: Ferroptosis가 급상승 키워드로 감지되었습니다.
+기존 항암제 내성 극복의 새로운 대안으로 떠오르고 있습니다."""
 
     # Generate newsletter
     generator = NewsletterGenerator()
@@ -498,8 +591,7 @@ AlphaFold 3 소식도 주목할 만합니다.
         trends=trends,
         articles_by_trend=articles_by_trend,
         editor_comment=editor_comment,
-        quick_news=quick_news,
-        total_papers_analyzed=2847,
+        total_papers_analyzed=100,
     )
 
     # Save

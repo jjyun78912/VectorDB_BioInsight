@@ -102,41 +102,27 @@ INSTITUTION: [Research institution name, or journal if not available]"""
 
         self._llm = None
 
-    def _get_llm(self, prefer_gemini: bool = True):
-        """Get LLM instance, preferring Gemini for cost efficiency."""
+    def _get_llm(self, prefer_claude: bool = True):
+        """Get LLM instance, preferring Claude Sonnet for quality."""
         if self._llm is not None:
             return self._llm
 
-        # Try Gemini first (preferred for lower cost)
-        if prefer_gemini and self.google_api_key:
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                self._llm = ChatGoogleGenerativeAI(
-                    model="gemini-2.0-flash-exp",
-                    google_api_key=self.google_api_key,
-                    temperature=0.7,
-                )
-                print("Using Gemini API")
-                return self._llm
-            except Exception as e:
-                print(f"Gemini init failed: {e}")
-
-        # Fallback to Claude
-        if self.anthropic_api_key:
+        # Try Claude first (preferred for Korean quality)
+        if prefer_claude and self.anthropic_api_key:
             try:
                 from langchain_anthropic import ChatAnthropic
                 self._llm = ChatAnthropic(
-                    model="claude-3-5-haiku-latest",
+                    model="claude-sonnet-4-20250514",
                     api_key=self.anthropic_api_key,
                     temperature=0.7,
                 )
-                print("Using Claude API")
+                print("Using Claude Sonnet API")
                 return self._llm
             except Exception as e:
                 print(f"Claude init failed: {e}")
 
-        # Retry with Gemini if Claude failed
-        if not prefer_gemini and self.google_api_key:
+        # Fallback to Gemini
+        if self.google_api_key:
             try:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 self._llm = ChatGoogleGenerativeAI(
@@ -147,7 +133,21 @@ INSTITUTION: [Research institution name, or journal if not available]"""
                 print("Using Gemini API (fallback)")
                 return self._llm
             except Exception as e:
-                print(f"Gemini fallback init failed: {e}")
+                print(f"Gemini init failed: {e}")
+
+        # Retry with Claude if Gemini failed
+        if not prefer_claude and self.anthropic_api_key:
+            try:
+                from langchain_anthropic import ChatAnthropic
+                self._llm = ChatAnthropic(
+                    model="claude-sonnet-4-20250514",
+                    api_key=self.anthropic_api_key,
+                    temperature=0.7,
+                )
+                print("Using Claude Sonnet API (fallback)")
+                return self._llm
+            except Exception as e:
+                print(f"Claude fallback init failed: {e}")
 
         raise RuntimeError("No LLM API key configured. Set GOOGLE_API_KEY or ANTHROPIC_API_KEY.")
 
@@ -271,13 +271,23 @@ INSTITUTION: [Research institution name, or journal if not available]"""
             Dictionary mapping trend keyword to list of NewsArticle
         """
         result = {}
+        used_pmids = set()  # Track already used papers to prevent duplicates
 
         for trend in trends:
             articles = []
-            for paper in trend.representative_papers[:max_per_trend]:
+            for paper in trend.representative_papers:
+                # Skip if this paper was already used in another trend
+                if paper.pmid in used_pmids:
+                    continue
+
                 article = self.summarize_paper(paper)
                 if article:
                     articles.append(article)
+                    used_pmids.add(paper.pmid)
+
+                # Stop if we have enough articles for this trend
+                if len(articles) >= max_per_trend:
+                    break
 
             result[trend.keyword] = articles
 
@@ -288,26 +298,47 @@ INSTITUTION: [Research institution name, or journal if not available]"""
         try:
             llm = self._get_llm()
 
-            trend_summary = "\n".join([
-                f"- {t.keyword} ({t.count}건, {t.trend_indicator})"
-                for t in trends
+            # Separate predefined and emerging trends
+            predefined = [t for t in trends if getattr(t, 'is_predefined', True) and not getattr(t, 'is_emerging', False)]
+            emerging = [t for t in trends if getattr(t, 'is_emerging', False)]
+
+            predefined_summary = "\n".join([
+                f"- {t.keyword} ({t.count}건, {getattr(t, 'change_label', t.trend_indicator)}, 카테고리: {getattr(t, 'category', 'N/A')}, 왜 핫함: {getattr(t, 'why_hot', 'N/A')})"
+                for t in predefined
             ])
 
+            emerging_summary = "\n".join([
+                f"- {t.keyword} ({t.count}건, 급상승 감지)"
+                for t in emerging
+            ]) if emerging else "없음"
+
             if self.language == "ko":
-                prompt = f"""오늘의 바이오 연구 트렌드를 요약해주세요.
+                prompt = f"""당신은 바이오/제약 업계 전문 에디터입니다.
+오늘의 PubMed 논문 트렌드를 분석하여 에디터 코멘트를 작성해주세요.
 
-트렌드 키워드:
-{trend_summary}
+[업계 주목 키워드 - 고정 핫토픽]
+{predefined_summary}
 
-2-3문장으로 오늘의 연구 동향을 요약하고, 주목할 포인트를 간단히 언급해주세요.
-에디터 코멘트 스타일로 작성해주세요."""
+[급상승 감지 키워드 - 신규]
+{emerging_summary}
+
+다음 형식으로 작성해주세요:
+1. 첫 문단: 오늘 가장 주목할 키워드와 그 의미 (왜 이 키워드가 업계에서 중요한지)
+2. 두 번째 문단: 급상승 키워드가 있다면 왜 갑자기 주목받는지 분석
+3. 마지막: 연구자/투자자가 주목해야 할 포인트
+
+마크다운 볼드(**키워드**) 사용 가능. 전체 200자 내외로 작성."""
             else:
-                prompt = f"""Summarize today's biomedical research trends.
+                prompt = f"""You are a biotech/pharma industry editor.
+Analyze today's PubMed trends and write an editor's comment.
 
-Trending keywords:
-{trend_summary}
+[Industry Hot Topics - Predefined]
+{predefined_summary}
 
-Write a 2-3 sentence editor's comment summarizing today's research landscape and key points to note."""
+[Emerging Keywords - New]
+{emerging_summary}
+
+Write a 2-3 paragraph comment covering key trends and what researchers/investors should note."""
 
             response = llm.invoke(prompt)
             return response.content.strip()

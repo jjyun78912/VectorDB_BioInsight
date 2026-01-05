@@ -45,13 +45,31 @@ class Paper:
 class PubMedFetcher:
     """Fetches papers from PubMed API."""
 
-    # Broad biomedical search query
+    # Broad biomedical search query - expanded to cover all predefined hot topics
     DEFAULT_QUERY = (
-        "(cancer[tiab] OR immunotherapy[tiab] OR gene therapy[tiab] OR "
-        "CRISPR[tiab] OR CAR-T[tiab] OR checkpoint inhibitor[tiab] OR "
-        "targeted therapy[tiab] OR precision medicine[tiab] OR "
-        "biomarker[tiab] OR clinical trial[tiab] OR drug discovery[tiab] OR "
-        "RNA-seq[tiab] OR single cell[tiab] OR artificial intelligence[tiab])"
+        # Cancer & Immunotherapy
+        "(cancer[tiab] OR immunotherapy[tiab] OR checkpoint inhibitor[tiab] OR "
+        "PD-1[tiab] OR PD-L1[tiab] OR CAR-T[tiab] OR CAR T cell[tiab] OR "
+        "bispecific antibody[tiab] OR ADC[tiab] OR antibody-drug conjugate[tiab] OR "
+        # Gene & Cell Therapy
+        "gene therapy[tiab] OR CRISPR[tiab] OR gene editing[tiab] OR "
+        "cell therapy[tiab] OR stem cell[tiab] OR iPSC[tiab] OR NK cell therapy[tiab] OR "
+        # mRNA & LNP
+        "mRNA[tiab] OR mRNA vaccine[tiab] OR lipid nanoparticle[tiab] OR LNP[tiab] OR "
+        "siRNA[tiab] OR antisense oligonucleotide[tiab] OR exosome[tiab] OR "
+        # GLP-1 & Metabolic
+        "GLP-1[tiab] OR semaglutide[tiab] OR tirzepatide[tiab] OR "
+        "obesity[tiab] OR weight loss drug[tiab] OR "
+        # Neurology
+        "Alzheimer[tiab] OR amyloid[tiab] OR tau protein[tiab] OR "
+        "neurodegeneration[tiab] OR "
+        # AI & Drug Discovery
+        "AlphaFold[tiab] OR AI drug discovery[tiab] OR machine learning drug[tiab] OR "
+        "drug discovery[tiab] OR precision medicine[tiab] OR "
+        # Microbiome & Others
+        "microbiome[tiab] OR gut microbiota[tiab] OR radiopharmaceutical[tiab] OR "
+        # General terms
+        "clinical trial[tiab] OR biomarker[tiab])"
     )
 
     def __init__(
@@ -273,6 +291,112 @@ class PubMedFetcher:
         pmids = await self.search(max_results=max_results, days=days)
         papers = await self.fetch_details(pmids)
         return papers
+
+    async def fetch_papers_by_keywords(
+        self,
+        keyword_queries: Dict[str, str],
+        max_per_keyword: int = 30,
+        days: int = 2,
+    ) -> Dict[str, List[Paper]]:
+        """
+        Fetch papers for each keyword separately for better coverage.
+
+        Args:
+            keyword_queries: Dict mapping topic name to search query
+            max_per_keyword: Max papers per keyword
+            days: Number of days to look back
+
+        Returns:
+            Dict mapping topic name to list of Papers
+        """
+        results = {}
+        all_pmids = set()
+
+        for topic_name, query in keyword_queries.items():
+            pmids = await self.search(
+                max_results=max_per_keyword,
+                days=days,
+                custom_query=query,
+            )
+
+            # Skip duplicates
+            new_pmids = [p for p in pmids if p not in all_pmids]
+            all_pmids.update(new_pmids)
+
+            if new_pmids:
+                papers = await self.fetch_details(new_pmids)
+                results[topic_name] = papers
+                print(f"  {topic_name}: {len(papers)}건")
+            else:
+                results[topic_name] = []
+
+            # Rate limiting
+            await asyncio.sleep(0.3)
+
+        return results
+
+    async def fetch_comprehensive(
+        self,
+        days: int = 2,
+        max_total: int = 500,
+    ) -> List[Paper]:
+        """
+        Fetch papers comprehensively covering all predefined hot topics.
+
+        Strategy:
+        1. Fetch papers for each hot topic keyword separately
+        2. Merge and deduplicate
+        3. Also fetch general biomedical papers
+
+        Args:
+            days: Number of days to look back
+            max_total: Maximum total papers
+
+        Returns:
+            List of Paper objects with good coverage
+        """
+        from .config.hot_topics import PREDEFINED_HOT_TOPICS
+
+        all_pmids = set()
+        all_papers = []
+
+        print(f"\n[키워드별 개별 검색 - {days}일]")
+
+        # 1. Keyword-specific searches
+        for topic_name, topic_info in PREDEFINED_HOT_TOPICS.items():
+            keywords = topic_info["keywords"]
+            # Build OR query from keywords
+            query_parts = [f'"{kw}"[tiab]' for kw in keywords[:3]]  # Top 3 keywords
+            query = " OR ".join(query_parts)
+
+            pmids = await self.search(max_results=30, days=days, custom_query=query)
+            new_pmids = [p for p in pmids if p not in all_pmids]
+
+            if new_pmids:
+                papers = await self.fetch_details(new_pmids[:20])  # Limit per topic
+                all_papers.extend(papers)
+                all_pmids.update(p.pmid for p in papers)
+                print(f"  ✅ {topic_name}: {len(papers)}건")
+            else:
+                print(f"  ❌ {topic_name}: 0건")
+
+            await asyncio.sleep(0.3)
+
+            if len(all_papers) >= max_total:
+                break
+
+        # 2. Also fetch from default query for general coverage
+        print(f"\n[일반 검색 추가]")
+        general_pmids = await self.search(max_results=100, days=days)
+        new_general = [p for p in general_pmids if p not in all_pmids]
+
+        if new_general:
+            general_papers = await self.fetch_details(new_general[:50])
+            all_papers.extend(general_papers)
+            print(f"  일반 검색: {len(general_papers)}건 추가")
+
+        print(f"\n총 수집 논문: {len(all_papers)}건 (중복 제거됨)")
+        return all_papers
 
 
 async def main():

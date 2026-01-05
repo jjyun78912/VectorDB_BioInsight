@@ -125,25 +125,47 @@ class BriefingScheduler:
         print(f"\n[{datetime.now()}] Starting briefing generation...")
 
         try:
-            # 1. Fetch papers
-            print(f"Fetching {self.papers_per_day} papers from last {self.lookback_days} days...")
-            papers = await self.fetcher.fetch_recent_papers(
-                max_results=self.papers_per_day,
-                days=self.lookback_days,
-            )
-            print(f"Fetched {len(papers)} papers")
+            # 1. Fetch papers comprehensively (keyword-specific + general)
+            lookback_hours = int(os.getenv("LOOKBACK_HOURS", "48"))
+            lookback_days = max(2, lookback_hours // 24) if lookback_hours else self.lookback_days
+
+            # Use comprehensive fetch for better hot topic coverage
+            use_comprehensive = os.getenv("USE_COMPREHENSIVE_FETCH", "true").lower() == "true"
+
+            if use_comprehensive:
+                print(f"Using comprehensive fetch (keyword-specific + general)...")
+                papers = await self.fetcher.fetch_comprehensive(
+                    days=lookback_days,
+                    max_total=500,
+                )
+            else:
+                print(f"Fetching {self.papers_per_day} papers from last {lookback_hours} hours...")
+                papers = await self.fetcher.fetch_recent_papers(
+                    max_results=self.papers_per_day,
+                    days=lookback_days,
+                )
+            print(f"Fetched {len(papers)} papers total")
 
             if not papers:
                 print("No papers found!")
                 return None
 
-            # 2. Analyze trends
-            print(f"Analyzing trends (top {self.top_trends})...")
+            # 2. Analyze trends with hybrid system
+            print(f"Analyzing hybrid trends (predefined + emerging)...")
             trends = self.analyzer.get_hot_topics(papers, top_n=self.top_trends)
-            print(f"Found {len(trends)} trending keywords")
 
-            for t in trends:
-                print(f"  {t.trend_indicator} {t.keyword}: {t.count} papers")
+            # Separate for display
+            predefined = [t for t in trends if getattr(t, 'is_predefined', True) and not getattr(t, 'is_emerging', False)]
+            emerging = [t for t in trends if getattr(t, 'is_emerging', False)]
+
+            print(f"\n[업계 주목 키워드] {len(predefined)}개")
+            for t in predefined:
+                print(f"  {t.trend_indicator} {t.keyword}: {t.count}건 ({getattr(t, 'change_label', '')})")
+
+            if emerging:
+                print(f"\n[🆕 급상승 감지] {len(emerging)}개")
+                for t in emerging:
+                    print(f"  🆕 {t.keyword}: {t.count}건")
 
             # 3. Generate summaries
             print("Generating AI summaries...")

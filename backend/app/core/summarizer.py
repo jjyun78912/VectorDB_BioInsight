@@ -8,11 +8,11 @@ Features:
 """
 from dataclasses import dataclass, field
 from pathlib import Path
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
-from .config import GOOGLE_API_KEY, GEMINI_MODEL
+from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 from .pdf_parser import BioPaperParser
 from .vector_store import BioVectorStore, create_vector_store
 
@@ -121,7 +121,7 @@ class PaperSummarizer:
     def __init__(
         self,
         disease_domain: str | None = None,
-        model_name: str = GEMINI_MODEL,
+        model_name: str = CLAUDE_MODEL,
         api_key: str | None = None
     ):
         """
@@ -129,8 +129,8 @@ class PaperSummarizer:
 
         Args:
             disease_domain: Disease domain for vector store access
-            model_name: Gemini model name
-            api_key: Google API key
+            model_name: Claude model name
+            api_key: Anthropic API key
         """
         self.disease_domain = disease_domain
 
@@ -139,17 +139,17 @@ class PaperSummarizer:
         if disease_domain:
             self.vector_store = create_vector_store(disease_domain=disease_domain)
 
-        # Configure Gemini
-        api_key = api_key or GOOGLE_API_KEY
+        # Configure Claude
+        api_key = api_key or ANTHROPIC_API_KEY
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY not set. Add it to .env file.")
+            raise ValueError("ANTHROPIC_API_KEY not set. Add it to .env file.")
 
         # Initialize LLM
-        self.llm = ChatGoogleGenerativeAI(
+        self.llm = ChatAnthropic(
             model=model_name,
-            google_api_key=api_key,
+            anthropic_api_key=api_key,
             temperature=0.2,
-            convert_system_message_to_human=True
+            max_tokens=4096
         )
 
         # Build prompts
