@@ -16,6 +16,293 @@ except ImportError:
 from .config import BIO_PAPER_SECTIONS, METHODS_SUBSECTIONS, EXCLUDE_SECTIONS
 
 
+# ============================================================================
+# Constants - Encoding fixes and patterns
+# ============================================================================
+
+ENCODING_FIXES = {
+    # Ligatures
+    'ﬁ': 'fi',
+    'ﬂ': 'fl',
+    'ﬀ': 'ff',
+    'ﬃ': 'ffi',
+    'ﬄ': 'ffl',
+    # Common math symbols that get corrupted
+    '¼': '1/4',
+    '½': '1/2',
+    '¾': '3/4',
+    'þ': 'th',
+    'ð': 'd',
+    'Þ': 'Th',
+    'Ð': 'D',
+    # Greek letters that may appear garbled
+    'α': 'alpha',
+    'β': 'beta',
+    'γ': 'gamma',
+    'δ': 'delta',
+    'ε': 'epsilon',
+    'μ': 'mu',
+    'σ': 'sigma',
+    'π': 'pi',
+    'λ': 'lambda',
+    'Δ': 'Delta',
+    'Σ': 'Sigma',
+    # Common mathematical operators
+    '×': 'x',
+    '÷': '/',
+    '≤': '<=',
+    '≥': '>=',
+    '≠': '!=',
+    '±': '+/-',
+    '∞': 'infinity',
+    '√': 'sqrt',
+    '∑': 'sum',
+    '∏': 'product',
+    '∫': 'integral',
+    # Superscripts/subscripts
+    '²': '^2',
+    '³': '^3',
+    '¹': '^1',
+    '⁰': '^0',
+    '⁴': '^4',
+    '⁵': '^5',
+    '⁶': '^6',
+    '⁷': '^7',
+    '⁸': '^8',
+    '⁹': '^9',
+    '₀': '_0',
+    '₁': '_1',
+    '₂': '_2',
+    '₃': '_3',
+    '₄': '_4',
+    '₅': '_5',
+    '₆': '_6',
+    '₇': '_7',
+    '₈': '_8',
+    '₉': '_9',
+}
+
+NONSENSE_PATTERNS = [
+    r'\b[bcdfghjklmnpqrstvwxz]{3,}\b',  # 3+ consonants in a row
+    r'\blfs\w*\b',
+    r'\bpdb\w*\b',
+    r'\bbgk\w*\b',
+    r'\bhTh\b',
+    r'\blfsr\w*\b',
+    r'\bMLE\w*\s+of\s+LFC\w*',
+    r'\bLFC\w*\s+for\s+gene\w*\s+with',
+]
+
+METADATA_SKIP_PATTERNS = [
+    "doi:", "http", "https", "://", "journal", "volume", "[page",
+    "issn", "isbn", "copyright", "©", "published", "article",
+    "open access", "creative commons", "licence", "license",
+    "academic.oup", "elsevier", "springer", "wiley", "nature.com",
+    "frontiersin", "received:", "accepted:", "printed:",
+]
+
+YEAR_EXTRACTION_PATTERNS = [
+    r"(?:published|received|accepted|copyright|©)[:\s]*(\d{4})",
+    r"(\d{4})\s*(?:Endocrine|Oxford|Elsevier|Springer|Wiley|Nature)",
+    r"(?:Volume|Vol\.?)\s*\d+.*?(\d{4})",
+    r",\s*(202[0-5]|201\d)\b",
+]
+
+
+# ============================================================================
+# Helper Classes
+# ============================================================================
+
+class GarbledTextDetector:
+    """Detects garbled mathematical formula text from PDFs with embedded TeX fonts."""
+
+    # Thresholds
+    MIN_LINE_LENGTH = 10
+    LOW_VOWEL_RATIO = 0.15
+    VERY_LOW_VOWEL_RATIO = 0.15
+    MIN_WORD_LENGTH = 4
+    GARBLED_SCORE_THRESHOLD = 0.3
+    MIN_UNUSUAL_SEQUENCES = 2
+
+    # Known garbled patterns from TeX fonts
+    GARBLED_PATTERNS = [
+        'lfs', 'pdb', 'bgk', 'hth', 'lfsr', 'pdbgk',
+        'jcj', 'clfs', 'fsrj', 'fsrg', 'sosrh',
+        'map of', '1/4 p', 'j2c'
+    ]
+
+    def is_garbled(self, line: str) -> bool:
+        """Check if a line contains garbled text."""
+        if len(line.strip()) < self.MIN_LINE_LENGTH:
+            return False
+
+        words = line.split()
+        if not words:
+            return False
+
+        garbled_score = sum(self._score_word(word) for word in words)
+
+        # Check score threshold
+        if garbled_score / max(len(words), 1) > self.GARBLED_SCORE_THRESHOLD:
+            return True
+
+        # Check for unusual character sequences
+        unusual_count = len(re.findall(
+            r'[;:]\s*[a-z]\s*[;:]|1/4\s+[a-z]|[a-z]\s*<\s*[a-z]{2,}\s*>',
+            line
+        ))
+        if unusual_count >= self.MIN_UNUSUAL_SEQUENCES:
+            return True
+
+        return False
+
+    def _score_word(self, word: str) -> int:
+        """Calculate garbled score for a single word."""
+        word_lower = word.lower().strip('.,;:()[]{}')
+        if len(word_lower) < 2:
+            return 0
+
+        score = 0
+        score += self._check_vowel_ratio(word_lower)
+        score += self._check_garbled_patterns(word_lower)
+        score += self._check_mixed_case(word)
+
+        return score
+
+    def _check_vowel_ratio(self, word: str) -> int:
+        """Check for abnormally low vowel ratio."""
+        if len(word) < self.MIN_WORD_LENGTH:
+            return 0
+
+        vowels = sum(1 for c in word if c in 'aeiou')
+        consonants = sum(1 for c in word if c.isalpha() and c not in 'aeiou')
+
+        if consonants > 0:
+            vowel_ratio = vowels / len(word)
+            if vowel_ratio < self.LOW_VOWEL_RATIO:
+                return 2
+
+        return 0
+
+    def _check_garbled_patterns(self, word: str) -> int:
+        """Check for known garbled patterns from TeX fonts."""
+        if any(pattern in word for pattern in self.GARBLED_PATTERNS):
+            return 3
+        return 0
+
+    def _check_mixed_case(self, word: str) -> int:
+        """Check for unusual mixed case patterns (e.g., 'hTh')."""
+        if len(word) < 3:
+            return 0
+
+        for i in range(1, len(word) - 1):
+            if (word[i].isupper() and
+                word[i].isalpha() and
+                word[i-1].islower() and
+                word[i+1].islower()):
+                return 2
+
+        return 0
+
+
+class MetadataExtractor:
+    """Extracts metadata (title, DOI, year, etc.) from paper text."""
+
+    def __init__(self):
+        self.skip_patterns = METADATA_SKIP_PATTERNS
+        self.year_patterns = YEAR_EXTRACTION_PATTERNS
+
+    def extract(self, text: str, pdf_path: Path) -> "PaperMetadata":
+        """Extract all metadata from paper text."""
+        metadata = PaperMetadata(file_path=str(pdf_path))
+
+        metadata.title = self._find_title(text)
+        metadata.doi = self._find_doi(text)
+        metadata.year = self._find_year(text)
+        metadata.abstract = self._find_abstract(text)
+        metadata.keywords = self._find_keywords(text)
+
+        return metadata
+
+    def _find_title(self, text: str) -> str:
+        """Find paper title from first substantial line."""
+        lines = text.split("\n")
+
+        for line in lines[:30]:
+            line = line.strip()
+
+            # Too short
+            if len(line) < 20:
+                continue
+
+            # Skip metadata patterns
+            line_lower = line.lower()
+            if any(pattern in line_lower for pattern in self.skip_patterns):
+                continue
+
+            # Skip number-only lines
+            if re.match(r'^[\d\-/.,\s]+$', line):
+                continue
+
+            # Skip non-alphabetic lines
+            alpha_ratio = sum(1 for c in line if c.isalpha()) / len(line)
+            if alpha_ratio < 0.5:
+                continue
+
+            return line
+
+        return ""
+
+    def _find_doi(self, text: str) -> str:
+        """Extract DOI from text."""
+        doi_match = re.search(r"(?:doi[:\s]*)?(10\.\d{4,}/[^\s]+)", text, re.IGNORECASE)
+        if doi_match:
+            # Return just the DOI part (group 1), not the "DOI:" prefix
+            return doi_match.group(1).strip()
+        return ""
+
+    def _find_year(self, text: str) -> str:
+        """Extract publication year from text."""
+        # Try specific patterns first
+        for pattern in self.year_patterns:
+            year_match = re.search(pattern, text[:3000], re.IGNORECASE)
+            if year_match:
+                year = year_match.group(1) if year_match.lastindex else year_match.group()
+                # Validate year range
+                if year.isdigit() and 2000 <= int(year) <= 2030:
+                    return year
+
+        # Fallback: find first 2010+ year
+        year_match = re.search(r"\b(20[1-2]\d)\b", text[:2000])
+        if year_match:
+            return year_match.group()
+
+        return ""
+
+    def _find_abstract(self, text: str) -> str:
+        """Extract abstract from text."""
+        abstract_match = re.search(
+            r"abstract[:\s]*\n?(.*?)(?=\n\s*(?:introduction|background|keywords|1\.|graphical))",
+            text,
+            re.IGNORECASE | re.DOTALL
+        )
+        if abstract_match:
+            return abstract_match.group(1).strip()[:2000]
+        return ""
+
+    def _find_keywords(self, text: str) -> list[str]:
+        """Extract keywords from text."""
+        keywords_match = re.search(
+            r"keywords?[:\s]*([^\n]+(?:\n[^\n]+)?)",
+            text,
+            re.IGNORECASE
+        )
+        if keywords_match:
+            keywords_text = keywords_match.group(1)
+            return [k.strip() for k in re.split(r"[,;]", keywords_text) if k.strip()]
+        return []
+
+
 @dataclass
 class PaperMetadata:
     """Metadata extracted from a bio paper."""
@@ -146,6 +433,8 @@ class BioPaperParser:
 
     def __init__(self):
         self.exclude_patterns = self._build_exclude_patterns()
+        self.garbled_detector = GarbledTextDetector()
+        self.metadata_extractor = MetadataExtractor()
 
     def _build_exclude_patterns(self) -> list[re.Pattern]:
         """Build patterns for content to exclude."""
@@ -157,56 +446,8 @@ class BioPaperParser:
         ]
 
     def _is_garbled_line(self, line: str) -> bool:
-        """
-        Detect if a line contains garbled math formula text.
-        These come from PDFs with embedded TeX fonts that don't extract properly.
-        """
-        if len(line.strip()) < 10:
-            return False
-
-        # Count indicators of garbled text
-        garbled_score = 0
-        words = line.split()
-
-        for word in words:
-            word_lower = word.lower().strip('.,;:()[]{}')
-            if len(word_lower) < 2:
-                continue
-
-            # Check for nonsensical consonant-heavy words
-            vowels = sum(1 for c in word_lower if c in 'aeiou')
-            consonants = sum(1 for c in word_lower if c.isalpha() and c not in 'aeiou')
-
-            # Very low vowel ratio suggests garbled text
-            if len(word_lower) >= 4 and consonants > 0:
-                vowel_ratio = vowels / len(word_lower)
-                if vowel_ratio < 0.15:  # Less than 15% vowels
-                    garbled_score += 2
-
-            # Specific garbled patterns from TeX fonts
-            garbled_patterns = [
-                'lfs', 'pdb', 'bgk', 'hth', 'lfsr', 'pdbgk',
-                'jcj', 'clfs', 'fsrj', 'fsrg', 'sosrh',
-                'map of', '1/4 p', 'j2c'
-            ]
-            if any(p in word_lower for p in garbled_patterns):
-                garbled_score += 3
-
-            # Mixed case in middle of word (like "hTh")
-            if len(word) >= 3 and any(word[i].isupper() and word[i-1].islower() and word[i+1].islower()
-                                       for i in range(1, len(word)-1) if word[i].isalpha()):
-                garbled_score += 2
-
-        # If more than 30% of meaningful content is garbled, mark the line
-        if len(words) > 0 and garbled_score / max(len(words), 1) > 0.3:
-            return True
-
-        # Also check for high density of unusual character sequences
-        unusual_count = len(re.findall(r'[;:]\s*[a-z]\s*[;:]|1/4\s+[a-z]|[a-z]\s*<\s*[a-z]{2,}\s*>', line))
-        if unusual_count >= 2:
-            return True
-
-        return False
+        """Detect if a line contains garbled math formula text."""
+        return self.garbled_detector.is_garbled(line)
 
     def parse_pdf(self, pdf_path: str | Path) -> tuple[PaperMetadata, list[PaperSection]]:
         """Parse a PDF file and extract structured content."""
@@ -503,202 +744,55 @@ class BioPaperParser:
 
     def _clean_text(self, text: str) -> str:
         """Clean extracted text and fix common encoding issues."""
-        # 1. Fix common PDF encoding issues for mathematical symbols
-        # These are ligatures and special characters that get mangled
-        encoding_fixes = {
-            # Ligatures
-            'ﬁ': 'fi',
-            'ﬂ': 'fl',
-            'ﬀ': 'ff',
-            'ﬃ': 'ffi',
-            'ﬄ': 'ffl',
-            # Common math symbols that get corrupted
-            '¼': '1/4',
-            '½': '1/2',
-            '¾': '3/4',
-            'þ': 'th',  # thorn character often misread
-            'ð': 'd',   # eth character
-            'Þ': 'Th',
-            'Ð': 'D',
-            # Greek letters that may appear garbled
-            'α': 'alpha',
-            'β': 'beta',
-            'γ': 'gamma',
-            'δ': 'delta',
-            'ε': 'epsilon',
-            'μ': 'mu',
-            'σ': 'sigma',
-            'π': 'pi',
-            'λ': 'lambda',
-            'Δ': 'Delta',
-            'Σ': 'Sigma',
-            # Common mathematical operators
-            '×': 'x',
-            '÷': '/',
-            '≤': '<=',
-            '≥': '>=',
-            '≠': '!=',
-            '±': '+/-',
-            '∞': 'infinity',
-            '√': 'sqrt',
-            '∑': 'sum',
-            '∏': 'product',
-            '∫': 'integral',
-            # Superscripts/subscripts
-            '²': '^2',
-            '³': '^3',
-            '¹': '^1',
-            '⁰': '^0',
-            '⁴': '^4',
-            '⁵': '^5',
-            '⁶': '^6',
-            '⁷': '^7',
-            '⁸': '^8',
-            '⁹': '^9',
-            '₀': '_0',
-            '₁': '_1',
-            '₂': '_2',
-            '₃': '_3',
-            '₄': '_4',
-            '₅': '_5',
-            '₆': '_6',
-            '₇': '_7',
-            '₈': '_8',
-            '₉': '_9',
-        }
+        text = self._fix_encoding_issues(text)
+        text = self._remove_garbled_patterns(text)
+        text = self._normalize_whitespace(text)
+        return text.strip()
 
-        for bad_char, replacement in encoding_fixes.items():
+    def _fix_encoding_issues(self, text: str) -> str:
+        """Fix common PDF encoding issues (ligatures, symbols, Greek letters)."""
+        for bad_char, replacement in ENCODING_FIXES.items():
             text = text.replace(bad_char, replacement)
+        return text
 
-        # 2. Remove garbled math formula text (from TeX/LaTeX fonts)
-        # These appear when PDF uses custom math fonts (CMSY, CMMI, etc.)
-        # Pattern examples: "lfsosrh g 1/4 pdbgk", "hTh MAP of bgk"
-
-        # 2a. Remove sequences with nonsensical consonant clusters
-        # Real English rarely has patterns like "lfs", "pdb", "bgk", "hTh"
-        nonsense_patterns = [
-            r'\b[bcdfghjklmnpqrstvwxz]{3,}\b',  # 3+ consonants in a row
-            r'\blfs\w*\b',  # lfs... patterns
-            r'\bpdb\w*\b',  # pdb... patterns
-            r'\bbgk\w*\b',  # bgk... patterns
-            r'\bhTh\b',     # hTh
-            r'\blfsr\w*\b', # lfsr... patterns
-            r'\bMLE\w*\s+of\s+LFC\w*',  # MLEs of LFCs (garbled)
-            r'\bLFC\w*\s+for\s+gene\w*\s+with',  # LFCs for genes with
-        ]
-
-        for pattern in nonsense_patterns:
+    def _remove_garbled_patterns(self, text: str) -> str:
+        """Remove garbled math formula text from TeX/LaTeX fonts."""
+        # Remove nonsensical consonant clusters
+        for pattern in NONSENSE_PATTERNS:
             text = re.sub(pattern, '', text, flags=re.IGNORECASE)
 
-        # 2b. Remove lines that look like garbled math formulas
-        # These often have unusual character distributions
+        # Remove garbled lines
         lines = text.split('\n')
         cleaned_lines = []
         for line in lines:
-            # Skip lines that are mostly garbled (high ratio of unusual patterns)
             if self._is_garbled_line(line):
                 cleaned_lines.append('[mathematical formula]')
             else:
                 cleaned_lines.append(line)
-        text = '\n'.join(cleaned_lines)
 
-        # 3. Clean up multiple spaces and newlines
+        return '\n'.join(cleaned_lines)
+
+    def _normalize_whitespace(self, text: str) -> str:
+        """Clean up whitespace, line breaks, and control characters."""
+        # Consolidate multiple newlines and spaces
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r" {2,}", " ", text)
 
-        # 4. Apply exclude patterns
+        # Apply exclude patterns
         for pattern in self.exclude_patterns:
             text = pattern.sub("", text)
 
-        # 5. Fix hyphenated words split across lines
+        # Fix hyphenated words split across lines
         text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
 
-        # 6. Remove null bytes and other control characters
+        # Remove control characters
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
 
-        return text.strip()
+        return text
 
     def _extract_metadata(self, text: str, pdf_path: Path) -> PaperMetadata:
         """Extract paper metadata from text."""
-        metadata = PaperMetadata(file_path=str(pdf_path))
-
-        lines = text.split("\n")
-
-        # Patterns to skip when looking for title
-        skip_patterns = [
-            "doi:", "http", "https", "://", "journal", "volume", "[page",
-            "issn", "isbn", "copyright", "©", "published", "article",
-            "open access", "creative commons", "licence", "license",
-            "academic.oup", "elsevier", "springer", "wiley", "nature.com",
-            "frontiersin", "received:", "accepted:", "printed:",
-        ]
-
-        # Find title - look for first substantial line that's not metadata
-        for line in lines[:30]:  # Look at more lines
-            line = line.strip()
-            if len(line) < 20:  # Too short
-                continue
-            line_lower = line.lower()
-            # Skip lines with metadata patterns
-            if any(pattern in line_lower for pattern in skip_patterns):
-                continue
-            # Skip lines that start with numbers only (page numbers, dates)
-            if re.match(r'^[\d\-/.,\s]+$', line):
-                continue
-            # Skip lines that are mostly non-alphabetic
-            alpha_ratio = sum(1 for c in line if c.isalpha()) / len(line)
-            if alpha_ratio < 0.5:
-                continue
-            # Found a potential title
-            metadata.title = line
-            break
-
-        doi_match = re.search(r"(?:doi[:\s]*)?10\.\d{4,}/[^\s]+", text, re.IGNORECASE)
-        if doi_match:
-            metadata.doi = doi_match.group().strip()
-
-        # 출판년도 추출 (더 정확한 패턴 우선)
-        # 1. "Published: 2024" 또는 "© 2024" 패턴
-        year_patterns = [
-            r"(?:published|received|accepted|copyright|©)[:\s]*(\d{4})",
-            r"(\d{4})\s*(?:Endocrine|Oxford|Elsevier|Springer|Wiley|Nature)",
-            r"(?:Volume|Vol\.?)\s*\d+.*?(\d{4})",
-            r",\s*(202[0-5]|201\d)\b",  # 최근 년도 우선
-        ]
-
-        for pattern in year_patterns:
-            year_match = re.search(pattern, text[:3000], re.IGNORECASE)
-            if year_match:
-                year = year_match.group(1) if year_match.lastindex else year_match.group()
-                # 합리적인 출판년도 범위 (2000-2030)
-                if year.isdigit() and 2000 <= int(year) <= 2030:
-                    metadata.year = year
-                    break
-
-        # 위 패턴으로 못 찾으면 2010년 이후 년도 중 첫 번째
-        if not metadata.year:
-            year_match = re.search(r"\b(20[1-2]\d)\b", text[:2000])
-            if year_match:
-                metadata.year = year_match.group()
-
-        abstract_match = re.search(
-            r"abstract[:\s]*\n?(.*?)(?=\n\s*(?:introduction|background|keywords|1\.|graphical))",
-            text,
-            re.IGNORECASE | re.DOTALL
-        )
-        if abstract_match:
-            metadata.abstract = abstract_match.group(1).strip()[:2000]
-
-        keywords_match = re.search(
-            r"keywords?[:\s]*([^\n]+(?:\n[^\n]+)?)",
-            text,
-            re.IGNORECASE
-        )
-        if keywords_match:
-            keywords_text = keywords_match.group(1)
-            metadata.keywords = [k.strip() for k in re.split(r"[,;]", keywords_text) if k.strip()]
-
-        return metadata
+        return self.metadata_extractor.extract(text, pdf_path)
 
     def _extract_sections_by_headers(self, full_text: str, headers: list[dict]) -> list[PaperSection]:
         """폰트 기반 헤더를 사용해 섹션 추출."""

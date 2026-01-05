@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  bio-briefing:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: bio-daily-briefing
+    restart: unless-stopped
+    volumes:
+      - ../output:/app/output
+      - ../config:/app/config
+    env_file:
+      - ../config/.env
+    environment:
+      - TZ=Asia/Seoul
+    healthcheck:
+      test: ["CMD", "python", "-c", "import src.scheduler"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # One-time run profile
+  bio-briefing-run:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: bio-briefing-run
+    profiles: ["run-once"]
+    volumes:
+      - ../output:/app/output
+      - ../config:/app/config
+    env_file:
+      - ../config/.env
+    environment:
+      - TZ=Asia/Seoul
+    command: ["python", "-m", "src.scheduler", "--run-now"]

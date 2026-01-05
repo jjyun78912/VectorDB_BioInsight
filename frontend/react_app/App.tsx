@@ -9,12 +9,11 @@ import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
-import BioResearchDaily from './components/BioResearchDaily';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
-  Library, FileSearch, Zap, Newspaper
+  Library, FileSearch, Zap
 } from 'lucide-react';
 
 // Paper type for Literature Review
@@ -35,7 +34,6 @@ const AppContent: React.FC = () => {
   const [showLiteratureReview, setShowLiteratureReview] = useState(false);
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [showBioDaily, setShowBioDaily] = useState(false);
 
   // Language context
   const { t } = useLanguage();
@@ -107,24 +105,7 @@ const AppContent: React.FC = () => {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-              {/* BIO Research Daily */}
-              <button
-                onClick={() => setShowBioDaily(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
-              >
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Newspaper className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="font-bold text-gray-900 mb-2">{t.bioResearchDaily}</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  {t.bioResearchDailyDesc}
-                </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 group-hover:gap-2 transition-all">
-                  {t.openTool} <ArrowRight className="w-4 h-4" />
-                </span>
-              </button>
-
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* Literature Review */}
               <button
                 onClick={() => setShowLiteratureReview(true)}
@@ -260,12 +241,6 @@ const AppContent: React.FC = () => {
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
 
-      {/* BIO Research Daily - Full Screen */}
-      {showBioDaily && (
-        <div className="fixed inset-0 z-50 bg-white overflow-hidden">
-          <BioResearchDaily onClose={() => setShowBioDaily(false)} />
-        </div>
-      )}
     </div>
   );
 };

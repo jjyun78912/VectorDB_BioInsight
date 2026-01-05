@@ -146,36 +146,6 @@ export interface DailyPapersResponse {
   cached: boolean;
 }
 
-// ============== Daily News Types ==============
-
-export interface NewsItem {
-  id: string;
-  headline: string;      // 뉴스 스타일 헤드라인
-  summary: string;       // 1-2문장 요약
-  significance: string;  // 왜 중요한지
-  category: string;
-  category_name: string;
-  source: string;        // 저널명
-  source_type: string;   // pubmed, biorxiv, medrxiv, nature, science
-  date: string;
-  pmid?: string;
-  doi?: string;
-  url?: string;          // Direct link to paper
-}
-
-export interface DailyNewsResponse {
-  date: string;
-  language: string;      // ko, en
-  sources: string[];     // Sources included
-  news_items: NewsItem[];
-  total: number;
-  cached: boolean;
-  generated_at: string;
-}
-
-export type NewsLanguage = 'ko' | 'en';
-export type NewsSource = 'pubmed' | 'biorxiv' | 'nature' | 'all';
-
 // ============== Enhanced Trending Types ==============
 
 export interface TrendMatch {
@@ -713,33 +683,6 @@ class BioInsightAPI {
     );
     if (!response.ok) {
       throw new Error(`Get daily papers failed: ${response.statusText}`);
-    }
-    return response.json();
-  }
-
-  /**
-   * Get AI-generated daily news summaries
-   * Returns news-style content in Korean
-   * Cache refreshes at KST 07:00 daily
-   */
-  async getDailyNews(
-    limit: number = 6,
-    noCache: boolean = false,
-    language: NewsLanguage = 'ko',
-    sources: NewsSource | NewsSource[] = 'pubmed'
-  ): Promise<DailyNewsResponse> {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      language: language,
-      sources: Array.isArray(sources) ? sources.join(',') : sources,
-    });
-    if (noCache) {
-      params.set('no_cache', 'true');
-    }
-
-    const response = await fetch(`${this.baseUrl}/crawler/daily-news?${params}`);
-    if (!response.ok) {
-      throw new Error(`Get daily news failed: ${response.statusText}`);
     }
     return response.json();
   }

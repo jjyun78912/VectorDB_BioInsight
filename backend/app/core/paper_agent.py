@@ -18,6 +18,145 @@ from .embeddings import get_embedder
 from .config import GOOGLE_API_KEY, GEMINI_MODEL, CHROMA_DIR
 
 
+class JunkContentValidator:
+    """Validates and filters out junk content like author contributions and references."""
+
+    JUNK_KEYWORDS = [
+        "writing", "editing", "review", "conceptualization",
+        "methodology", "validation", "investigation", "supervision",
+        "data curation", "visualization", "funding acquisition",
+        "competing interests", "conflict of interest"
+    ]
+
+    STOP_WORDS = {
+        "what", "is", "the", "are", "how", "does", "do", "can",
+        "this", "that", "paper", "study", "research", "finding"
+    }
+
+    # If 4+ junk keywords appear, likely author contributions section
+    JUNK_KEYWORD_THRESHOLD = 4
+
+    @classmethod
+    def is_junk(cls, text: str) -> bool:
+        """Check if content is junk (author contributions, etc.)."""
+        text_lower = text.lower()
+        keyword_count = sum(1 for kw in cls.JUNK_KEYWORDS if kw in text_lower)
+
+        if keyword_count >= cls.JUNK_KEYWORD_THRESHOLD:
+            return True
+
+        # Check for reference-style content (e.g., "1. Smith A, Jones B.")
+        if re.match(r'^\d+\.\s+[A-Z][a-z]+\s+[A-Z]{1,2}[,.]', text):
+            return True
+
+        return False
+
+    @classmethod
+    def is_relevant_to_question(cls, content: str, question: str) -> bool:
+        """Basic relevance check between content and question."""
+        question_lower = question.lower()
+        question_terms = set(question_lower.split()) - cls.STOP_WORDS
+        content_lower = content.lower()
+
+        # Check if any question term appears in content
+        matches = sum(1 for term in question_terms if term in content_lower)
+
+        # At least one key term should match
+        return matches >= 1 or len(question_terms) == 0
+
+
+class ConfidenceEstimator:
+    """Estimates confidence scores for LLM-generated answers."""
+
+    BASE_CONFIDENCE = 0.7
+    UNCERTAINTY_PENALTY = 0.15
+    CITATION_BONUS = 0.05
+    MAX_CITATION_BONUS = 0.2
+
+    UNCERTAINTY_PHRASES = [
+        "cannot find", "not mentioned", "unclear",
+        "may", "might", "possibly"
+    ]
+
+    @classmethod
+    def estimate(cls, answer: str, context: str) -> float:
+        """Estimate confidence in the answer based on characteristics."""
+        confidence = cls.BASE_CONFIDENCE
+
+        # Lower confidence if answer indicates uncertainty
+        for phrase in cls.UNCERTAINTY_PHRASES:
+            if phrase in answer.lower():
+                confidence -= cls.UNCERTAINTY_PENALTY
+                break  # Only apply penalty once
+
+        # Higher confidence if answer has citations
+        citation_count = len(re.findall(r'\[\d+\]', answer))
+        confidence += min(citation_count * cls.CITATION_BONUS, cls.MAX_CITATION_BONUS)
+
+        return max(0.0, min(1.0, confidence))
+
+
+class PromptTemplates:
+    """Language-specific prompt templates for paper summarization."""
+
+    QA_SYSTEM_PROMPT = """You are a research assistant. Give BRIEF, helpful answers about this paper.
+
+RULES:
+- 2-3 sentences max
+- Start with the key point
+- Cite sources: [1], [2], [3]
+- Synthesize information from multiple sources if needed
+- Use simple language
+
+Example: "The study shows X is effective for treating Y [1][2]. Key side effects include A and B [3]." """
+
+    QA_HUMAN_PROMPT = """Context from paper (each source is numbered [Source N]):
+{context}
+
+Question: {question}
+
+Answer (remember to cite sources using [1], [2], etc.):"""
+
+    SUMMARIZE_PROMPTS = {
+        "en": {
+            "system": """You are a research paper summarizer. Analyze the paper content and provide a structured summary.
+
+Output format (JSON):
+{{
+  "summary": "2-3 sentence overview of what the paper is about and its main contribution",
+  "key_findings": ["finding 1", "finding 2", "finding 3"],
+  "methodology": "Brief description of the research approach/methods used"
+}}
+
+Be concise and focus on the most important aspects.""",
+            "human": """Paper: {title}
+
+Content from paper:
+{context}
+
+Provide a structured summary in JSON format:"""
+        },
+        "ko": {
+            "system": """당신은 연구 논문 요약 전문가입니다. 논문 내용을 분석하고 구조화된 요약을 제공하세요.
+
+출력 형식 (JSON):
+{{
+  "summary": "논문의 주제와 주요 기여에 대한 2-3문장 개요",
+  "key_findings": ["핵심 발견 1", "핵심 발견 2", "핵심 발견 3"],
+  "methodology": "연구 방법론에 대한 간략한 설명"
+}}
+
+중요: 반드시 한국어로 작성하세요. 핵심적인 내용에 집중하고 간결하게 작성하세요.""",
+            "human": """논문: {title}
+
+논문 내용:
+{context}
+
+JSON 형식으로 구조화된 요약을 한국어로 제공하세요:"""
+        }
+    }
+
+
 @dataclass
 class PaperSession:
     """A chat session for a specific paper."""
@@ -156,68 +295,29 @@ class PaperAgent:
         )
 
     def _filter_results(self, results: list[SearchResult], question: str) -> list[SearchResult]:
-        """Filter out low-quality and irrelevant results."""
-        filtered = []
+        """
+        Filter out low-quality and irrelevant results.
 
-        for r in results:
-            # Skip very low relevance (but be lenient)
-            if r.relevance_score < self.MIN_RELEVANCE_SCORE:
-                continue
-
-            # Skip obvious junk content
-            if self._is_junk_content(r.content):
-                continue
-
-            # Don't filter by question relevance - trust the vector search
-            # The embedding model is better at semantic matching than keyword matching
-            filtered.append(r)
-
-        # If all results were filtered out, return top results anyway (less strict)
-        if not filtered and results:
-            # Return top 3 results even if they're low relevance
-            return [r for r in results[:3] if not self._is_junk_content(r.content)]
-
-        return filtered
-
-    def _is_junk_content(self, text: str) -> bool:
-        """Check if content is junk (author contributions, etc.)."""
-        junk_keywords = [
-            "writing", "editing", "review", "conceptualization",
-            "methodology", "validation", "investigation", "supervision",
-            "data curation", "visualization", "funding acquisition",
-            "competing interests", "conflict of interest"
+        Steps:
+        1. Filter by relevance score and junk content
+        2. If nothing passes filters, return top non-junk results as fallback
+        """
+        # Step 1: Apply strict filters
+        filtered = [
+            r for r in results
+            if r.relevance_score >= self.MIN_RELEVANCE_SCORE
+            and not JunkContentValidator.is_junk(r.content)
         ]
 
-        text_lower = text.lower()
-        keyword_count = sum(1 for kw in junk_keywords if kw in text_lower)
+        # Step 2: Fallback if all filtered out
+        if filtered:
+            return filtered
 
-        # If 4+ junk keywords, it's likely author contributions
-        if keyword_count >= 4:
-            return True
+        # Return top 3 non-junk results even if low relevance
+        if not results:
+            return []
 
-        # Check for reference-style content
-        if re.match(r'^\d+\.\s+[A-Z][a-z]+\s+[A-Z]{1,2}[,.]', text):
-            return True
-
-        return False
-
-    def _is_relevant_to_question(self, content: str, question: str) -> bool:
-        """Basic relevance check between content and question."""
-        # Extract key terms from question
-        question_lower = question.lower()
-
-        # Remove common words
-        stop_words = {"what", "is", "the", "are", "how", "does", "do", "can",
-                     "this", "that", "paper", "study", "research", "finding"}
-
-        question_terms = set(question_lower.split()) - stop_words
-        content_lower = content.lower()
-
-        # Check if any question term appears in content
-        matches = sum(1 for term in question_terms if term in content_lower)
-
-        # At least one key term should match
-        return matches >= 1 or len(question_terms) == 0
+        return [r for r in results[:3] if not JunkContentValidator.is_junk(r.content)]
 
     def _build_context(self, results: list[SearchResult]) -> str:
         """Build context string from search results with numbered citations."""
@@ -236,22 +336,8 @@ class PaperAgent:
         from langchain_core.prompts import ChatPromptTemplate
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a research assistant. Give BRIEF, helpful answers about this paper.
-
-RULES:
-- 2-3 sentences max
-- Start with the key point
-- Cite sources: [1], [2], [3]
-- Synthesize information from multiple sources if needed
-- Use simple language
-
-Example: "The study shows X is effective for treating Y [1][2]. Key side effects include A and B [3]." """),
-            ("human", """Context from paper (each source is numbered [Source N]):
-{context}
-
-Question: {question}
-
-Answer (remember to cite sources using [1], [2], etc.):""")
+            ("system", PromptTemplates.QA_SYSTEM_PROMPT),
+            ("human", PromptTemplates.QA_HUMAN_PROMPT)
         ])
 
         chain = prompt | self.llm
@@ -263,44 +349,15 @@ Answer (remember to cite sources using [1], [2], etc.):""")
             })
 
             answer = result.content
-
-            # Estimate confidence based on answer characteristics
-            confidence = self._estimate_confidence(answer, context)
+            confidence = ConfidenceEstimator.estimate(answer, context)
 
             return answer, confidence
 
         except Exception as e:
             return f"Error generating response: {str(e)}", 0.0
 
-    def _estimate_confidence(self, answer: str, context: str) -> float:
-        """Estimate confidence in the answer."""
-        confidence = 0.7  # Base confidence
-
-        # Lower confidence if answer indicates uncertainty
-        uncertainty_phrases = ["cannot find", "not mentioned", "unclear", "may", "might", "possibly"]
-        for phrase in uncertainty_phrases:
-            if phrase in answer.lower():
-                confidence -= 0.15
-
-        # Higher confidence if answer has citations
-        citation_count = len(re.findall(r'\[\d+\]', answer))
-        confidence += min(citation_count * 0.05, 0.2)
-
-        return max(0.0, min(1.0, confidence))
-
-    def summarize(self, language: str = "en") -> dict:
-        """
-        Generate AI summary of the paper using the indexed chunks.
-
-        Args:
-            language: Output language - "en" for English, "ko" for Korean
-
-        Returns:
-            dict with summary, key_findings, methodology
-        """
-        from langchain_core.prompts import ChatPromptTemplate
-
-        # Get diverse chunks from different sections
+    def _gather_summary_context(self) -> str:
+        """Gather diverse chunks from different sections for summarization."""
         intro_results = self.vector_store.search("introduction background purpose", top_k=2)
         method_results = self.vector_store.search("methods methodology approach", top_k=2)
         result_results = self.vector_store.search("results findings outcomes", top_k=3)
@@ -317,54 +374,43 @@ Answer (remember to cite sources using [1], [2], etc.):""")
                 all_chunks.append(f"[{section}] {r.content}")
 
         if not all_chunks:
-            no_content_msg = "요약을 생성할 수 없습니다 - 인덱싱된 콘텐츠가 없습니다." if language == "ko" else "Unable to generate summary - no content indexed."
+            return ""
+
+        return "\n\n---\n\n".join(all_chunks[:8])  # Limit to 8 chunks
+
+    def summarize(self, language: str = "en") -> dict:
+        """
+        Generate AI summary of the paper using the indexed chunks.
+
+        Args:
+            language: Output language - "en" for English, "ko" for Korean
+
+        Returns:
+            dict with summary, key_findings, methodology
+        """
+        from langchain_core.prompts import ChatPromptTemplate
+
+        # Get diverse chunks from different sections
+        context = self._gather_summary_context()
+
+        if not context:
+            no_content_msg = (
+                "요약을 생성할 수 없습니다 - 인덱싱된 콘텐츠가 없습니다."
+                if language == "ko"
+                else "Unable to generate summary - no content indexed."
+            )
             return {
                 "summary": no_content_msg,
                 "key_findings": [],
                 "methodology": ""
             }
 
-        context = "\n\n---\n\n".join(all_chunks[:8])  # Limit to 8 chunks
-
-        # Choose language-specific prompt
-        if language == "ko":
-            system_prompt = """당신은 연구 논문 요약 전문가입니다. 논문 내용을 분석하고 구조화된 요약을 제공하세요.
-
-출력 형식 (JSON):
-{{
-  "summary": "논문의 주제와 주요 기여에 대한 2-3문장 개요",
-  "key_findings": ["핵심 발견 1", "핵심 발견 2", "핵심 발견 3"],
-  "methodology": "연구 방법론에 대한 간략한 설명"
-}}
-
-중요: 반드시 한국어로 작성하세요. 핵심적인 내용에 집중하고 간결하게 작성하세요."""
-            human_prompt = """논문: {title}
-
-논문 내용:
-{context}
-
-JSON 형식으로 구조화된 요약을 한국어로 제공하세요:"""
-        else:
-            system_prompt = """You are a research paper summarizer. Analyze the paper content and provide a structured summary.
-
-Output format (JSON):
-{{
-  "summary": "2-3 sentence overview of what the paper is about and its main contribution",
-  "key_findings": ["finding 1", "finding 2", "finding 3"],
-  "methodology": "Brief description of the research approach/methods used"
-}}
-
-Be concise and focus on the most important aspects."""
-            human_prompt = """Paper: {title}
-
-Content from paper:
-{context}
-
-Provide a structured summary in JSON format:"""
+        # Get language-specific prompts
+        prompts = PromptTemplates.SUMMARIZE_PROMPTS.get(language, PromptTemplates.SUMMARIZE_PROMPTS["en"])
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt)
+            ("system", prompts["system"]),
+            ("human", prompts["human"])
         ])
 
         chain = prompt | self.llm
@@ -375,34 +421,38 @@ Provide a structured summary in JSON format:"""
                 "context": context
             })
 
-            # Parse JSON from response
-            import json
-            response_text = result.content.strip()
-
-            # Try to extract JSON from response
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0]
-
-            try:
-                parsed = json.loads(response_text)
-                return {
-                    "summary": parsed.get("summary", ""),
-                    "key_findings": parsed.get("key_findings", []),
-                    "methodology": parsed.get("methodology", "")
-                }
-            except json.JSONDecodeError:
-                # Fallback: return raw response as summary
-                return {
-                    "summary": response_text[:500],
-                    "key_findings": [],
-                    "methodology": ""
-                }
+            return self._parse_summary_response(result.content)
 
         except Exception as e:
             return {
                 "summary": f"Error generating summary: {str(e)}",
+                "key_findings": [],
+                "methodology": ""
+            }
+
+    def _parse_summary_response(self, response_text: str) -> dict:
+        """Parse JSON response from summarization LLM."""
+        import json
+
+        response_text = response_text.strip()
+
+        # Extract JSON from markdown code blocks if present
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0]
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0]
+
+        try:
+            parsed = json.loads(response_text)
+            return {
+                "summary": parsed.get("summary", ""),
+                "key_findings": parsed.get("key_findings", []),
+                "methodology": parsed.get("methodology", "")
+            }
+        except json.JSONDecodeError:
+            # Fallback: return raw response as summary
+            return {
+                "summary": response_text[:500],
                 "key_findings": [],
                 "methodology": ""
             }

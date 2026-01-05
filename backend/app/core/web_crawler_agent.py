@@ -132,6 +132,115 @@ TRENDING_CATEGORIES = {
 }
 
 
+class PaperScorer:
+    """Handles scoring calculations for papers (recency, citation velocity, trend score)."""
+
+    @staticmethod
+    def calculate_recency_score(year: int) -> float:
+        """
+        Calculate recency score based on publication year.
+        Papers from last 2 years get higher scores.
+
+        Args:
+            year: Publication year
+
+        Returns:
+            Recency score (0-100)
+        """
+        if not year:
+            return 0.0
+
+        current_year = datetime.now().year
+        years_old = current_year - year
+        return max(0, 100 - (years_old * 20))
+
+    @staticmethod
+    def calculate_citation_velocity(citations_by_year: Dict[str, int]) -> float:
+        """
+        Calculate citation velocity (recent citations / older citations).
+
+        Velocity > 1.0 means accelerating citations (trending up)
+        Velocity < 1.0 means decelerating citations (cooling down)
+
+        Args:
+            citations_by_year: Dict mapping year strings to citation counts
+
+        Returns:
+            Citation velocity ratio
+        """
+        if not citations_by_year:
+            return 0.0
+
+        current_year = datetime.now().year
+        recent_citations = 0
+        older_citations = 0
+
+        for year_str, count in citations_by_year.items():
+            try:
+                year = int(year_str)
+                if year >= current_year - 1:  # Last 2 years (2024, 2025)
+                    recent_citations += count
+                elif year >= current_year - 3:  # Previous 2 years (2022, 2023)
+                    older_citations += count
+            except ValueError:
+                continue
+
+        # Calculate velocity ratio
+        if older_citations > 0:
+            return recent_citations / older_citations
+        elif recent_citations > 0:
+            # Only recent citations = very hot (new paper getting attention)
+            return 5.0
+        else:
+            return 0.0
+
+    @staticmethod
+    def calculate_trend_score(
+        citation_velocity: float,
+        publication_surge: float,
+        citation_count: int,
+        recency_score: float
+    ) -> float:
+        """
+        Calculate comprehensive trend score from multiple factors.
+
+        Components: citation_velocity (35%) + publication_surge (25%) +
+                   citation_score (20%) + recency (20%)
+
+        Args:
+            citation_velocity: Citation growth rate
+            publication_surge: Topic publication growth rate
+            citation_count: Total citation count
+            recency_score: Recency score (0-100)
+
+        Returns:
+            Trend score (0-100)
+        """
+        import math
+
+        # Calculate citation score
+        citation_score = 0
+        if citation_count > 0:
+            citation_score = min(100, math.log10(citation_count + 1) * 30)
+
+        velocity_score = min(100, citation_velocity * 20)
+        surge_score = min(100, publication_surge * 25)
+
+        if citation_velocity > 0 or publication_surge > 0:
+            # Multi-factor trend formula
+            return (
+                velocity_score * 0.35 +      # Citation velocity (most important)
+                surge_score * 0.25 +          # Publication surge
+                citation_score * 0.20 +       # Total citations
+                recency_score * 0.20          # Recency
+            )
+        elif citation_count > 0:
+            # Fallback: old formula if no velocity/surge data
+            return (citation_score * 0.6) + (recency_score * 0.4)
+        else:
+            return recency_score * 0.5
+
+
 @dataclass
 class FetchedPaper:
     """Normalized paper data from any source."""
@@ -179,76 +288,23 @@ class FetchedPaper:
         self._calculate_scores()
 
     def _calculate_scores(self):
-        """Calculate trend and recency scores with citation velocity."""
-        import math
-        current_year = datetime.now().year
+        """Calculate trend and recency scores using PaperScorer."""
+        scorer = PaperScorer()
 
-        # 1. Recency score (papers from last 2 years get higher scores)
-        if self.year:
-            years_old = current_year - self.year
-            self.recency_score = max(0, 100 - (years_old * 20))
+        # Calculate recency score
+        self.recency_score = scorer.calculate_recency_score(self.year)
 
-        # 2. Calculate citation velocity from citations_by_year
+        # Calculate citation velocity
         if self.citations_by_year:
-            self._calculate_citation_velocity(current_year)
+            self.citation_velocity = scorer.calculate_citation_velocity(self.citations_by_year)
 
-        # 3. Calculate trend score with NEW formula
-        # Components: citation_velocity (35%) + publication_surge (25%) + citation_score (20%) + recency (20%)
-        citation_score = 0
-        if self.citation_count > 0:
-            citation_score = min(100, math.log10(self.citation_count + 1) * 30)
-
-        velocity_score = min(100, self.citation_velocity * 20)  # Scale velocity to 0-100
-        surge_score = min(100, self.publication_surge * 25)  # Scale surge to 0-100
-
-        if self.citation_velocity > 0 or self.publication_surge > 0:
-            # NEW: Multi-factor trend formula
-            self.trend_score = (
-                velocity_score * 0.35 +      # Citation velocity (most important)
-                surge_score * 0.25 +          # Publication surge
-                citation_score * 0.20 +       # Total citations
-                self.recency_score * 0.20     # Recency
-            )
-        elif self.citation_count > 0:
-            # Fallback: old formula if no velocity/surge data
-            self.trend_score = (citation_score * 0.6) + (self.recency_score * 0.4)
-        else:
-            self.trend_score = self.recency_score * 0.5
-
-    def _calculate_citation_velocity(self, current_year: int):
-        """
-        Calculate citation velocity (recent citations / older citations).
-
-        Velocity > 1.0 means accelerating citations (trending up)
-        Velocity < 1.0 means decelerating citations (cooling down)
-        """
-        if not self.citations_by_year:
-            self.citation_velocity = 0.0
-            return
-
-        # Get citations for recent years (last 2 years) vs older years
-        recent_citations = 0
-        older_citations = 0
-
-        for year_str, count in self.citations_by_year.items():
-            try:
-                year = int(year_str)
-                if year >= current_year - 1:  # Last 2 years (2024, 2025)
-                    recent_citations += count
-                elif year >= current_year - 3:  # Previous 2 years (2022, 2023)
-                    older_citations += count
-            except ValueError:
-                continue
-
-        # Calculate velocity ratio
-        if older_citations > 0:
-            # Ratio of recent to older citations
-            self.citation_velocity = recent_citations / older_citations
-        elif recent_citations > 0:
-            # Only recent citations = very hot (new paper getting attention)
-            self.citation_velocity = 5.0  # High velocity for new trending papers
-        else:
-            self.citation_velocity = 0.0
+        # Calculate trend score
+        self.trend_score = scorer.calculate_trend_score(
+            citation_velocity=self.citation_velocity,
+            publication_surge=self.publication_surge,
+            citation_count=self.citation_count,
+            recency_score=self.recency_score
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -607,6 +663,184 @@ class WebCrawlerAgent:
 
             return papers
 
+    async def _fetch_latest_pmids(
+        self,
+        session: aiohttp.ClientSession,
+        query: str,
+        limit: int
+    ) -> List[str]:
+        """
+        Fetch latest paper PMIDs (Title-focused, sorted by date).
+
+        Args:
+            session: aiohttp session
+            query: Search query
+            limit: Target number of results
+
+        Returns:
+            List of PMIDs
+        """
+        title_query = f"{query}[Title]"
+
+        await self._rate_limit("pubmed")
+        pmids = await self._search_pubmed_ids(
+            session, title_query, limit + 3, "pub_date", "2024/01/01", None
+        )
+
+        # If not enough Title results, also search Title/Abstract
+        if len(pmids) < limit:
+            await self._rate_limit("pubmed")
+            tiab_query = f"{query}[Title/Abstract]"
+            extra_pmids = await self._search_pubmed_ids(
+                session, tiab_query, limit + 3, "pub_date", "2024/01/01", None
+            )
+            for pmid in extra_pmids:
+                if pmid not in pmids:
+                    pmids.append(pmid)
+
+        return pmids
+
+    async def _fetch_impact_pmids(
+        self,
+        session: aiohttp.ClientSession,
+        query: str,
+        limit: int
+    ) -> List[str]:
+        """
+        Fetch high-impact paper PMIDs (sorted by relevance).
+
+        Args:
+            session: aiohttp session
+            query: Search query
+            limit: Target number of results
+
+        Returns:
+            List of PMIDs
+        """
+        await self._rate_limit("pubmed")
+        return await self._search_pubmed_ids(
+            session, query, limit + 3, "relevance", "2020/01/01", None
+        )
+
+    def _merge_and_deduplicate(
+        self,
+        latest_pmids: List[str],
+        impact_pmids: List[str]
+    ) -> List[str]:
+        """
+        Merge and deduplicate PMIDs, prioritizing latest papers.
+
+        Args:
+            latest_pmids: Latest paper PMIDs
+            impact_pmids: High-impact paper PMIDs
+
+        Returns:
+            Combined deduplicated list
+        """
+        seen = set()
+        combined = []
+
+        # Add latest first (priority)
+        for pmid in latest_pmids:
+            if pmid not in seen:
+                seen.add(pmid)
+                combined.append(pmid)
+
+        # Add high-impact
+        for pmid in impact_pmids:
+            if pmid not in seen:
+                seen.add(pmid)
+                combined.append(pmid)
+
+        return combined
+
+    def _filter_by_query_terms(
+        self,
+        papers: List[FetchedPaper],
+        query: str,
+        max_results: int
+    ) -> List[FetchedPaper]:
+        """
+        Filter papers to ensure query terms appear in title or abstract.
+
+        Args:
+            papers: List of papers to filter
+            query: Original search query
+            max_results: Maximum results needed
+
+        Returns:
+            Filtered papers
+        """
+        query_terms = query.lower().split()
+        filtered = []
+
+        for paper in papers:
+            title_lower = paper.title.lower()
+            # At least one query term should be in title
+            if any(term in title_lower for term in query_terms):
+                filtered.append(paper)
+            elif len(filtered) < max_results:
+                # Include some that match in abstract if we don't have enough
+                if paper.abstract and any(term in paper.abstract.lower() for term in query_terms):
+                    paper.trend_score -= 10  # Lower priority
+                    filtered.append(paper)
+
+        return filtered
+
+    def _apply_core_ranking(self, papers: List[FetchedPaper]) -> List[FetchedPaper]:
+        """
+        Apply core paper reranking to papers.
+
+        Args:
+            papers: List of papers to rank
+
+        Returns:
+            Papers with core ranking applied
+        """
+        reranker = get_reranker(domain="oncology")
+        for paper in papers:
+            score = reranker.score_paper(
+                title=paper.title,
+                abstract=paper.abstract,
+                year=paper.year,
+                journal=paper.journal,
+                citation_count=paper.citation_count
+            )
+            paper.core_score = score.total_score
+            paper.article_type = score.article_type
+            paper.is_core_paper = score.is_core_paper
+        return papers
+
+    def _apply_lens_classification(self, papers: List[FetchedPaper]) -> List[FetchedPaper]:
+        """
+        Apply lens classification to papers.
+
+        Args:
+            papers: List of papers to classify
+
+        Returns:
+            Papers with lens classification applied
+        """
+        lens_classifier = get_lens_classifier()
+        for paper in papers:
+            classification = lens_classifier.classify(
+                title=paper.title,
+                abstract=paper.abstract,
+                year=paper.year,
+                article_type=paper.article_type,
+                citation_count=paper.citation_count
+            )
+            paper.primary_lens = classification.primary_lens.value
+            paper.lens_scores = {
+                lens.value: {
+                    "score": score.score,
+                    "confidence": score.confidence
+                }
+                for lens, score in classification.all_scores.items()
+            }
+            paper.lens_explanation = classification.explanation
+        return papers
+
     async def search_pubmed_hybrid(
         self,
         query: str,
@@ -628,69 +862,23 @@ class WebCrawlerAgent:
         """
         half_results = max(3, max_results // 2)
 
-        # Add [Title] qualifier for more relevant results in latest search
-        title_query = f"{query}[Title]"
-
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            # 1. Get LATEST papers (Title-focused, sorted by date)
-            await self._rate_limit("pubmed")
-            latest_pmids = await self._search_pubmed_ids(
-                session, title_query, half_results + 3, "pub_date", "2024/01/01", None
-            )
+            # Fetch latest and high-impact PMIDs
+            latest_pmids = await self._fetch_latest_pmids(session, query, half_results)
+            impact_pmids = await self._fetch_impact_pmids(session, query, half_results)
 
-            # If not enough Title results, also search Title/Abstract
-            if len(latest_pmids) < half_results:
-                await self._rate_limit("pubmed")
-                tiab_query = f"{query}[Title/Abstract]"
-                extra_pmids = await self._search_pubmed_ids(
-                    session, tiab_query, half_results + 3, "pub_date", "2024/01/01", None
-                )
-                for pmid in extra_pmids:
-                    if pmid not in latest_pmids:
-                        latest_pmids.append(pmid)
-
-            # 2. Get HIGH-IMPACT papers (sorted by relevance)
-            await self._rate_limit("pubmed")
-            impact_pmids = await self._search_pubmed_ids(
-                session, query, half_results + 3, "relevance", "2020/01/01", None
-            )
-
-            # Combine and deduplicate
-            seen = set()
-            combined_pmids = []
-
-            # Add latest first (priority)
-            for pmid in latest_pmids:
-                if pmid not in seen:
-                    seen.add(pmid)
-                    combined_pmids.append(pmid)
-
-            # Add high-impact
-            for pmid in impact_pmids:
-                if pmid not in seen:
-                    seen.add(pmid)
-                    combined_pmids.append(pmid)
+            # Merge and deduplicate
+            combined_pmids = self._merge_and_deduplicate(latest_pmids, impact_pmids)
 
             if not combined_pmids:
                 return []
 
-            # Fetch details
+            # Fetch paper details
             await self._rate_limit("pubmed")
             papers = await self._fetch_pubmed_details(session, combined_pmids[:max_results + 4])
 
-            # Filter: ensure query terms appear in title (case-insensitive)
-            query_terms = query.lower().split()
-            filtered_papers = []
-            for paper in papers:
-                title_lower = paper.title.lower()
-                # At least one query term should be in title
-                if any(term in title_lower for term in query_terms):
-                    filtered_papers.append(paper)
-                elif len(filtered_papers) < max_results:
-                    # Include some that match in abstract if we don't have enough
-                    if paper.abstract and any(term in paper.abstract.lower() for term in query_terms):
-                        paper.trend_score -= 10  # Lower priority
-                        filtered_papers.append(paper)
+            # Filter by query terms
+            filtered_papers = self._filter_by_query_terms(papers, query, max_results)
 
             # Boost latest papers
             latest_set = set(latest_pmids)
@@ -698,39 +886,9 @@ class WebCrawlerAgent:
                 if paper.pmid in latest_set:
                     paper.trend_score += 20
 
-            # Apply Core Paper Reranking
-            reranker = get_reranker(domain="oncology")
-            for paper in filtered_papers:
-                score = reranker.score_paper(
-                    title=paper.title,
-                    abstract=paper.abstract,
-                    year=paper.year,
-                    journal=paper.journal,
-                    citation_count=paper.citation_count
-                )
-                paper.core_score = score.total_score
-                paper.article_type = score.article_type
-                paper.is_core_paper = score.is_core_paper
-
-            # Apply Lens Classification
-            lens_classifier = get_lens_classifier()
-            for paper in filtered_papers:
-                classification = lens_classifier.classify(
-                    title=paper.title,
-                    abstract=paper.abstract,
-                    year=paper.year,
-                    article_type=paper.article_type,
-                    citation_count=paper.citation_count
-                )
-                paper.primary_lens = classification.primary_lens.value
-                paper.lens_scores = {
-                    lens.value: {
-                        "score": score.score,
-                        "confidence": score.confidence
-                    }
-                    for lens, score in classification.all_scores.items()
-                }
-                paper.lens_explanation = classification.explanation
+            # Apply core ranking and lens classification
+            filtered_papers = self._apply_core_ranking(filtered_papers)
+            filtered_papers = self._apply_lens_classification(filtered_papers)
 
             # Sort by core_score (primary), then year (secondary)
             filtered_papers.sort(key=lambda p: (p.core_score, p.year), reverse=True)
@@ -1191,16 +1349,37 @@ class WebCrawlerAgent:
 
     # ==================== Full Text Retrieval ====================
 
-    async def fetch_full_text(self, pmid: str = None, pmcid: str = None, doi: str = None, use_playwright: bool = True) -> Optional[str]:
+
+class FullTextFetcher:
+    """
+    Handles full text retrieval from various sources using a strategy pattern.
+
+    Tries multiple fetch strategies in order of reliability:
+    1. PubMed Full Text Crawler (HTML scraping)
+    2. PMC OA API (open access papers)
+    3. Europe PMC (full text XML)
+    4. Unpaywall API (legal free versions)
+    5. Publisher site via PubMed links (Playwright)
+    """
+
+    def __init__(self, timeout: int = 30):
+        """
+        Initialize the fetcher.
+
+        Args:
+            timeout: Request timeout in seconds
+        """
+        self.timeout = aiohttp.ClientTimeout(total=timeout)
+
+    async def fetch(
+        self,
+        pmid: str = None,
+        pmcid: str = None,
+        doi: str = None,
+        use_playwright: bool = True
+    ) -> Optional[str]:
         """
         Fetch full text content from various sources.
-
-        Tries multiple methods in order:
-        0. PubMed Full Text Crawler (HTML scraping - most robust for OA papers)
-        1. PMC OA API for open access papers (if pmcid available)
-        2. Europe PMC for full text XML
-        3. Unpaywall API (finds legal free versions by DOI)
-        4. PubMed full text links → Publisher site via Playwright
 
         Args:
             pmid: PubMed ID
@@ -1211,49 +1390,71 @@ class WebCrawlerAgent:
         Returns:
             Full text string or None if not available
         """
-        # Method 0: Try PubMed Full Text Crawler (most robust for OA papers)
-        if pmid:
+        # Try each strategy in order
+        strategies = [
+            (self._try_fulltext_crawler, pmid, "PubMedFullTextCrawler"),
+            (self._try_pmc_oa, pmcid, "PMC OA"),
+            (self._try_europe_pmc, (pmid, pmcid), "Europe PMC"),
+            (self._try_unpaywall, doi, "Unpaywall"),
+        ]
+
+        for strategy_func, arg, name in strategies:
+            if arg:
+                try:
+                    result = await strategy_func(arg)
+                    if result and len(result) > 500:
+                        print(f"Successfully fetched full text via {name}")
+                        return result
+                except Exception as e:
+                    print(f"{name} failed: {e}")
+
+        # Try to get PMCID from DOI if needed
+        if doi and not pmcid:
             try:
-                crawler = get_fulltext_crawler()
-                full_text = await crawler.crawl(pmid)
-                if full_text and len(full_text) > 500:  # Ensure we got meaningful content
-                    print(f"Successfully fetched full text via PubMedFullTextCrawler for PMID {pmid}")
-                    return full_text
-            except Exception as e:
-                print(f"PubMedFullTextCrawler failed for PMID {pmid}: {e}")
-
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            # Method 1: Try PMC OA API (for open access papers)
-            if pmcid:
-                full_text = await self._fetch_from_pmc_oa(session, pmcid)
-                if full_text:
-                    return full_text
-
-            # Method 2: Try Europe PMC
-            if pmid or pmcid:
-                full_text = await self._fetch_from_europe_pmc(session, pmid, pmcid)
-                if full_text:
-                    return full_text
-
-            # Method 3: Try Unpaywall API (finds legal free versions)
-            if doi:
-                full_text = await self._fetch_from_unpaywall(session, doi)
-                if full_text:
-                    return full_text
-
-            # Method 4: If we only have DOI, try to get PMCID first
-            if doi and not pmcid:
-                paper = await self.fetch_by_doi(doi)
+                from .web_crawler_agent import WebCrawlerAgent
+                agent = WebCrawlerAgent()
+                paper = await agent.fetch_by_doi(doi)
                 if paper and paper.pmcid:
-                    return await self.fetch_full_text(pmcid=paper.pmcid, use_playwright=False)
+                    return await self.fetch(pmcid=paper.pmcid, use_playwright=False)
+            except Exception as e:
+                print(f"DOI to PMCID lookup failed: {e}")
 
-            # Method 5: Try Playwright to crawl publisher site via PubMed links
-            if use_playwright and pmid:
-                full_text = await self._fetch_via_pubmed_links(pmid)
-                if full_text:
-                    return full_text
+        # Last resort: Playwright
+        if use_playwright and pmid:
+            try:
+                result = await self._try_pubmed_links(pmid)
+                if result:
+                    return result
+            except Exception as e:
+                print(f"PubMed links fetch failed: {e}")
 
-            return None
+        return None
+
+    async def _try_fulltext_crawler(self, pmid: str) -> Optional[str]:
+        """Try PubMed Full Text Crawler (most robust for OA papers)."""
+        crawler = get_fulltext_crawler()
+        full_text = await crawler.crawl(pmid)
+        return full_text if full_text and len(full_text) > 500 else None
+
+    async def _try_pmc_oa(self, pmcid: str) -> Optional[str]:
+        """Try PMC Open Access API."""
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            return await self._fetch_from_pmc_oa(session, pmcid)
+
+    async def _try_europe_pmc(self, ids: tuple) -> Optional[str]:
+        """Try Europe PMC."""
+        pmid, pmcid = ids
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            return await self._fetch_from_europe_pmc(session, pmid, pmcid)
+
+    async def _try_unpaywall(self, doi: str) -> Optional[str]:
+        """Try Unpaywall API."""
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            return await self._fetch_from_unpaywall(session, doi)
+
+    async def _try_pubmed_links(self, pmid: str) -> Optional[str]:
+        """Try fetching via PubMed links with Playwright."""
+        return await self._fetch_via_pubmed_links(pmid)
 
     async def _fetch_from_pmc_oa(self, session: aiohttp.ClientSession, pmcid: str) -> Optional[str]:
         """Fetch full text from PMC Open Access subset."""
@@ -1264,7 +1465,6 @@ class WebCrawlerAgent:
 
             # Get OA file location
             params = {"id": pmcid, "format": "tgz"}
-            await self._rate_limit("pubmed")
 
             async with session.get(PMC_OA_URL, params=params) as response:
                 if response.status != 200:
@@ -1304,7 +1504,12 @@ class WebCrawlerAgent:
             print(f"PMC OA fetch error: {e}")
             return None
 
-    async def _fetch_from_europe_pmc(self, session: aiohttp.ClientSession, pmid: str = None, pmcid: str = None) -> Optional[str]:
+    async def _fetch_from_europe_pmc(
+        self,
+        session: aiohttp.ClientSession,
+        pmid: str = None,
+        pmcid: str = None
+    ) -> Optional[str]:
         """Fetch full text from Europe PMC."""
         try:
             # Build query
@@ -1423,7 +1628,6 @@ class WebCrawlerAgent:
                         return await self._fetch_from_europe_pmc(session, None, f"PMC{pmcid_match.group(1)}")
 
                 # If it's a direct PDF/HTML, we need Playwright to extract
-                # Return the URL for now, the caller can use Playwright
                 print(f"Unpaywall found OA version: {oa_url}")
 
                 # Try to fetch if it's XML/HTML
@@ -1498,8 +1702,7 @@ class WebCrawlerAgent:
                 # Wait for the full text links section
                 await page.wait_for_selector("#full-text-links-list, .full-text-links", timeout=10000)
 
-                # Find the first full text link (usually the best one)
-                # PubMed shows links like "Free PMC article", "Free article", etc.
+                # Find the first full text link
                 link_selectors = [
                     "#full-text-links-list a.link-item",
                     ".full-text-links a",
@@ -1525,6 +1728,25 @@ class WebCrawlerAgent:
         except Exception as e:
             print(f"Error getting PubMed full text link: {e}")
             return None
+
+
+    async def fetch_full_text(self, pmid: str = None, pmcid: str = None, doi: str = None, use_playwright: bool = True) -> Optional[str]:
+        """
+        Fetch full text content from various sources.
+
+        Delegates to FullTextFetcher for simplified full text retrieval.
+
+        Args:
+            pmid: PubMed ID
+            pmcid: PMC ID (e.g., "PMC1234567")
+            doi: DOI (for fallback lookup)
+            use_playwright: Whether to try Playwright for publisher sites
+
+        Returns:
+            Full text string or None if not available
+        """
+        fetcher = FullTextFetcher(timeout=self.timeout.total)
+        return await fetcher.fetch(pmid=pmid, pmcid=pmcid, doi=doi, use_playwright=use_playwright)
 
     # ==================== Indexing Integration ====================
 

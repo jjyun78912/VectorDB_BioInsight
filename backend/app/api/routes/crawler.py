@@ -60,7 +60,8 @@ class LensScoreDetail(BaseModel):
     confidence: str = "low"
 
 
-class PaperResponse(BaseModel):
+class BasePaperResponse(BaseModel):
+    """Base response model with common paper fields."""
     id: str
     source: str
     title: str
@@ -91,6 +92,11 @@ class PaperResponse(BaseModel):
     primary_lens: str = ""  # "overview", "trend", "mechanism", "clinical"
     lens_scores: Optional[Dict[str, LensScoreDetail]] = None
     lens_explanation: str = ""
+
+
+class PaperResponse(BasePaperResponse):
+    """Standard paper response."""
+    pass
 
 
 class LensGroup(BaseModel):
@@ -130,7 +136,7 @@ class TrendInfo(BaseModel):
     matched_terms: List[str] = []  # Keywords that matched
 
 
-class TrendedPaper(PaperResponse):
+class TrendedPaper(BasePaperResponse):
     """Paper with trend matching information."""
     trend_match: Optional[TrendInfo] = None
 
@@ -184,6 +190,101 @@ class BatchResponse(BaseModel):
 
 
 # ==================== Helper Functions ====================
+
+# Category display metadata for trends
+_CATEGORY_DISPLAY_INFO = {
+    "tumor_evolution": ("🧬 Cancer Evolution & Plasticity", "🧬"),
+    "immunotherapy": ("🛡️ Immunotherapy & TME", "🛡️"),
+    "precision_medicine": ("🎯 Precision Medicine", "🎯"),
+    "cancer_prevention": ("🛡️ Cancer Prevention", "🛡️"),
+    "treatment_resistance": ("💊 Treatment Resistance", "💊"),
+    "emerging_targets": ("🎯 Emerging Targets", "🎯"),
+}
+
+
+def _init_trend_category(cat_id: str) -> TrendCategory:
+    """
+    Initialize a TrendCategory with display metadata.
+
+    Args:
+        cat_id: Category ID (e.g., "tumor_evolution")
+
+    Returns:
+        Initialized TrendCategory
+    """
+    cat_name, cat_emoji = _CATEGORY_DISPLAY_INFO.get(cat_id, (cat_id, "🔬"))
+    return TrendCategory(
+        category_id=cat_id,
+        category_name=cat_name,
+        emoji=cat_emoji,
+        trends={},
+        total_papers=0
+    )
+
+
+def _init_trend_group(trend_id: str, match) -> TrendGroup:
+    """
+    Initialize a TrendGroup from a trend match.
+
+    Args:
+        trend_id: Trend identifier
+        match: TrendMatch object with trend metadata
+
+    Returns:
+        Initialized TrendGroup
+    """
+    return TrendGroup(
+        trend_id=trend_id,
+        trend_name=match.trend_name,
+        emoji=match.emoji,
+        color=match.color,
+        why_trending=match.why_trending,
+        papers=[],
+        paper_count=0
+    )
+
+
+def _map_paper_to_trend(paper_resp: PaperResponse, matcher) -> Optional[tuple]:
+    """
+    Map a paper to its primary trend.
+
+    Args:
+        paper_resp: PaperResponse object to map
+        matcher: TrendMatcher instance
+
+    Returns:
+        Tuple of (category_id, trend_id, TrendedPaper) if match found, None otherwise
+    """
+    # Find matching trends
+    matches = matcher.match_paper(
+        paper_resp.title,
+        paper_resp.abstract,
+        paper_resp.keywords
+    )
+
+    if not matches:
+        return None
+
+    primary_match = matches[0]
+    cat_id = primary_match.category
+    trend_id = primary_match.trend_id
+
+    # Create TrendedPaper with trend info
+    trended_paper = TrendedPaper(
+        **paper_resp.model_dump(),
+        trend_match=TrendInfo(
+            id=primary_match.trend_id,
+            name=primary_match.trend_name,
+            emoji=primary_match.emoji,
+            color=primary_match.color,
+            why_trending=primary_match.why_trending,
+            clinical_relevance=ONCOLOGY_TRENDS[trend_id].clinical_relevance if trend_id in ONCOLOGY_TRENDS else None,
+            matched_terms=primary_match.matched_terms[:5]
+        )
+    )
+
+    return (cat_id, trend_id, trended_paper)
+
 
 def paper_to_response(paper: FetchedPaper, title_ko: str = None, abstract_ko: str = None) -> PaperResponse:
     """Convert FetchedPaper to API response."""
@@ -567,75 +668,32 @@ async def get_enhanced_trending(
 
         # Group papers by trend
         categories: Dict[str, TrendCategory] = {}
-        unmatched_count = 0
 
         for paper_resp in paper_responses:
-            # Get paper details for matching
-            title = paper_resp.title
-            abstract = paper_resp.abstract
-            keywords = paper_resp.keywords
+            # Map paper to trend
+            result = _map_paper_to_trend(paper_resp, trend_matcher)
 
-            # Find matching trends
-            matches = trend_matcher.match_paper(title, abstract, keywords)
-
-            if matches:
-                primary_match = matches[0]
-                cat_id = primary_match.category
+            if result:
+                cat_id, trend_id, trended_paper = result
 
                 # Initialize category if needed
                 if cat_id not in categories:
-                    # Get category display info
-                    cat_names = {
-                        "tumor_evolution": ("🧬 Cancer Evolution & Plasticity", "🧬"),
-                        "immunotherapy": ("🛡️ Immunotherapy & TME", "🛡️"),
-                        "precision_medicine": ("🎯 Precision Medicine", "🎯"),
-                        "cancer_prevention": ("🛡️ Cancer Prevention", "🛡️"),
-                        "treatment_resistance": ("💊 Treatment Resistance", "💊"),
-                        "emerging_targets": ("🎯 Emerging Targets", "🎯"),
-                    }
-                    cat_name, cat_emoji = cat_names.get(cat_id, (cat_id, "🔬"))
-
-                    categories[cat_id] = TrendCategory(
-                        category_id=cat_id,
-                        category_name=cat_name,
-                        emoji=cat_emoji,
-                        trends={},
-                        total_papers=0
-                    )
+                    categories[cat_id] = _init_trend_category(cat_id)
 
                 # Initialize trend if needed
-                trend_id = primary_match.trend_id
                 if trend_id not in categories[cat_id].trends:
-                    trend_def = ONCOLOGY_TRENDS.get(trend_id)
-                    categories[cat_id].trends[trend_id] = TrendGroup(
-                        trend_id=trend_id,
-                        trend_name=primary_match.trend_name,
-                        emoji=primary_match.emoji,
-                        color=primary_match.color,
-                        why_trending=primary_match.why_trending,
-                        papers=[],
-                        paper_count=0
+                    # Get primary match for initialization
+                    matches = trend_matcher.match_paper(
+                        paper_resp.title,
+                        paper_resp.abstract,
+                        paper_resp.keywords
                     )
+                    categories[cat_id].trends[trend_id] = _init_trend_group(trend_id, matches[0])
 
-                # Create TrendedPaper with trend info
-                trended_paper = TrendedPaper(
-                    **paper_resp.model_dump(),
-                    trend_match=TrendInfo(
-                        id=primary_match.trend_id,
-                        name=primary_match.trend_name,
-                        emoji=primary_match.emoji,
-                        color=primary_match.color,
-                        why_trending=primary_match.why_trending,
-                        clinical_relevance=ONCOLOGY_TRENDS[trend_id].clinical_relevance if trend_id in ONCOLOGY_TRENDS else None,
-                        matched_terms=primary_match.matched_terms[:5]
-                    )
-                )
-
+                # Add paper to trend
                 categories[cat_id].trends[trend_id].papers.append(trended_paper)
                 categories[cat_id].trends[trend_id].paper_count += 1
                 categories[cat_id].total_papers += 1
-            else:
-                unmatched_count += 1
 
         # Get all defined trends for reference
         all_trends = trend_matcher.get_all_trends()
@@ -747,13 +805,22 @@ _daily_cache: Dict[str, Dict] = {}
 _daily_cache_time: Dict[str, datetime] = {}
 
 
-def _is_daily_cache_valid(cache_key: str) -> bool:
-    """Check if daily cache is valid (before next KST 07:00)."""
-    if cache_key not in _daily_cache_time:
+def _is_cache_valid(cache_key: str, cache_time_dict: Dict[str, datetime]) -> bool:
+    """
+    Check if cache is valid (before next KST 07:00).
+
+    Args:
+        cache_key: Key to check in cache
+        cache_time_dict: Dictionary mapping cache keys to timestamps
+
+    Returns:
+        True if cache is still valid, False otherwise
+    """
+    if cache_key not in cache_time_dict:
         return False
 
     from datetime import timezone
-    cached_at = _daily_cache_time[cache_key]
+    cached_at = cache_time_dict[cache_key]
     now = datetime.now(timezone.utc)
 
     # KST 07:00 = UTC 22:00 (previous day)
@@ -796,7 +863,7 @@ async def get_daily_papers(
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Check cache
-    if not no_cache and _is_daily_cache_valid(cache_key):
+    if not no_cache and _is_cache_valid(cache_key, _daily_cache_time):
         cached = _daily_cache[cache_key]
         return DailyPapersResponse(
             category=category,
@@ -854,597 +921,6 @@ async def get_daily_papers(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching daily papers: {str(e)}")
 
-
-# ==================== Daily News Generation ====================
-
-class NewsItem(BaseModel):
-    """A single news item generated from a paper."""
-    id: str
-    headline: str  # 뉴스 스타일 헤드라인
-    summary: str   # 1-2문장 요약
-    significance: str  # 왜 중요한지
-    category: str
-    category_name: str
-    source: str  # 저널명
-    source_type: str = "pubmed"  # pubmed, biorxiv, medrxiv, nature, science
-    date: str
-    pmid: Optional[str] = None
-    doi: Optional[str] = None
-    url: Optional[str] = None  # Direct link to paper
-
-
-class DailyNewsResponse(BaseModel):
-    """Response for daily news."""
-    date: str
-    language: str = "ko"  # ko, en
-    sources: List[str] = ["pubmed"]  # Sources included
-    news_items: List[NewsItem]
-    total: int
-    cached: bool
-    generated_at: str
-
-
-# Cache for generated news
-_news_cache: Dict[str, Dict] = {}
-_news_cache_time: Dict[str, datetime] = {}
-
-
-def _is_news_cache_valid(cache_key: str) -> bool:
-    """Check if news cache is valid (before next KST 07:00)."""
-    if cache_key not in _news_cache_time:
-        return False
-
-    from datetime import timezone
-    cached_at = _news_cache_time[cache_key]
-    now = datetime.now(timezone.utc)
-
-    kst_offset = timedelta(hours=9)
-    now_kst = now + kst_offset
-
-    today_7am_kst = now_kst.replace(hour=7, minute=0, second=0, microsecond=0)
-    if now_kst.hour < 7:
-        today_7am_kst -= timedelta(days=1)
-    today_7am_utc = today_7am_kst - kst_offset
-
-    return cached_at.replace(tzinfo=timezone.utc) >= today_7am_utc
-
-
-# Multi-language prompts for news generation
-NEWS_PROMPTS = {
-    "ko": {
-        "system": """당신은 생명과학 뉴스 기자입니다. 학술 논문을 일반 독자도 이해할 수 있는 뉴스 기사 형태로 변환해주세요.
-
-다음 형식으로 정확히 응답해주세요:
-HEADLINE: [흥미를 끄는 한글 헤드라인, 20자 이내]
-SUMMARY: [핵심 발견을 1-2문장으로 쉽게 설명]
-SIGNIFICANCE: [이 연구가 왜 중요한지 1문장으로 설명]
-
-예시:
-HEADLINE: 새로운 암 면역치료법 효과 입증
-SUMMARY: 연구팀이 개발한 새로운 면역치료제가 기존 치료법 대비 30% 높은 생존율을 보였습니다.
-SIGNIFICANCE: 난치성 암 환자들에게 새로운 치료 옵션을 제공할 수 있습니다.""",
-        "fallback_significance": "최신 연구 결과입니다.",
-    },
-    "en": {
-        "system": """You are a science journalist specializing in life sciences. Transform academic papers into engaging news articles that general readers can understand.
-
-Respond in exactly this format:
-HEADLINE: [Catchy headline, max 15 words]
-SUMMARY: [Key findings in 1-2 sentences, easy to understand]
-SIGNIFICANCE: [Why this research matters, 1 sentence]
-
-Example:
-HEADLINE: New Cancer Immunotherapy Shows 30% Better Survival Rates
-SUMMARY: Researchers developed a novel immunotherapy that significantly outperformed existing treatments in clinical trials.
-SIGNIFICANCE: This breakthrough could offer new hope for patients with treatment-resistant cancers.""",
-        "fallback_significance": "Latest research findings.",
-    }
-}
-
-CATEGORY_NAMES_EN = {
-    "oncology": "Oncology",
-    "immunotherapy": "Immunotherapy",
-    "gene_therapy": "Gene Therapy",
-    "neurology": "Neuroscience",
-    "infectious_disease": "Infectious Disease",
-    "ai_medicine": "AI in Medicine",
-    "genomics": "Genomics",
-    "drug_discovery": "Drug Discovery",
-}
-
-
-async def _generate_news_from_paper(
-    paper: dict,
-    category: str,
-    category_name: str,
-    language: str = "ko",
-    source_type: str = "pubmed"
-) -> Optional[NewsItem]:
-    """Generate a news item from a paper using AI."""
-    try:
-        from backend.app.core.config import GOOGLE_API_KEY
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_core.prompts import ChatPromptTemplate
-
-        prompt_config = NEWS_PROMPTS.get(language, NEWS_PROMPTS["en"])
-
-        # Build paper URL
-        paper_url = None
-        if paper.get("pmid"):
-            paper_url = f"https://pubmed.ncbi.nlm.nih.gov/{paper.get('pmid')}"
-        elif paper.get("doi"):
-            paper_url = f"https://doi.org/{paper.get('doi')}"
-        elif paper.get("url"):
-            paper_url = paper.get("url")
-
-        if not GOOGLE_API_KEY or not paper.get("abstract"):
-            # Fallback: create simple news without AI
-            # Use "or" to handle explicit None values (not just missing keys)
-            paper_id = paper.get("pmid") or paper.get("id") or paper.get("doi") or "unknown"
-            return NewsItem(
-                id=paper_id,
-                headline=paper.get("title", "")[:100],
-                summary=paper.get("abstract", "")[:200] + "..." if paper.get("abstract") else "",
-                significance=prompt_config["fallback_significance"],
-                category=category,
-                category_name=category_name,
-                source=paper.get("journal", source_type.upper()),
-                source_type=source_type,
-                date=datetime.now().strftime("%Y-%m-%d"),
-                pmid=paper.get("pmid"),
-                doi=paper.get("doi"),
-                url=paper_url
-            )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.7
-        )
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", prompt_config["system"]),
-            ("human", """Paper Title: {title}
-
-Abstract: {abstract}
-
-Field: {category}""")
-        ])
-
-        chain = prompt | llm
-        result = chain.invoke({
-            "title": paper.get("title", ""),
-            "abstract": paper.get("abstract", "")[:1500],
-            "category": category_name
-        })
-
-        response_text = result.content
-
-        # Parse response
-        headline = ""
-        summary = ""
-        significance = ""
-
-        for line in response_text.split("\n"):
-            line = line.strip()
-            if line.startswith("HEADLINE:"):
-                headline = line.replace("HEADLINE:", "").strip()
-            elif line.startswith("SUMMARY:"):
-                summary = line.replace("SUMMARY:", "").strip()
-            elif line.startswith("SIGNIFICANCE:"):
-                significance = line.replace("SIGNIFICANCE:", "").strip()
-
-        # Fallback if parsing fails
-        if not headline:
-            headline = paper.get("title", "")[:50]
-        if not summary:
-            summary = paper.get("abstract", "")[:150] + "..."
-        if not significance:
-            significance = prompt_config["fallback_significance"]
-
-        # Use "or" to handle explicit None values (not just missing keys)
-        paper_id = paper.get("pmid") or paper.get("id") or paper.get("doi") or "unknown"
-        return NewsItem(
-            id=paper_id,
-            headline=headline,
-            summary=summary,
-            significance=significance,
-            category=category,
-            category_name=category_name,
-            source=paper.get("journal", source_type.upper()),
-            source_type=source_type,
-            date=datetime.now().strftime("%Y-%m-%d"),
-            pmid=paper.get("pmid"),
-            doi=paper.get("doi"),
-            url=paper_url
-        )
-
-    except Exception as e:
-        print(f"Error generating news for paper: {e}")
-        return None
-
-
-# ==================== bioRxiv/medRxiv Integration ====================
-
-async def _fetch_biorxiv_papers(category: str, max_results: int = 5) -> List[dict]:
-    """Fetch recent papers from bioRxiv/medRxiv API."""
-    import httpx
-
-    # bioRxiv category keywords for filtering (match partial)
-    category_keywords = {
-        "oncology": ["cancer", "tumor", "oncol", "carcinoma", "leukemia", "lymphoma"],
-        "immunotherapy": ["immun", "antibod", "t-cell", "b-cell", "cytokine"],
-        "gene_therapy": ["gene", "crispr", "cas9", "editing", "transfect", "vector"],
-        "neurology": ["neuro", "brain", "alzheimer", "parkinson", "cognit", "synap"],
-        "infectious_disease": ["virus", "bacteria", "infect", "pathogen", "covid", "sars"],
-        "ai_medicine": ["machine learning", "deep learning", "neural network", "ai", "algorithm"],
-        "genomics": ["genom", "sequenc", "rna-seq", "single-cell", "transcript"],
-        "drug_discovery": ["drug", "compound", "pharma", "therapeutic", "clinical"],
-    }
-
-    keywords = category_keywords.get(category, [])
-
-    papers = []
-    try:
-        today = datetime.now()
-        start_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
-        end_date = today.strftime("%Y-%m-%d")
-
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            # Fetch from bioRxiv
-            url = f"https://api.biorxiv.org/details/biorxiv/{start_date}/{end_date}/0/json"
-            response = await client.get(url)
-
-            if response.status_code == 200:
-                data = response.json()
-                collection = data.get("collection", [])
-
-                # Filter by keywords in title or abstract
-                for paper in collection:
-                    title = paper.get("title", "").lower()
-                    abstract = paper.get("abstract", "").lower()
-                    text = title + " " + abstract
-
-                    # Check if any keyword matches
-                    if not keywords or any(kw.lower() in text for kw in keywords):
-                        papers.append({
-                            "id": paper.get("doi", ""),
-                            "title": paper.get("title", ""),
-                            "abstract": paper.get("abstract", ""),
-                            "journal": "bioRxiv",
-                            "doi": paper.get("doi"),
-                            "pmid": None,
-                            "url": f"https://www.biorxiv.org/content/{paper.get('doi')}",
-                            "date": paper.get("date", ""),
-                        })
-                        if len(papers) >= max_results:
-                            break
-
-            # Also fetch from medRxiv
-            if len(papers) < max_results:
-                url = f"https://api.biorxiv.org/details/medrxiv/{start_date}/{end_date}/0/json"
-                response = await client.get(url)
-
-                if response.status_code == 200:
-                    data = response.json()
-                    collection = data.get("collection", [])
-
-                    for paper in collection:
-                        if len(papers) >= max_results:
-                            break
-
-                        title = paper.get("title", "").lower()
-                        abstract = paper.get("abstract", "").lower()
-                        text = title + " " + abstract
-
-                        if not keywords or any(kw.lower() in text for kw in keywords):
-                            papers.append({
-                                "id": paper.get("doi", ""),
-                                "title": paper.get("title", ""),
-                                "abstract": paper.get("abstract", ""),
-                                "journal": "medRxiv",
-                                "doi": paper.get("doi"),
-                                "pmid": None,
-                                "url": f"https://www.medrxiv.org/content/{paper.get('doi')}",
-                                "date": paper.get("date", ""),
-                            })
-
-    except Exception as e:
-        print(f"Error fetching bioRxiv papers: {e}")
-
-    return papers[:max_results]
-
-
-async def _fetch_nature_science_papers(max_results: int = 5) -> List[dict]:
-    """Fetch recent papers from Nature RSS feed (RDF format)."""
-    import httpx
-    import xml.etree.ElementTree as ET
-    import re
-
-    papers = []
-
-    # Namespaces for Nature RDF
-    namespaces = {
-        'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-        'rss': 'http://purl.org/rss/1.0/',
-        'dc': 'http://purl.org/dc/elements/1.1/',
-        'content': 'http://purl.org/rss/1.0/modules/content/',
-        'prism': 'http://prismstandard.org/namespaces/basic/2.0/',
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            # Fetch Nature RSS (RDF format)
-            response = await client.get("https://www.nature.com/nature.rss")
-            if response.status_code == 200:
-                root = ET.fromstring(response.content)
-
-                # Parse RDF items
-                items = root.findall(".//rss:item", namespaces)
-                if not items:
-                    # Try without namespace
-                    items = root.findall(".//{http://purl.org/rss/1.0/}item")
-
-                for item in items[:max_results]:
-                    # Get title
-                    title_elem = item.find("rss:title", namespaces)
-                    if title_elem is None:
-                        title_elem = item.find("{http://purl.org/rss/1.0/}title")
-                    title = title_elem.text if title_elem is not None else ""
-
-                    # Get description
-                    desc_elem = item.find("rss:description", namespaces)
-                    if desc_elem is None:
-                        desc_elem = item.find("{http://purl.org/rss/1.0/}description")
-                    description = desc_elem.text if desc_elem is not None else ""
-
-                    # Clean HTML from description
-                    if description:
-                        description = re.sub(r'<[^>]+>', '', description)
-
-                    # Get link from rdf:about attribute
-                    link = item.get("{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about", "")
-                    if not link:
-                        link_elem = item.find("rss:link", namespaces)
-                        if link_elem is None:
-                            link_elem = item.find("{http://purl.org/rss/1.0/}link")
-                        link = link_elem.text if link_elem is not None else ""
-
-                    # Extract DOI from link
-                    doi = None
-                    if "/articles/" in link:
-                        doi_match = re.search(r'/articles/([^/]+)$', link)
-                        if doi_match:
-                            doi = doi_match.group(1)
-
-                    # Get date
-                    date_elem = item.find("dc:date", namespaces)
-                    if date_elem is None:
-                        date_elem = item.find("{http://purl.org/dc/elements/1.1/}date")
-                    date = date_elem.text if date_elem is not None else ""
-
-                    if title:  # Only add if we have a title
-                        papers.append({
-                            "id": doi or link,
-                            "title": title,
-                            "abstract": description[:500] if description else "",
-                            "journal": "Nature",
-                            "doi": doi,
-                            "pmid": None,
-                            "url": link,
-                            "date": date,
-                        })
-
-    except Exception as e:
-        print(f"Error fetching Nature papers: {e}")
-
-    return papers[:max_results]
-
-
-CATEGORY_NAMES = {
-    "oncology": "종양학",
-    "immunotherapy": "면역치료",
-    "gene_therapy": "유전자치료",
-    "neurology": "신경과학",
-    "infectious_disease": "감염병",
-    "ai_medicine": "AI의학",
-    "genomics": "유전체학",
-    "drug_discovery": "신약개발",
-}
-
-
-@router.get("/daily-news", response_model=DailyNewsResponse, summary="Get AI-generated daily news")
-async def get_daily_news(
-    limit: int = Query(default=6, ge=1, le=20, description="Number of news items"),
-    language: str = Query(default="ko", regex="^(ko|en)$", description="Language: ko (Korean) or en (English)"),
-    sources: str = Query(default="pubmed", description="Sources: pubmed, biorxiv, nature, all (comma-separated)"),
-    no_cache: bool = Query(default=False, description="Bypass cache")
-):
-    """
-    Get AI-generated news summaries from today's papers.
-
-    **Global News Feature:**
-    - Language: ko (Korean) or en (English)
-    - Sources: pubmed, biorxiv (includes medRxiv), nature (includes Science), or all
-
-    Returns news-style summaries suitable for a daily digest.
-    Cache refreshes at KST 07:00 daily.
-    """
-    from datetime import timezone
-
-    # Parse sources
-    source_list = [s.strip().lower() for s in sources.split(",")]
-    if "all" in source_list:
-        source_list = ["pubmed", "biorxiv", "nature"]
-
-    cache_key = f"daily_news_{limit}_{language}_{'-'.join(sorted(source_list))}"
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # Check cache
-    if not no_cache and _is_news_cache_valid(cache_key):
-        cached = _news_cache[cache_key]
-        return DailyNewsResponse(
-            date=cached["date"],
-            language=language,
-            sources=source_list,
-            news_items=cached["news_items"],
-            total=len(cached["news_items"]),
-            cached=True,
-            generated_at=cached["generated_at"]
-        )
-
-    try:
-        # Category name lookup based on language
-        category_names = CATEGORY_NAMES if language == "ko" else CATEGORY_NAMES_EN
-
-        # Fetch papers from multiple categories
-        categories_to_fetch = ["oncology", "gene_therapy", "neurology", "immunotherapy", "ai_medicine", "drug_discovery"]
-
-        all_news: List[NewsItem] = []
-
-        # Calculate papers per source
-        papers_per_source = max(2, limit // len(source_list))
-
-        # ===== Fetch from PubMed =====
-        if "pubmed" in source_list:
-            papers_per_category = max(1, papers_per_source // len(categories_to_fetch))
-
-            for category in categories_to_fetch:
-                if len(all_news) >= papers_per_source:
-                    break
-
-                try:
-                    base_query = TRENDING_CATEGORY_BASES.get(category, TRENDING_CATEGORY_BASES["oncology"])
-                    now = datetime.now()
-                    min_date = (now - timedelta(days=7)).strftime("%Y/%m/%d")
-                    max_date = now.strftime("%Y/%m/%d")
-
-                    papers = await crawler_agent.search_pubmed(
-                        query=base_query,
-                        max_results=papers_per_category + 2,
-                        sort="pub_date",
-                        min_date=min_date,
-                        max_date=max_date
-                    )
-
-                    for paper in papers[:papers_per_category]:
-                        if len(all_news) >= papers_per_source:
-                            break
-
-                        paper_dict = {
-                            "id": paper.pmid or paper.id,
-                            "title": paper.title,
-                            "abstract": paper.abstract,
-                            "journal": paper.journal,
-                            "pmid": paper.pmid,
-                            "doi": paper.doi,
-                        }
-
-                        news_item = await _generate_news_from_paper(
-                            paper_dict,
-                            category,
-                            category_names.get(category, category),
-                            language=language,
-                            source_type="pubmed"
-                        )
-                        if news_item:
-                            all_news.append(news_item)
-
-                except Exception as e:
-                    print(f"Error fetching PubMed {category} for news: {e}")
-                    continue
-
-        # ===== Fetch from bioRxiv/medRxiv =====
-        if "biorxiv" in source_list:
-            try:
-                for category in categories_to_fetch[:3]:  # Limit categories for preprints
-                    if len(all_news) >= limit:
-                        break
-
-                    biorxiv_papers = await _fetch_biorxiv_papers(category, max_results=2)
-
-                    for paper in biorxiv_papers:
-                        if len(all_news) >= limit:
-                            break
-
-                        source_type = "biorxiv" if paper.get("journal") == "bioRxiv" else "medrxiv"
-                        news_item = await _generate_news_from_paper(
-                            paper,
-                            category,
-                            category_names.get(category, category),
-                            language=language,
-                            source_type=source_type
-                        )
-                        if news_item:
-                            all_news.append(news_item)
-
-            except Exception as e:
-                print(f"Error fetching bioRxiv for news: {e}")
-
-        # ===== Fetch from Nature/Science =====
-        if "nature" in source_list:
-            try:
-                nature_papers = await _fetch_nature_science_papers(max_results=papers_per_source)
-
-                for paper in nature_papers:
-                    if len(all_news) >= limit:
-                        break
-
-                    # Determine category from title/abstract
-                    paper_category = "drug_discovery"  # Default
-                    title_lower = paper.get("title", "").lower()
-                    if any(kw in title_lower for kw in ["cancer", "tumor", "oncology"]):
-                        paper_category = "oncology"
-                    elif any(kw in title_lower for kw in ["brain", "neuro", "alzheimer"]):
-                        paper_category = "neurology"
-                    elif any(kw in title_lower for kw in ["gene", "crispr", "dna"]):
-                        paper_category = "gene_therapy"
-                    elif any(kw in title_lower for kw in ["immune", "antibody"]):
-                        paper_category = "immunotherapy"
-                    elif any(kw in title_lower for kw in ["ai", "machine learning", "deep learning"]):
-                        paper_category = "ai_medicine"
-
-                    source_type = "nature" if paper.get("journal") == "Nature" else "science"
-                    news_item = await _generate_news_from_paper(
-                        paper,
-                        paper_category,
-                        category_names.get(paper_category, paper_category),
-                        language=language,
-                        source_type=source_type
-                    )
-                    if news_item:
-                        all_news.append(news_item)
-
-            except Exception as e:
-                print(f"Error fetching Nature/Science for news: {e}")
-
-        # Limit to requested amount
-        all_news = all_news[:limit]
-
-        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        # Update cache
-        _news_cache[cache_key] = {
-            "date": today,
-            "news_items": all_news,
-            "generated_at": generated_at,
-            "language": language,
-            "sources": source_list
-        }
-        _news_cache_time[cache_key] = datetime.now(timezone.utc)
-
-        return DailyNewsResponse(
-            date=today,
-            language=language,
-            sources=source_list,
-            news_items=all_news,
-            total=len(all_news),
-            cached=False,
-            generated_at=generated_at
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating daily news: {str(e)}")
 
 
 # ==================== Playwright Deep Crawler Endpoints ====================
