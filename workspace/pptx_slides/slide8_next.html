@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #277884;
+  padding: 15pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 24pt;
+  margin: 0;
+  font-weight: bold;
+}
+.content {
+  display: flex;
+  flex: 1;
+  padding: 20pt 30pt;
+  gap: 25pt;
+}
+.column {
+  flex: 1;
+}
+.column-title {
+  color: #277884;
+  font-size: 16pt;
+  margin: 0 0 15pt 0;
+  font-weight: bold;
+}
+.task-item {
+  background: #F8F9FA;
+  border-radius: 5pt;
+  padding: 10pt;
+  margin-bottom: 10pt;
+  border-left: 3pt solid #5EA8A7;
+}
+.task-item.high {
+  border-left-color: #FE4447;
+}
+.task-item.medium {
+  border-left-color: #f39c12;
+}
+.task-item h3 {
+  color: #333333;
+  font-size: 12pt;
+  margin: 0 0 3pt 0;
+  font-weight: bold;
+}
+.task-item p {
+  color: #666666;
+  font-size: 10pt;
+  margin: 0;
+}
+.priority-high {
+  background: #FE4447;
+  color: #FFFFFF;
+  font-size: 8pt;
+  padding: 2pt 6pt;
+  border-radius: 3pt;
+  display: inline-block;
+  margin-top: 5pt;
+}
+.priority-med {
+  background: #f39c12;
+  color: #FFFFFF;
+  font-size: 8pt;
+  padding: 2pt 6pt;
+  border-radius: 3pt;
+  display: inline-block;
+  margin-top: 5pt;
+}
+.priority-low {
+  background: #27ae60;
+  color: #FFFFFF;
+  font-size: 8pt;
+  padding: 2pt 6pt;
+  border-radius: 3pt;
+  display: inline-block;
+  margin-top: 5pt;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Next Steps</h1>
+</div>
+<div class="content">
+  <div class="column">
+    <h2 class="column-title">This Week</h2>
+    <div class="task-item high">
+      <h3>Fix HTML Report Display</h3>
+      <p>Bootstrap CSS loading issue in local environment</p>
+      <div class="priority-high"><p>High</p></div>
+    </div>
+    <div class="task-item high">
+      <h3>Real GEO Dataset Testing</h3>
+      <p>Test with GSE19804 lung cancer RNA-seq data</p>
+      <div class="priority-high"><p>High</p></div>
+    </div>
+    <div class="task-item medium">
+      <h3>Probe ID Mapping Enhancement</h3>
+      <p>Improve GPL annotation parsing coverage</p>
+      <div class="priority-med"><p>Medium</p></div>
+    </div>
+  </div>
+  <div class="column">
+    <h2 class="column-title">Next Sprint</h2>
+    <div class="task-item medium">
+      <h3>DisGeNET API Integration</h3>
+      <p>Connect external gene-disease database</p>
+      <div class="priority-med"><p>Medium</p></div>
+    </div>
+    <div class="task-item medium">
+      <h3>COSMIC/OncoKB Integration</h3>
+      <p>Add mutation and precision oncology data</p>
+      <div class="priority-med"><p>Medium</p></div>
+    </div>
+    <div class="task-item">
+      <h3>RAG Pipeline Connection</h3>
+      <p>Link DEG results with paper knowledge base</p>
+      <div class="priority-low"><p>Low</p></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

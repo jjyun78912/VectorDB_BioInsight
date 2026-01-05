@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #277884;
+  padding: 15pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 24pt;
+  margin: 0;
+  font-weight: bold;
+}
+.content {
+  display: flex;
+  flex: 1;
+  padding: 20pt 30pt;
+}
+.left-col {
+  flex: 1;
+  padding-right: 20pt;
+}
+.right-col {
+  flex: 1;
+  padding-left: 20pt;
+  border-left: 3pt solid #5EA8A7;
+}
+h2 {
+  color: #277884;
+  font-size: 18pt;
+  margin: 0 0 15pt 0;
+  font-weight: bold;
+}
+ul {
+  margin: 0;
+  padding-left: 20pt;
+  color: #333333;
+  font-size: 13pt;
+  line-height: 1.8;
+}
+li {
+  margin-bottom: 8pt;
+}
+.highlight {
+  background: #5EA8A7;
+  color: #FFFFFF;
+  padding: 10pt 15pt;
+  border-radius: 5pt;
+  margin-top: 15pt;
+}
+.highlight p {
+  margin: 0;
+  font-size: 12pt;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Project Overview</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>Pipeline Architecture</h2>
+    <ul>
+      <li>DESeq2 differential expression via rpy2</li>
+      <li>Co-expression network analysis (NetworkX)</li>
+      <li>Pathway enrichment (GO/KEGG via gseapy)</li>
+      <li>Cancer gene validation (200+ genes DB)</li>
+      <li>Publication-quality visualizations</li>
+      <li>Interactive HTML reports</li>
+    </ul>
+  </div>
+  <div class="right-col">
+    <h2>New Modules Added</h2>
+    <ul>
+      <li>visualizations.py - Volcano, MA, PCA, Heatmap</li>
+      <li>disease_database.py - 44 cancer genes</li>
+      <li>validation_enhanced.py - 200+ genes, Tier1/2</li>
+      <li>qc_module.py - Quality control metrics</li>
+      <li>html_report.py - Bootstrap 5 reports</li>
+      <li>rnaseq_enhanced_pipeline.py - v2.0</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

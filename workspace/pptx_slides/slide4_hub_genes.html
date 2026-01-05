@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #277884;
+  padding: 12pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 22pt;
+  margin: 0;
+  font-weight: bold;
+}
+.content {
+  display: flex;
+  flex: 1;
+  padding: 10pt 25pt 15pt 25pt;
+  gap: 15pt;
+}
+.left-col {
+  flex: 1.2;
+}
+.right-col {
+  flex: 0.8;
+  display: flex;
+  flex-direction: column;
+  gap: 6pt;
+}
+h2 {
+  color: #277884;
+  font-size: 13pt;
+  margin: 0 0 6pt 0;
+  font-weight: bold;
+}
+.gene-table {
+  width: 100%;
+  font-size: 10pt;
+}
+.gene-row {
+  display: flex;
+  padding: 3pt 0;
+  border-bottom: 1pt solid #EEEEEE;
+}
+.gene-row.header {
+  font-weight: bold;
+  color: #277884;
+  border-bottom: 2pt solid #5EA8A7;
+}
+.gene-name { flex: 0.8; }
+.gene-fc { flex: 0.6; text-align: center; }
+.gene-disease { flex: 1.4; }
+.up { color: #FE4447; }
+.insight-card {
+  background: #F5F5F5;
+  border-radius: 4pt;
+  padding: 6pt 8pt;
+  border-left: 3pt solid #5EA8A7;
+}
+.insight-card h3 {
+  color: #277884;
+  font-size: 10pt;
+  margin: 0 0 3pt 0;
+}
+.insight-card p {
+  color: #333333;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.2;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Top Hub Genes (Network Analysis)</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>Top 6 Hub Genes</h2>
+    <div class="gene-table">
+      <div class="gene-row header">
+        <p class="gene-name">Gene</p>
+        <p class="gene-fc">FC</p>
+        <p class="gene-disease">Top Disease</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">HIF1A</p>
+        <p class="gene-fc up">5.6x</p>
+        <p class="gene-disease">Multiple Cancers (hypoxia)</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">SPP1</p>
+        <p class="gene-fc up">5.6x</p>
+        <p class="gene-disease">Metastasis marker</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">MYC</p>
+        <p class="gene-fc up">5.3x</p>
+        <p class="gene-disease">Burkitt Lymphoma</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">APC</p>
+        <p class="gene-fc up">5.1x</p>
+        <p class="gene-disease">Colorectal Cancer</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">CCNB1</p>
+        <p class="gene-fc up">5.0x</p>
+        <p class="gene-disease">Proliferation marker</p>
+      </div>
+      <div class="gene-row">
+        <p class="gene-name">RB1</p>
+        <p class="gene-fc up">5.0x</p>
+        <p class="gene-disease">Retinoblastoma</p>
+      </div>
+    </div>
+  </div>
+  <div class="right-col">
+    <div class="insight-card">
+      <h3>Therapeutic Targets</h3>
+      <p>31 genes with known therapeutics</p>
+    </div>
+    <div class="insight-card">
+      <h3>Validation Rate</h3>
+      <p>86% validated (Tier1 + Tier2)</p>
+    </div>
+    <div class="insight-card">
+      <h3>Pathway Enrichment</h3>
+      <p>1,374 significant pathways</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

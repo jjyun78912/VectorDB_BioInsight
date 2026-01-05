@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #ffffff; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #277884;
+  padding: 15pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 24pt;
+  margin: 0;
+  font-weight: bold;
+}
+.content {
+  display: flex;
+  flex: 1;
+  padding: 20pt 30pt;
+  gap: 20pt;
+}
+.stat-card {
+  flex: 1;
+  background: #F5F5F5;
+  border-radius: 8pt;
+  padding: 15pt;
+  text-align: center;
+  border-top: 4pt solid #5EA8A7;
+}
+.stat-card.up {
+  border-top-color: #FE4447;
+}
+.stat-card.down {
+  border-top-color: #3498db;
+}
+.stat-value {
+  color: #277884;
+  font-size: 36pt;
+  font-weight: bold;
+  margin: 10pt 0;
+}
+.stat-card.up .stat-value {
+  color: #FE4447;
+}
+.stat-card.down .stat-value {
+  color: #3498db;
+}
+.stat-label {
+  color: #666666;
+  font-size: 12pt;
+  margin: 0;
+}
+.stat-sublabel {
+  color: #999999;
+  font-size: 10pt;
+  margin: 5pt 0 0 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Analysis Results Summary</h1>
+</div>
+<div class="content">
+  <div class="stat-card">
+    <p class="stat-label">Total Genes Analyzed</p>
+    <p class="stat-value">4,709</p>
+    <p class="stat-sublabel">40 samples</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-label">Significant DEGs</p>
+    <p class="stat-value">43</p>
+    <p class="stat-sublabel">padj &lt; 0.05, |log2FC| &gt; 1</p>
+  </div>
+  <div class="stat-card up">
+    <p class="stat-label">Upregulated</p>
+    <p class="stat-value">22</p>
+    <p class="stat-sublabel">51% of DEGs</p>
+  </div>
+  <div class="stat-card down">
+    <p class="stat-label">Downregulated</p>
+    <p class="stat-value">21</p>
+    <p class="stat-sublabel">49% of DEGs</p>
+  </div>
+</div>
+</body>
+</html>
