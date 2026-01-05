@@ -454,6 +454,248 @@ result = pipeline.analyze("counts.csv")
 
 ---
 
+## Enhanced Pipeline Modules (v2.0)
+
+The RNA-seq analysis pipeline has been enhanced with the following production-ready modules:
+
+### Module Overview
+
+| Module | File | Description |
+|--------|------|-------------|
+| **Visualizations** | `rnaseq_test_results/visualizations.py` | Publication-quality plots |
+| **Disease Database** | `rnaseq_test_results/disease_database.py` | Curated cancer gene DB (44 genes) |
+| **QC Module** | `rnaseq_test_results/qc_module.py` | Quality control metrics |
+| **HTML Reporter** | `rnaseq_test_results/html_report.py` | Bootstrap 5 reports |
+| **Enhanced Pipeline** | `rnaseq_test_results/rnaseq_enhanced_pipeline.py` | Integrated v2.0 |
+| **Validation** | `rnaseq_test_results/validation_enhanced.py` | 200+ cancer genes, Tier1/Tier2 |
+
+### 1. Visualizations Module
+
+```python
+from rnaseq_test_results.visualizations import RNAseqVisualizer
+
+viz = RNAseqVisualizer(output_dir='plots')
+
+# Volcano plot
+viz.volcano_plot(deg_results, title="Treatment vs Control")
+
+# MA plot
+viz.ma_plot(deg_results)
+
+# PCA plot (sample clustering)
+viz.pca_plot(normalized_counts, metadata)
+
+# Heatmap (top DEGs)
+viz.heatmap(normalized_counts, top_genes=50, metadata=metadata)
+
+# Network visualization
+viz.network_plot(hub_genes, network_edges)
+
+# Generate all plots as dashboard
+viz.create_dashboard(deg_results, normalized_counts, hub_genes, metadata)
+```
+
+**Available Plots**:
+- `volcano_plot()`: -log10(p) vs log2FC with significance thresholds
+- `ma_plot()`: Mean expression vs log2FC
+- `pca_plot()`: Sample clustering with variance explained
+- `heatmap()`: Hierarchical clustering of top DEGs
+- `network_plot()`: Gene co-expression network
+- `create_dashboard()`: Multi-panel figure with all plots
+
+### 2. Disease Database Module
+
+```python
+from rnaseq_test_results.disease_database import DiseaseDatabase, GeneCard
+
+db = DiseaseDatabase()
+
+# Get gene card with disease associations
+card = db.create_gene_card(
+    gene_symbol='EGFR',
+    log2fc=2.5,
+    pvalue=1e-10
+)
+print(card.top_disease)       # 'Lung Cancer'
+print(card.therapeutics)      # ['Erlotinib', 'Gefitinib', 'Osimertinib']
+
+# Validate gene list against known cancer genes
+validation = db.validate_gene_list(['TP53', 'MYC', 'GAPDH'])
+# {'validated': ['TP53', 'MYC'], 'rate': 0.67}
+
+# Get disease enrichment
+enrichment = db.get_disease_enrichment(['EGFR', 'KRAS', 'TP53', 'BRAF'])
+```
+
+**Cancer Gene Categories**:
+- Oncogenes: EGFR, KRAS, BRAF, MYC, PIK3CA, ERBB2, ALK, MET, RET, ROS1...
+- Tumor Suppressors: TP53, RB1, PTEN, BRCA1, BRCA2, APC, CDKN2A, VHL...
+- Proliferation: TOP2A, MKI67, CCNB1, AURKA, BIRC5, CDC20, BUB1...
+- Angiogenesis: VEGFA, HIF1A
+- Invasion: MMP1, MMP9, SPP1, COL1A1
+
+### 3. QC Module
+
+```python
+from rnaseq_test_results.qc_module import RNAseqQC
+
+qc = RNAseqQC()
+
+# Calculate QC metrics
+metrics = qc.calculate_metrics(count_matrix)
+# library_size, detection_rate, zero_fraction, cv, etc.
+
+# Detect outlier samples
+outliers = qc.detect_outliers(count_matrix)
+# ['Sample_3', 'Sample_7']  # IQR-based detection
+
+# Filter low-expressed genes
+filtered = qc.filter_genes(count_matrix, min_count=10, min_samples=3)
+
+# Generate QC report
+qc_report = qc.generate_report(count_matrix, metadata)
+```
+
+**QC Metrics**:
+- Library size (total reads per sample)
+- Gene detection rate
+- Zero-expression fraction
+- Coefficient of variation
+- Sample-sample correlation
+
+### 4. HTML Report Generator
+
+```python
+from rnaseq_test_results.html_report import HTMLReportGenerator
+
+reporter = HTMLReportGenerator()
+
+# Generate comprehensive HTML report
+html = reporter.generate_report(
+    deg_results=significant_degs,
+    gene_cards=gene_cards,
+    pathway_enrichment=pathways,
+    qc_metrics=qc_report,
+    plots_dir='plots/'
+)
+
+# Save report
+reporter.save_report(html, 'analysis_report.html')
+```
+
+**Report Sections**:
+- Executive Summary (total genes, DEGs, validation rate)
+- QC Metrics Dashboard
+- Top DEGs Table (sortable)
+- Gene Cards with Disease Associations
+- Pathway Enrichment Results
+- Visualization Gallery
+- Methods & Parameters
+
+### 5. Enhanced Validation Module
+
+```python
+from rnaseq_test_results.validation_enhanced import (
+    CancerGeneDatabase, ProbeMapper, EnhancedValidator
+)
+
+# Cancer gene database (200+ genes)
+cancer_db = CancerGeneDatabase()
+tier1_genes = cancer_db.get_tier1_genes()       # ~100 high-confidence
+all_genes = cancer_db.get_all_cancer_genes()    # 200+ genes
+
+# Classify individual gene
+info = cancer_db.classify_gene('EGFR')
+# {'tier': 1, 'type': 'oncogene', 'confidence': 'high'}
+
+# Probe ID mapping (for microarray data)
+mapper = ProbeMapper()
+gene_map = mapper.map_probes_to_genes(probe_ids, gpl_id='GPL570')
+# {'206702_at': 'EGFR', '202400_at': 'KRAS', ...}
+
+# Enhanced validation with statistics
+validator = EnhancedValidator()
+result = validator.validate_gene_list(
+    genes=['TP53', 'MYC', 'TOP2A', 'UNKNOWN1'],
+    disease_type='lung_cancer'
+)
+# {
+#   'validated_genes': ['TP53', 'MYC', 'TOP2A'],
+#   'validation_rate': 0.75,
+#   'tier1_count': 2,
+#   'tier2_count': 1,
+#   'fisher_pvalue': 0.001,
+#   'disease_specific': ['TP53', 'MYC']
+# }
+```
+
+**Tier Classification**:
+| Tier | Source | Confidence | Gene Count |
+|------|--------|------------|------------|
+| Tier 1 | CGC + OncoKB | High | ~100 |
+| Tier 2 | COSMIC + IntOGen | Medium | ~100 |
+
+**Disease Signatures** (6 cancer types):
+- Lung Cancer: EGFR, KRAS, ALK, ROS1, STK11...
+- Breast Cancer: ERBB2, PIK3CA, ESR1, BRCA1...
+- Colorectal Cancer: APC, KRAS, TP53, BRAF...
+- Pancreatic Cancer: KRAS, TP53, SMAD4, CDKN2A...
+- Liver Cancer: TP53, CTNNB1, AXIN1, TERT...
+- Glioblastoma: EGFR, PTEN, IDH1, TERT...
+
+### 6. Enhanced Pipeline (v2.0)
+
+```python
+from rnaseq_test_results.rnaseq_enhanced_pipeline import EnhancedRNAseqPipeline
+
+pipeline = EnhancedRNAseqPipeline(output_dir='results')
+
+# Run full pipeline
+results = pipeline.run_full_pipeline(
+    counts_file='counts.csv',           # or use_synthetic=True
+    metadata_file='metadata.csv',
+    disease_type='lung_cancer',
+    generate_report=True
+)
+
+# Access results
+print(f"Significant DEGs: {len(results['significant_degs'])}")
+print(f"Validation Rate: {results['validation']['rate']:.1%}")
+print(f"Hub Genes: {results['hub_genes'][:10]}")
+```
+
+**Pipeline Steps**:
+1. **QC Analysis** → Outlier detection, gene filtering
+2. **DESeq2 Analysis** → Differential expression via rpy2
+3. **Validation** → Cancer gene database lookup
+4. **Network Analysis** → Hub gene identification
+5. **Pathway Enrichment** → GO/KEGG via gseapy
+6. **Visualization** → All publication-quality plots
+7. **Report Generation** → HTML + CSV outputs
+
+**Output Structure**:
+```
+results/
+├── analysis_report.html      # Interactive HTML report
+├── analysis_report.txt       # Text summary
+├── deseq2_all_results.csv    # Full DESeq2 output
+├── deseq2_significant.csv    # Filtered significant DEGs
+├── gene_cards.json           # Gene cards with diseases
+├── hub_genes.csv             # Network hub genes
+├── pathway_enrichment.csv    # GO/KEGG results
+├── qc_report.json            # QC metrics
+├── validation_report.json    # Validation statistics
+└── plots/
+    ├── volcano_plot.png
+    ├── ma_plot.png
+    ├── pca_plot.png
+    ├── heatmap.png
+    ├── network_plot.png
+    └── dashboard.png
+```
+
+---
+
 ## BioInsight Platform Integration
 
 The RAG pipeline integrates with BioInsight's vector database for literature validation.
