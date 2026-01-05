@@ -101,34 +101,34 @@
   - GO Term Enrichment (BP, MF, CC)
 - **우선순위**: P1 (중요)
 
-### 4.3 ML 예측 모델 모듈 (ML Prediction)
-
-#### 4.3.1 자동 모델 학습
-- **기능**: 선택된 유전자 Signature로 ML 모델 자동 생성
-- **지원 알고리즘**: XGBoost, Random Forest, SVM
-- **우선순위**: P1 (중요)
-
-#### 4.3.2 모델 검증
-- **기능**: 자동 교차 검증 및 성능 평가
-- **메트릭**: ROC-AUC, Precision, Recall, F1-Score
-- **우선순위**: P1 (중요)
-
-#### 4.3.3 Feature Importance
-- **기능**: SHAP 기반 주요 기여 유전자 시각화
-- **출력**: Feature Importance Plot, SHAP Summary Plot
-- **우선순위**: P2 (권장)
-
 ### 4.4 AI 연구 어시스턴트 (Research Assistant)
 
-#### 4.4.1 통합 Q&A 챗봇
-- **기능**: 논문 + DEG + Pathway 정보 종합 답변
+#### 4.4.1 RNA-seq → 질병 연관성 분석 ⭐ 핵심 기능
+- **기능**: RNA-seq 데이터 업로드 → DEG 식별 → 각 유전자의 질병 연관성 자동 검색
+- **출력 예시**:
+```
+  Gene: TP53 ↑ 3.2x (p < 0.001)
+  ├─ Li-Fraumeni Syndrome     Score: 0.95 [OMIM]
+  ├─ Hepatocellular Carcinoma Score: 0.87 [TCGA]
+  └─ Therapeutic: p53 reactivators (APR-246)
+```
+- **데이터 소스**: DisGeNET, OMIM, ClinVar, COSMIC, TCGA
+- **우선순위**: P0 (필수)
+
+#### 4.4.2 통합 Q&A 챗봇
+- **기능**: 논문 + DEG + 질병 연관성 종합 답변 (RAG 기반)
 - **지원 질문 예시**:
-  - "이 논문 결과와 내 RNA-seq 데이터는 어떤 관계인가?"
-  - "DEG에서 나타난 유전자들의 알려진 기능은?"
+  - "TP53이 상향 발현되면 어떤 질병과 관련있나?"
+  - "내 DEG 중 치료 타겟이 있는 유전자는?"
+  - "BRCA1과 관련된 최신 논문 요약해줘"
+- **기술**: GROBID + Docling → ChromaDB → Claude
 - **우선순위**: P1 (중요)
 
-#### 4.4.2 실험 아이디어 제안
-- **기능**: 분석 결과 기반 후속 실험 방향 제안
+#### 4.4.3 실험 아이디어 제안
+- **기능**: 분석 결과 기반 후속 실험/연구 방향 제안
+- **예시**:
+  - "EGFR 상향 + KRAS 변이 → TKI 저항성 가능성, MET 억제제 병용 고려"
+  - "DNA repair pathway enrichment → PARP 억제제 감수성 확인 실험 제안"
 - **우선순위**: P2 (권장)
 
 ---
