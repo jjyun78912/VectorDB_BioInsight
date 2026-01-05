@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIO 데일리 브리핑 #{{ issue_number }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #E5E7EB;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        /* PDF Download Button */
+        .download-btn {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: #4C1D95;
+            color: #FFFFFF;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(76, 29, 149, 0.3);
+            transition: all 0.2s;
+            z-index: 100;
+        }
+        .download-btn:hover {
+            background: #5B21B6;
+            transform: translateY(-2px);
+        }
+        .download-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Newspaper Container */
+        .newspaper {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #FFFEF8;
+            box-shadow: 0 4px 40px rgba(0,0,0,0.12);
+        }
+
+        /* Masthead */
+        .masthead {
+            padding: 32px 48px 24px;
+            border-bottom: 3px double #1F2937;
+            text-align: center;
+        }
+        .masthead-date {
+            font-size: 12px;
+            color: #6B7280;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+        .masthead-title {
+            font-family: 'Noto Serif KR', Georgia, serif;
+            font-size: 48px;
+            font-weight: 700;
+            color: #1F2937;
+            letter-spacing: -1px;
+            margin-bottom: 8px;
+        }
+        .masthead-subtitle {
+            font-size: 13px;
+            color: #6B7280;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+        .masthead-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #E5E7EB;
+            font-size: 11px;
+            color: #9CA3AF;
+        }
+
+        /* Content */
+        .content {
+            padding: 0 48px 48px;
+        }
+
+        /* Headline */
+        .headline-section {
+            padding: 40px 0 32px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .headline-label {
+            display: inline-block;
+            padding: 6px 14px;
+            background: linear-gradient(135deg, #4C1D95 0%, #5B21B6 100%);
+            color: #FFFFFF;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .headline-title {
+            font-family: 'Noto Serif KR', Georgia, serif;
+            font-size: 32px;
+            font-weight: 700;
+            color: #1F2937;
+            line-height: 1.35;
+            margin-bottom: 16px;
+        }
+        .headline-summary {
+            font-size: 16px;
+            color: #4B5563;
+            line-height: 1.7;
+        }
+
+        /* Two Column */
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            padding: 32px 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+
+        /* Section Title */
+        .section-title {
+            font-family: 'Noto Serif KR', Georgia, serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #4C1D95;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #4C1D95;
+            margin-bottom: 20px;
+        }
+
+        /* News Item */
+        .news-item {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #F3F4F6;
+        }
+        .news-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .news-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .badge-approved { background: #DCFCE7; color: #16A34A; }
+        .badge-pending { background: #FEF3C7; color: #D97706; }
+        .badge-phase3 { background: #EDE9FE; color: #7C3AED; }
+        .badge-new { background: #DBEAFE; color: #2563EB; }
+        .badge-hot { background: #FEE2E2; color: #DC2626; }
+
+        .news-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1F2937;
+            line-height: 1.45;
+            margin-bottom: 6px;
+        }
+        .news-desc {
+            font-size: 13px;
+            color: #6B7280;
+            line-height: 1.6;
+        }
+
+        /* Research Grid */
+        .research-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 32px 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .research-card {
+            padding: 20px;
+            background: #FAFAF9;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+        }
+        .journal-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .journal-nature { background: #1F2937; color: #FFFFFF; }
+        .journal-nejm { background: #DC2626; color: #FFFFFF; }
+        .journal-cell { background: #2563EB; color: #FFFFFF; }
+        .journal-biorxiv { background: #F97316; color: #FFFFFF; }
+
+        .research-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1F2937;
+            line-height: 1.45;
+            margin-bottom: 8px;
+        }
+        .research-insight {
+            font-size: 12px;
+            color: #6B7280;
+            line-height: 1.5;
+        }
+
+        /* Topics Table */
+        .topics-section {
+            padding: 32px 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .topics-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .topics-table th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #9CA3AF;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0 0 12px 0;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        .topics-table th:nth-child(2),
+        .topics-table th:nth-child(3),
+        .topics-table th:nth-child(4) {
+            text-align: center;
+        }
+        .topics-table td {
+            padding: 14px 0;
+            border-bottom: 1px solid #F3F4F6;
+            font-size: 14px;
+        }
+        .topics-table td:nth-child(2),
+        .topics-table td:nth-child(3),
+        .topics-table td:nth-child(4) {
+            text-align: center;
+        }
+        .topic-name { font-weight: 600; color: #1F2937; }
+        .topic-count { color: #6B7280; }
+        .topic-change-up { color: #16A34A; font-weight: 500; }
+        .topic-change-down { color: #DC2626; font-weight: 500; }
+        .topic-change-same { color: #9CA3AF; }
+        .topic-event {
+            display: inline-block;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+
+        /* Editor Note */
+        .editor-section {
+            padding: 32px 0;
+        }
+        .editor-content {
+            padding-left: 24px;
+            border-left: 3px solid #4C1D95;
+        }
+        .editor-quote {
+            font-family: 'Noto Serif KR', Georgia, serif;
+            font-size: 17px;
+            font-style: italic;
+            color: #374151;
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+        .editor-quote strong {
+            color: #4C1D95;
+            font-style: normal;
+        }
+        .editor-note {
+            font-size: 14px;
+            color: #6B7280;
+            line-height: 1.7;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 24px 48px;
+            background: #FAFAF9;
+            border-top: 2px solid #1F2937;
+            text-align: center;
+        }
+        .footer-text {
+            font-size: 12px;
+            color: #9CA3AF;
+            margin-bottom: 8px;
+        }
+        .footer-links a {
+            font-size: 12px;
+            color: #4C1D95;
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 10px;
+            }
+            .masthead {
+                padding: 24px 20px 20px;
+            }
+            .masthead-title {
+                font-size: 32px;
+            }
+            .masthead-meta {
+                flex-direction: column;
+                gap: 8px;
+                text-align: center;
+            }
+            .content {
+                padding: 0 20px 32px;
+            }
+            .two-column {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+            .research-grid {
+                grid-template-columns: 1fr;
+            }
+            .headline-title {
+                font-size: 24px;
+            }
+            .download-btn {
+                top: 12px;
+                right: 12px;
+                padding: 10px 16px;
+                font-size: 12px;
+            }
+            .footer {
+                padding: 20px;
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            body { background: white; padding: 0; }
+            .download-btn { display: none; }
+            .newspaper { box-shadow: none; }
+        }
+        @page { size: A4; margin: 0; }
+    </style>
+</head>
+<body>
+
+    <button class="download-btn" onclick="downloadPDF()">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        PDF 다운로드
+    </button>
+
+    <div class="newspaper" id="newsletter">
+
+        <!-- Masthead -->
+        <header class="masthead">
+            <p class="masthead-date">{{ date_en }}</p>
+            <h1 class="masthead-title">BIO 데일리 브리핑</h1>
+            <p class="masthead-subtitle">AI-Powered Biomedical Research Intelligence</p>
+            <div class="masthead-meta">
+                <span>Issue #{{ issue_number }}</span>
+                <span>분석 논문 {{ total_papers }}건 · 최근 48시간</span>
+                <span>Seoul, Korea</span>
+            </div>
+        </header>
+
+        <main class="content">
+
+            <!-- Headline -->
+            <section class="headline-section">
+                <span class="headline-label">🚨 오늘의 헤드라인</span>
+                <h2 class="headline-title">{{ headline_title }}</h2>
+                <p class="headline-summary">{{ headline_summary }}</p>
+            </section>
+
+            <!-- Two Column: Regulatory + Clinical -->
+            <section class="two-column">
+                <div>
+                    <h3 class="section-title">⚡ 규제 · 승인</h3>
+                    {% for item in regulatory_news %}
+                    <article class="news-item">
+                        <span class="news-badge badge-{{ item.badge_type }}">{{ item.badge_text }}</span>
+                        <h4 class="news-title">{{ item.title }}</h4>
+                        <p class="news-desc">{{ item.description }}</p>
+                    </article>
+                    {% endfor %}
+                    {% if not regulatory_news %}
+                    <p class="news-desc" style="color: #9CA3AF;">오늘은 새로운 규제 뉴스가 없습니다.</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <h3 class="section-title">📊 임상시험</h3>
+                    {% for item in clinical_trials %}
+                    <article class="news-item">
+                        <span class="news-badge badge-{{ item.badge_type }}">{{ item.badge_text }}</span>
+                        <h4 class="news-title">{{ item.title }}</h4>
+                        <p class="news-desc">{{ item.description }}</p>
+                    </article>
+                    {% endfor %}
+                    {% if not clinical_trials %}
+                    <p class="news-desc" style="color: #9CA3AF;">오늘은 새로운 임상시험 업데이트가 없습니다.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Research Grid -->
+            <section>
+                <div style="padding-top: 32px; padding-bottom: 12px;">
+                    <h3 class="section-title">🔬 주목할 연구</h3>
+                </div>
+                <div class="research-grid" style="padding-top: 0;">
+                    {% for item in research_papers %}
+                    <article class="research-card">
+                        <span class="journal-badge journal-{{ item.journal_class }}">{{ item.journal }}</span>
+                        <h4 class="research-title">{{ item.title }}</h4>
+                        <p class="research-insight">{{ item.insight }}</p>
+                    </article>
+                    {% endfor %}
+                    {% if not research_papers %}
+                    <p class="news-desc" style="color: #9CA3AF; grid-column: 1 / -1;">오늘은 주목할 연구가 없습니다.</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <!-- Hot Topics -->
+            <section class="topics-section">
+                <h3 class="section-title">📈 핫토픽 트래커</h3>
+                <table class="topics-table">
+                    <thead>
+                        <tr>
+                            <th>키워드</th>
+                            <th>논문 수</th>
+                            <th>주간 변동</th>
+                            <th>주요 이벤트</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in hot_topics %}
+                        <tr>
+                            <td class="topic-name">{{ item.name }}</td>
+                            <td class="topic-count">{{ item.count }}건</td>
+                            <td class="topic-change-{{ item.change_type }}">{{ item.change_text }}</td>
+                            <td>
+                                {% if item.event %}
+                                <span class="topic-event badge-{{ item.event_type }}">{{ item.event }}</span>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not hot_topics %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: #9CA3AF;">핫토픽 데이터가 없습니다.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Editor Note -->
+            <section class="editor-section">
+                <h3 class="section-title">💬 에디터 노트</h3>
+                <div class="editor-content">
+                    <p class="editor-quote">{{ editor_quote | safe }}</p>
+                    <p class="editor-note">{{ editor_note }}</p>
+                </div>
+            </section>
+
+        </main>
+
+        <footer class="footer">
+            <p class="footer-text">매일 아침 8시, AI가 분석한 바이오 연구 트렌드를 전해드립니다.</p>
+            <p class="footer-links">
+                <a href="#">구독 설정</a>
+                <span style="margin: 0 8px; color: #D1D5DB;">|</span>
+                <a href="#" style="color: #9CA3AF;">구독 해지</a>
+            </p>
+        </footer>
+
+    </div>
+
+    <script>
+        function downloadPDF() {
+            const element = document.getElementById('newsletter');
+            const button = document.querySelector('.download-btn');
+            button.style.display = 'none';
+
+            const opt = {
+                margin: 0,
+                filename: 'BIO_데일리브리핑_#{{ issue_number }}_{{ date_file }}.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: 'avoid-all' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                button.style.display = 'flex';
+            });
+        }
+    </script>
+
+</body>
+</html>

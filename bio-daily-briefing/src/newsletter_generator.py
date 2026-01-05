@@ -1,603 +1,397 @@
 """
-Newsletter Generator - HTML email template generation
+뉴스레터 HTML 생성기 v3 - 신문 스타일
+멀티소스 + PDF 다운로드 지원
 
-New format with hybrid hot topics:
-- Predefined hot topics with why_hot explanation
-- Emerging trends detection
-- Week-over-week change tracking
+Features:
+- Deep Plum 컬러 (#4C1D95 → #5B21B6)
+- Noto Serif KR + Noto Sans KR 폰트
+- 신문 스타일 레이아웃 (2단 컬럼, 카드 그리드)
+- PDF 다운로드 (html2pdf.js)
 """
 
-import os
+from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
-from typing import List, Dict, Optional
 from pathlib import Path
-from dataclasses import dataclass
-
-from jinja2 import Environment, BaseLoader
-
-from .trend_analyzer import Trend
-from .ai_summarizer import NewsArticle
-
-
-@dataclass
-class NewsletterData:
-    """Data for newsletter generation."""
-    issue_number: int
-    date: str
-    trends: List[Trend]
-    articles_by_trend: Dict[str, List[NewsArticle]]
-    editor_comment: str
-    quick_news: List[str] = None
-    total_papers_analyzed: int = 0
-
-
-# New HTML Template - Hybrid Hot Topic Layout
-HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BIO 데일리 브리핑 #{{ issue_number }}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #1a1a2e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif; color: #e0e0e0;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #1a1a2e;">
-        <tr>
-            <td align="center" style="padding: 20px 10px;">
-                <!-- Main Container -->
-                <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="background-color: #16213e; border-radius: 8px;">
-
-                    <!-- Header -->
-                    <tr>
-                        <td style="padding: 30px 30px 20px 30px; border-bottom: 1px solid #0f3460;">
-                            <table width="100%" cellspacing="0" cellpadding="0">
-                                <tr>
-                                    <td>
-                                        <p style="margin: 0; color: #4ecca3; font-size: 12px; font-weight: 600; letter-spacing: 2px;">
-                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                        </p>
-                                        <h1 style="margin: 10px 0 5px 0; color: #ffffff; font-size: 22px; font-weight: 700;">
-                                            📰 BIO 데일리 브리핑
-                                        </h1>
-                                        <p style="margin: 0; color: #a0a0a0; font-size: 13px;">
-                                            {{ date }} | Issue #{{ issue_number }}
-                                        </p>
-                                        <p style="margin: 10px 0 0 0; color: #4ecca3; font-size: 12px; font-weight: 600; letter-spacing: 2px;">
-                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                    <!-- Hot Keywords Section -->
-                    <tr>
-                        <td style="padding: 25px 30px;">
-                            <h2 style="margin: 0 0 8px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                📊 오늘의 핫 키워드
-                            </h2>
-                            <p style="margin: 0 0 20px 0; color: #a0a0a0; font-size: 13px;">
-                                최근 48시간 PubMed 논문 {{ total_papers_analyzed }}건 분석 결과
-                            </p>
-
-                            <!-- Predefined Hot Topics -->
-                            {% set predefined = trends | selectattr('is_predefined', 'equalto', true) | list %}
-                            {% if predefined %}
-                            <p style="margin: 0 0 10px 0; color: #4ecca3; font-size: 12px; font-weight: 600;">
-                                [업계 주목 키워드]
-                            </p>
-                            <table width="100%" cellspacing="0" cellpadding="0">
-                                {% for trend in predefined %}
-                                <tr>
-                                    <td style="padding: 10px 0; border-bottom: 1px solid #0f3460;">
-                                        <table width="100%" cellspacing="0" cellpadding="0">
-                                            <tr>
-                                                <td width="35" style="color: #6c757d; font-size: 13px; font-weight: 600;">
-                                                    {{ loop.index }}위
-                                                </td>
-                                                <td style="color: #ffffff; font-size: 14px; font-weight: 500;">
-                                                    {{ trend.keyword | title }}
-                                                </td>
-                                                <td width="60" align="right" style="color: #a0a0a0; font-size: 13px;">
-                                                    {{ trend.count }}건
-                                                </td>
-                                                <td width="100" align="right">
-                                                    {% if trend.is_first_tracking %}
-                                                    <span style="color: #4ecca3; font-size: 13px;">
-                                                        📊 추적 시작
-                                                    </span>
-                                                    {% elif trend.week_change >= 50 %}
-                                                    <span style="color: #ff6b6b; font-size: 13px; font-weight: 500;">
-                                                        🔥 +{{ trend.week_change|round|int }}%
-                                                    </span>
-                                                    {% elif trend.week_change >= 10 %}
-                                                    <span style="color: #4ecca3; font-size: 13px;">
-                                                        ⬆️ +{{ trend.week_change|round|int }}%
-                                                    </span>
-                                                    {% elif trend.week_change <= -10 %}
-                                                    <span style="color: #ff6b6b; font-size: 13px;">
-                                                        ⬇️ {{ trend.week_change|round|int }}%
-                                                    </span>
-                                                    {% else %}
-                                                    <span style="color: #6c757d; font-size: 13px;">
-                                                        ➡️ 유지
-                                                    </span>
-                                                    {% endif %}
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </table>
-                            {% endif %}
-
-                            <!-- Emerging Trends -->
-                            {% set emerging = trends | selectattr('is_emerging', 'equalto', true) | list %}
-                            {% if emerging %}
-                            <p style="margin: 20px 0 10px 0; color: #ff6b6b; font-size: 12px; font-weight: 600;">
-                                [🆕 급상승 감지]
-                            </p>
-                            <table width="100%" cellspacing="0" cellpadding="0">
-                                {% for trend in emerging %}
-                                <tr>
-                                    <td style="padding: 10px 0; border-bottom: 1px solid #0f3460;">
-                                        <table width="100%" cellspacing="0" cellpadding="0">
-                                            <tr>
-                                                <td width="20" style="color: #ff6b6b; font-size: 13px;">
-                                                    •
-                                                </td>
-                                                <td style="color: #ffffff; font-size: 14px; font-weight: 500;">
-                                                    {{ trend.keyword | title }}
-                                                </td>
-                                                <td width="60" align="right" style="color: #a0a0a0; font-size: 13px;">
-                                                    {{ trend.count }}건
-                                                </td>
-                                                <td width="100" align="right">
-                                                    <span style="color: #ff6b6b; font-size: 13px; font-weight: 500;">
-                                                        {{ trend.change_label }}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                        <p style="margin: 5px 0 0 20px; color: #6c757d; font-size: 11px;">
-                                            └ 고정 목록 외 키워드 중 상위 급상승 감지
-                                        </p>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </table>
-                            {% endif %}
-                        </td>
-                    </tr>
-
-                    <!-- Divider -->
-                    <tr>
-                        <td style="padding: 0 30px;">
-                            <p style="margin: 0; color: #4ecca3; font-size: 12px; text-align: center; letter-spacing: 2px;">
-                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                            </p>
-                        </td>
-                    </tr>
-
-                    <!-- Main Research Section -->
-                    <tr>
-                        <td style="padding: 25px 30px 10px 30px;">
-                            <h2 style="margin: 0 0 5px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                ✨ 오늘의 주요 연구
-                            </h2>
-                            <p style="margin: 0; color: #6c757d; font-size: 12px;">
-                                [상위 핫토픽 기반 대표 논문]
-                            </p>
-                        </td>
-                    </tr>
-
-                    <!-- Articles by Trend -->
-                    {% set article_num = namespace(value=1) %}
-                    {% for trend in trends %}
-                    {% set articles = articles_by_trend.get(trend.keyword, []) %}
-                    {% if articles %}
-                    <tr>
-                        <td style="padding: 15px 30px;">
-                            <!-- Trend Header -->
-                            <table width="100%" cellspacing="0" cellpadding="0" style="border-top: 1px solid #0f3460;">
-                                <tr>
-                                    <td style="padding-top: 15px;">
-                                        <p style="margin: 0; color: #4ecca3; font-size: 12px; font-weight: 600;">
-                                            ───────────────────────────────
-                                        </p>
-                                        <p style="margin: 8px 0; color: #ffffff; font-size: 14px; font-weight: 600;">
-                                            {% if trend.is_emerging %}
-                                            🆕 | {{ trend.keyword | title }}
-                                            {% else %}
-                                            {{ "%02d"|format(article_num.value) }} | {{ trend.keyword | title }} ({{ trend.change_label }})
-                                            {% endif %}
-                                        </p>
-                                        <p style="margin: 0 0 15px 0; color: #4ecca3; font-size: 12px; font-weight: 600;">
-                                            ───────────────────────────────
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-
-                            <!-- Why Hot -->
-                            {% if trend.why_hot %}
-                            <p style="margin: 0 0 15px 0; padding: 10px 15px; background-color: #0f3460; border-radius: 6px; color: #a0a0a0; font-size: 13px;">
-                                {% if trend.is_emerging %}
-                                <strong style="color: #ff6b6b;">왜 갑자기 급상승?</strong><br>
-                                {% else %}
-                                <strong style="color: #4ecca3;">이 키워드가 왜 요즘 핫한가요?</strong><br>
-                                {% endif %}
-                                → {{ trend.why_hot }}
-                            </p>
-                            {% endif %}
-
-                            {% for article in articles[:1] %}
-                            <!-- Article Content -->
-                            <table width="100%" cellspacing="0" cellpadding="0">
-                                <tr>
-                                    <td>
-                                        <!-- Context Question -->
-                                        <p style="margin: 0 0 12px 0; color: #a0a0a0; font-size: 13px; font-style: italic;">
-                                            💬 {{ article.hook }}
-                                        </p>
-
-                                        <!-- Title -->
-                                        <p style="margin: 0 0 15px 0; color: #ffffff; font-size: 15px; font-weight: 600; line-height: 1.5;">
-                                            "{{ article.title }}"
-                                        </p>
-
-                                        <!-- Content -->
-                                        <p style="margin: 0 0 15px 0; color: #c0c0c0; font-size: 14px; line-height: 1.7;">
-                                            {{ article.content }}
-                                        </p>
-
-                                        <!-- Insight -->
-                                        {% if article.insight %}
-                                        <p style="margin: 0 0 12px 0; color: #4ecca3; font-size: 13px;">
-                                            💡 {{ article.insight }}
-                                        </p>
-                                        {% endif %}
-
-                                        <!-- Source -->
-                                        <p style="margin: 0; color: #6c757d; font-size: 12px;">
-                                            📍 {{ article.source_institution }} | 📖 {{ article.source_journal }}
-                                            {% if article.pmid %}
-                                            | <a href="https://pubmed.ncbi.nlm.nih.gov/{{ article.pmid }}" style="color: #4ecca3; text-decoration: none;">PMID</a>
-                                            {% endif %}
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                            {% set article_num.value = article_num.value + 1 %}
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    {% endif %}
-                    {% endfor %}
-
-                    <!-- Quick News Section -->
-                    {% if quick_news %}
-                    <tr>
-                        <td style="padding: 10px 30px;">
-                            <p style="margin: 0; color: #4ecca3; font-size: 12px; text-align: center; letter-spacing: 2px;">
-                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 20px 30px;">
-                            <h2 style="margin: 0 0 15px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                ⚡ 한눈에 보는 소식 <span style="color: #6c757d; font-size: 12px; font-weight: 400;">(자동 수집)</span>
-                            </h2>
-                            {% for news in quick_news %}
-                            <p style="margin: 0 0 10px 0; color: #c0c0c0; font-size: 13px; line-height: 1.5;">
-                                {{ news }}
-                            </p>
-                            {% endfor %}
-                        </td>
-                    </tr>
-                    {% endif %}
-
-                    <!-- Editor Comment -->
-                    <tr>
-                        <td style="padding: 10px 30px;">
-                            <p style="margin: 0; color: #4ecca3; font-size: 12px; text-align: center; letter-spacing: 2px;">
-                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 20px 30px;">
-                            <h2 style="margin: 0 0 15px 0; color: #ffffff; font-size: 16px; font-weight: 600;">
-                                💬 AI 에디터 코멘트
-                            </h2>
-                            <div style="margin: 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">
-                                {{ editor_comment | replace('\n\n', '</p><p style="margin: 15px 0; color: #c0c0c0; font-size: 14px; line-height: 1.8;">') | replace('\n', '<br>') | safe }}
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style="padding: 25px 30px; border-top: 1px solid #0f3460;">
-                            <p style="margin: 0; color: #4ecca3; font-size: 12px; text-align: center; letter-spacing: 2px;">
-                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                            </p>
-                            <table width="100%" cellspacing="0" cellpadding="0">
-                                <tr>
-                                    <td style="padding-top: 15px; color: #6c757d; font-size: 11px; text-align: center;">
-                                        BIO 데일리 브리핑 | AI 기반 바이오 연구 뉴스레터<br>
-                                        <a href="#" style="color: #4ecca3; text-decoration: none;">구독 해지</a>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-
-                </table>
-                <!-- End Main Container -->
-            </td>
-        </tr>
-    </table>
-</body>
-</html>"""
+from typing import Optional, Dict, List, Any
+import os
+import json
 
 
 class NewsletterGenerator:
-    """Generate HTML email newsletters."""
+    """신문 스타일 뉴스레터 HTML 생성기"""
 
-    def __init__(self, output_dir: Optional[Path] = None):
-        self.output_dir = output_dir or Path(__file__).parent.parent / "output"
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Issue number tracking
-        self.issue_file = self.output_dir / "issue_number.txt"
-
-    def get_issue_number(self) -> int:
-        """Get and increment issue number."""
-        if self.issue_file.exists():
-            with open(self.issue_file, "r") as f:
-                number = int(f.read().strip())
-        else:
-            number = 0
-
-        # Increment
-        number += 1
-        with open(self.issue_file, "w") as f:
-            f.write(str(number))
-
-        return number
-
-    def generate_html(
-        self,
-        trends: List[Trend],
-        articles_by_trend: Dict[str, List[NewsArticle]],
-        editor_comment: str,
-        quick_news: List[str] = None,
-        total_papers_analyzed: int = 0,
-        issue_number: Optional[int] = None,
-    ) -> str:
+    def __init__(self, template_dir: Optional[str] = None):
         """
-        Generate HTML newsletter.
-
         Args:
-            trends: List of Trend objects
-            articles_by_trend: Dictionary mapping keyword to articles
-            editor_comment: Editor's comment
-            quick_news: List of quick news items
-            total_papers_analyzed: Total papers analyzed
-            issue_number: Optional specific issue number
-
-        Returns:
-            HTML string
+            template_dir: 템플릿 디렉토리 경로 (기본: templates/)
         """
-        if issue_number is None:
-            issue_number = self.get_issue_number()
+        if template_dir is None:
+            # 현재 파일 기준 상대 경로
+            base_dir = Path(__file__).parent.parent
+            template_dir = base_dir / "templates"
 
-        # Get weekday name in Korean
-        weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
-        today = datetime.now()
-        weekday = weekdays[today.weekday()]
-        date_str = f"{today.strftime('%Y년 %m월 %d일')} {weekday}"
-
-        # Setup Jinja environment
-        env = Environment(loader=BaseLoader())
-        template = env.from_string(HTML_TEMPLATE)
-
-        # Render template
-        html = template.render(
-            issue_number=issue_number,
-            date=date_str,
-            trends=trends,
-            articles_by_trend=articles_by_trend,
-            editor_comment=editor_comment,
-            quick_news=quick_news or [],
-            total_papers_analyzed=total_papers_analyzed,
+        self.template_dir = Path(template_dir)
+        self.env = Environment(
+            loader=FileSystemLoader(str(self.template_dir)),
+            autoescape=False  # HTML을 그대로 렌더링하기 위해
         )
+        self.template = self.env.get_template("newsletter_template.html")
 
-        return html
-
-    def save_html(
-        self,
-        html: str,
-        filename: Optional[str] = None,
-    ) -> Path:
-        """
-        Save HTML to file.
+    def generate(self, data: dict, issue_number: int) -> str:
+        """뉴스레터 HTML 생성
 
         Args:
-            html: HTML string
-            filename: Optional filename
+            data: 뉴스레터 데이터 딕셔너리
+            issue_number: 발행 호수
 
         Returns:
-            Path to saved file
+            렌더링된 HTML 문자열
         """
-        if filename is None:
-            filename = f"briefing_{datetime.now().strftime('%Y%m%d')}.html"
+        now = datetime.now()
 
-        filepath = self.output_dir / filename
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(html)
-
-        return filepath
-
-    def generate_and_save(
-        self,
-        data: NewsletterData,
-    ) -> Path:
-        """
-        Generate and save newsletter.
-
-        Args:
-            data: NewsletterData object
-
-        Returns:
-            Path to saved file
-        """
-        html = self.generate_html(
-            trends=data.trends,
-            articles_by_trend=data.articles_by_trend,
-            editor_comment=data.editor_comment,
-            quick_news=data.quick_news,
-            total_papers_analyzed=data.total_papers_analyzed,
-            issue_number=data.issue_number,
-        )
-
-        return self.save_html(html)
-
-    def generate_json(
-        self,
-        trends: List[Trend],
-        articles_by_trend: Dict[str, List[NewsArticle]],
-        editor_comment: str,
-        quick_news: List[str] = None,
-        total_papers_analyzed: int = 0,
-        issue_number: Optional[int] = None,
-    ) -> dict:
-        """Generate JSON data for the newsletter."""
-        if issue_number is None:
-            issue_number = self.get_issue_number()
-
-        return {
+        context = {
+            # 메타 정보
             "issue_number": issue_number,
-            "date": datetime.now().strftime("%Y년 %m월 %d일"),
-            "total_papers_analyzed": total_papers_analyzed,
-            "trends": [t.to_dict() for t in trends],
-            "articles": {
-                keyword: [a.to_dict() for a in articles]
-                for keyword, articles in articles_by_trend.items()
-            },
-            "quick_news": quick_news or [],
-            "editor_comment": editor_comment,
+            "date_en": now.strftime("%A, %B %d, %Y"),
+            "date_kr": now.strftime("%Y년 %m월 %d일"),
+            "date_file": now.strftime("%Y-%m-%d"),
+            "total_papers": data.get("total_papers", 0),
+
+            # 헤드라인
+            "headline_title": data.get("headline", {}).get("title", "오늘의 주요 바이오 뉴스"),
+            "headline_summary": data.get("headline", {}).get("summary", ""),
+
+            # 규제 뉴스
+            "regulatory_news": self._format_regulatory(data.get("regulatory", [])),
+
+            # 임상시험
+            "clinical_trials": self._format_clinical(data.get("clinical_trials", [])),
+
+            # 연구 논문
+            "research_papers": self._format_research(data.get("research", [])),
+
+            # 핫토픽
+            "hot_topics": self._format_topics(data.get("hot_topics", [])),
+
+            # 에디터 코멘트
+            "editor_quote": data.get("editor", {}).get("quote", ""),
+            "editor_note": data.get("editor", {}).get("note", "")
         }
 
+        return self.template.render(**context)
 
-def main():
-    """Test newsletter generation with sample data."""
-    from .trend_analyzer import Trend
-    from .ai_summarizer import NewsArticle
+    def _format_regulatory(self, items: list) -> list:
+        """규제 뉴스 포맷팅"""
+        result = []
+        badge_map = {
+            "approved": ("approved", "✓ 승인"),
+            "pending": ("pending", "⏳ 심사중"),
+            "warning": ("hot", "⚠️ 경고"),
+            "rejected": ("hot", "✗ 거절"),
+            "fast_track": ("new", "🚀 패스트트랙"),
+            "breakthrough": ("phase3", "💎 혁신신약"),
+            "safety": ("hot", "⚠️ 안전성")
+        }
 
-    # Sample data - new format with predefined/emerging
-    trends = [
-        Trend(
-            keyword="GLP-1",
-            count=42,
-            previous_count=35,
-            week_ago_count=31,
-            category="치료제",
-            why_hot="비만→당뇨→심장→알츠하이머 적응증 확대 경쟁",
-            is_predefined=True,
-            is_emerging=False,
-        ),
-        Trend(
-            keyword="CAR-T",
-            count=28,
-            previous_count=25,
-            week_ago_count=25,
-            category="세포치료",
-            why_hot="고형암 적용, 자가면역질환 확장",
-            is_predefined=True,
-            is_emerging=False,
-        ),
-        Trend(
-            keyword="CRISPR",
-            count=25,
-            previous_count=25,
-            week_ago_count=26,
-            category="유전자편집",
-            why_hot="최초 유전자치료제 카스게비 승인",
-            is_predefined=True,
-            is_emerging=False,
-        ),
-        Trend(
-            keyword="Ferroptosis",
-            count=18,
-            previous_count=5,
-            week_ago_count=0,
-            category="",
-            why_hot="급상승 감지된 키워드",
-            is_predefined=False,
-            is_emerging=True,
-        ),
-    ]
+        for item in items[:3]:  # 최대 3개
+            status = item.get("status", "pending")
+            badge_type, badge_text = badge_map.get(status, ("pending", "📋 기타"))
 
-    articles_by_trend = {
-        "GLP-1": [
-            NewsArticle(
-                pmid="12345678",
-                hook="왜 이 연구가 오늘 주목받나요?",
-                title="위고비, 심부전 환자에서도 심혈관 보호 효과 확인",
-                content="세마글루타이드(위고비)가 비만 동반 심부전 환자에서 심혈관 사건을 20% 감소시켰다는 대규모 임상 결과가 발표되었습니다.",
-                insight="GLP-1 적응증 확대 경쟁 가속화 예상",
-                source_journal="NEJM",
-                source_institution="Novo Nordisk",
-            )
+            result.append({
+                "badge_type": badge_type,
+                "badge_text": badge_text,
+                "title": item.get("title", ""),
+                "description": item.get("description", "")
+            })
+        return result
+
+    def _format_clinical(self, items: list) -> list:
+        """임상시험 포맷팅"""
+        result = []
+        badge_map = {
+            "phase3_positive": ("approved", "Phase 3 ✓"),
+            "phase3_negative": ("hot", "Phase 3 ✗"),
+            "phase3_completed": ("phase3", "Phase 3 완료"),
+            "new_trial": ("new", "신규 임상"),
+            "stopped": ("hot", "중단"),
+            "phase2": ("pending", "Phase 2"),
+            "phase1": ("pending", "Phase 1")
+        }
+
+        for item in items[:3]:  # 최대 3개
+            trial_type = item.get("type", "phase3_completed")
+            badge_type, badge_text = badge_map.get(trial_type, ("phase3", "Phase 3"))
+
+            result.append({
+                "badge_type": badge_type,
+                "badge_text": badge_text,
+                "title": item.get("title", ""),
+                "description": item.get("description", "")
+            })
+        return result
+
+    def _format_research(self, items: list) -> list:
+        """연구 논문 포맷팅"""
+        result = []
+        journal_map = {
+            "nature": "nature",
+            "science": "nature",
+            "cell": "cell",
+            "nejm": "nejm",
+            "new england journal of medicine": "nejm",
+            "lancet": "nejm",
+            "the lancet": "nejm",
+            "jama": "nejm",
+            "biorxiv": "biorxiv",
+            "medrxiv": "biorxiv",
+            "nature medicine": "nature",
+            "nature genetics": "nature",
+            "nature biotechnology": "nature",
+            "cell metabolism": "cell",
+            "cell stem cell": "cell",
+            "cancer cell": "cell"
+        }
+
+        for item in items[:4]:  # 최대 4개 (2x2 그리드)
+            journal = item.get("journal", "")
+            journal_lower = journal.lower()
+            journal_class = journal_map.get(journal_lower, "nature")
+
+            # 저널명 표시 형식
+            display_journal = journal.upper()
+            if len(display_journal) > 15:
+                display_journal = display_journal[:15] + "..."
+
+            result.append({
+                "journal": display_journal,
+                "journal_class": journal_class,
+                "title": item.get("title", ""),
+                "insight": item.get("insight", item.get("summary", ""))
+            })
+        return result
+
+    def _format_topics(self, items: list) -> list:
+        """핫토픽 포맷팅"""
+        result = []
+        event_type_map = {
+            "approval": "approved",
+            "first_approval": "hot",
+            "mna": "pending",
+            "phase3": "phase3",
+            "breakthrough": "new",
+            "warning": "hot"
+        }
+
+        for item in items[:5]:  # 최대 5개
+            change = item.get("change", 0)
+
+            # 변동 타입 결정
+            if change > 20:
+                change_type = "up"
+                change_text = f"🔥 +{change}%"
+            elif change > 0:
+                change_type = "up"
+                change_text = f"↑ +{change}%"
+            elif change < 0:
+                change_type = "down"
+                change_text = f"↓ {change}%"
+            else:
+                change_type = "same"
+                change_text = "→ 유지"
+
+            result.append({
+                "name": item.get("name", ""),
+                "count": item.get("count", 0),
+                "change_type": change_type,
+                "change_text": change_text,
+                "event": item.get("event"),
+                "event_type": event_type_map.get(item.get("event_type"), "approved")
+            })
+        return result
+
+    def save(self, html: str, issue_number: int, output_dir: Optional[str] = None) -> str:
+        """HTML 파일 저장
+
+        Args:
+            html: 렌더링된 HTML 문자열
+            issue_number: 발행 호수
+            output_dir: 출력 디렉토리 (기본: output/)
+
+        Returns:
+            저장된 파일 경로
+        """
+        if output_dir is None:
+            base_dir = Path(__file__).parent.parent
+            output_dir = base_dir / "output"
+
+        output_dir = Path(output_dir)
+        html_dir = output_dir / "html"
+        html_dir.mkdir(parents=True, exist_ok=True)
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        filename = f"bio_daily_briefing_{issue_number}_{date_str}.html"
+        filepath = html_dir / filename
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        return str(filepath)
+
+    def generate_and_save(self, data: dict, issue_number: int, output_dir: Optional[str] = None) -> str:
+        """HTML 생성 및 저장 (편의 메서드)
+
+        Args:
+            data: 뉴스레터 데이터
+            issue_number: 발행 호수
+            output_dir: 출력 디렉토리
+
+        Returns:
+            저장된 파일 경로
+        """
+        html = self.generate(data, issue_number)
+        return self.save(html, issue_number, output_dir)
+
+
+def create_sample_data() -> dict:
+    """테스트용 샘플 데이터 생성"""
+    return {
+        "total_papers": 205,
+
+        "headline": {
+            "title": "FDA, 버텍스 CRISPR 겸상적혈구 치료제 최종 승인",
+            "summary": "2012년 CRISPR 발견 이후 11년 만에 실제 환자 치료제로 FDA 승인을 획득했습니다. 버텍스와 CRISPR Therapeutics가 공동 개발한 이 치료제는 유전자 편집 기술을 활용해 겸상적혈구병 환자의 조혈모세포를 교정합니다. 이번 승인은 유전자 치료의 새로운 시대를 여는 이정표로 평가받고 있습니다."
+        },
+
+        "regulatory": [
+            {
+                "status": "approved",
+                "title": "노보 노디스크, 경구용 세마글루타이드 비만 적응증 승인",
+                "description": "위고비의 경구 버전이 FDA 승인. 주사 없이 GLP-1 수용체 작용제 복용 가능"
+            },
+            {
+                "status": "pending",
+                "title": "릴리, 도나네맙 알츠하이머 치료제 심사 중",
+                "description": "FDA 자문위원회 6월 검토 예정. 레카네맙과의 경쟁 주목"
+            },
+            {
+                "status": "fast_track",
+                "title": "모더나 개인맞춤 암백신, 패스트트랙 지정",
+                "description": "흑색종 대상 mRNA 네오항원 백신. 키트루다 병용 임상 진행 중"
+            }
         ],
-        "CAR-T": [
-            NewsArticle(
-                pmid="11111111",
-                hook="이번 주 계속 상승세",
-                title="고형암 침투력 높인 차세대 CAR-T 개발",
-                content="종양 미세환경을 뚫고 들어가는 새로운 CAR-T가 개발되었습니다.",
-                insight="CAR-T의 고형암 적용 가능성 한 걸음 더",
-                source_journal="Cell",
-                source_institution="MIT",
-            )
+
+        "clinical_trials": [
+            {
+                "type": "phase3_positive",
+                "title": "BioNTech 개인맞춤 암백신, 흑색종 재발률 44% 감소",
+                "description": "mRNA 네오항원 백신 + 키트루다 병용. 무재발 생존기간 유의미하게 연장"
+            },
+            {
+                "type": "new_trial",
+                "title": "알닐람, RNAi 기반 심부전 치료제 Phase 3 시작",
+                "description": "ATTR 심근병증 대상. 기존 약물 대비 6개월마다 1회 투여"
+            },
+            {
+                "type": "stopped",
+                "title": "바이오젠, SMA 유전자치료제 임상 조기 중단",
+                "description": "안전성 우려로 환자 등록 중단. 간독성 이슈 조사 중"
+            }
         ],
-        "Ferroptosis": [
-            NewsArticle(
-                pmid="99999999",
-                hook="왜 갑자기 급상승?",
-                title="페롭토시스 유도 항암제, 전임상 돌파",
-                content="기존 항암제 내성을 극복하는 새로운 세포사멸 메커니즘으로 주목받고 있습니다.",
-                insight="새로운 항암 전략으로 부상",
-                source_journal="Nature",
-                source_institution="Harvard",
-            )
+
+        "research": [
+            {
+                "journal": "Nature",
+                "title": "종양미세환경 리프로그래밍 새 기전 발견",
+                "insight": "CAR-T 효능 높이는 병용전략 제시. 면역억제 극복 방안 도출"
+            },
+            {
+                "journal": "NEJM",
+                "title": "GLP-1 작용제, 심혈관 사망률 20% 감소",
+                "insight": "SELECT 임상 최종 결과. 비만 치료 넘어 심혈관 보호 효과 입증"
+            },
+            {
+                "journal": "Cell",
+                "title": "장내 미생물-뇌 축 새로운 신호전달 경로",
+                "insight": "파킨슨병 조기 진단 바이오마커 가능성. 미생물 대사체 프로파일링"
+            },
+            {
+                "journal": "bioRxiv",
+                "title": "AlphaFold3, 항체-항원 복합체 예측 정확도 향상",
+                "insight": "프리프린트 (피어리뷰 전). 신약 개발 가속화 기대"
+            }
         ],
+
+        "hot_topics": [
+            {
+                "name": "GLP-1",
+                "count": 45,
+                "change": 23,
+                "event": "경구제 승인",
+                "event_type": "approval"
+            },
+            {
+                "name": "CRISPR",
+                "count": 38,
+                "change": 156,
+                "event": "첫 승인",
+                "event_type": "first_approval"
+            },
+            {
+                "name": "CAR-T",
+                "count": 32,
+                "change": 12,
+                "event": None,
+                "event_type": None
+            },
+            {
+                "name": "mRNA 백신",
+                "count": 28,
+                "change": 8,
+                "event": "암백신 Phase 3",
+                "event_type": "phase3"
+            },
+            {
+                "name": "ADC",
+                "count": 25,
+                "change": -5,
+                "event": None,
+                "event_type": None
+            }
+        ],
+
+        "editor": {
+            "quote": "오늘 최대 이슈는 <strong>CRISPR 치료제 FDA 승인</strong>입니다. 2012년 Jennifer Doudna와 Emmanuelle Charpentier가 CRISPR-Cas9를 발표한 지 11년 만에, 이 기술이 실제 환자 치료에 사용되는 역사적인 순간입니다.",
+            "note": "버텍스 주가는 장전 거래에서 8% 상승했으며, CRISPR Therapeutics는 12% 급등했습니다. 유전자 편집 치료제 시대의 서막이 열렸습니다."
+        }
     }
-
-    editor_comment = """이번 주는 **GLP-1의 주간**입니다.
-비만 → 당뇨 → 심장 → 알츠하이머까지, 적응증 확장 속도가 정말 빠르네요.
-
-**주목 포인트**: Ferroptosis가 급상승 키워드로 감지되었습니다.
-기존 항암제 내성 극복의 새로운 대안으로 떠오르고 있습니다."""
-
-    # Generate newsletter
-    generator = NewsletterGenerator()
-    html = generator.generate_html(
-        trends=trends,
-        articles_by_trend=articles_by_trend,
-        editor_comment=editor_comment,
-        total_papers_analyzed=100,
-    )
-
-    # Save
-    filepath = generator.save_html(html, "test_newsletter.html")
-    print(f"Newsletter saved to: {filepath}")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="BIO 데일리 브리핑 뉴스레터 생성기 (신문 스타일)")
+    parser.add_argument("--test", action="store_true", help="샘플 데이터로 테스트 생성")
+    parser.add_argument("--issue", type=int, default=1, help="발행 호수")
+    parser.add_argument("--output", type=str, help="출력 디렉토리")
+    args = parser.parse_args()
+
+    if args.test:
+        print("🗞️ BIO 데일리 브리핑 테스트 생성 중...")
+
+        generator = NewsletterGenerator()
+        sample_data = create_sample_data()
+
+        filepath = generator.generate_and_save(
+            data=sample_data,
+            issue_number=args.issue,
+            output_dir=args.output
+        )
+
+        print(f"✅ 뉴스레터 생성 완료: {filepath}")
+        print(f"📂 브라우저에서 열어보세요: file://{os.path.abspath(filepath)}")
+    else:
+        print("사용법: python -m src.newsletter_generator --test")
+        print("옵션:")
+        print("  --test     샘플 데이터로 테스트 생성")
+        print("  --issue N  발행 호수 지정 (기본: 1)")
+        print("  --output   출력 디렉토리 지정")
