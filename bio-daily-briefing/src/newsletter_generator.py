@@ -60,6 +60,7 @@ class NewsletterGenerator:
             # 헤드라인
             "headline_title": data.get("headline", {}).get("title", "오늘의 주요 바이오 뉴스"),
             "headline_summary": data.get("headline", {}).get("summary", ""),
+            "headline_why": data.get("headline", {}).get("why_important", ""),
 
             # 규제 뉴스
             "regulatory_news": self._format_regulatory(data.get("regulatory", [])),
@@ -126,7 +127,9 @@ class NewsletterGenerator:
                 "badge_type": badge_type,
                 "badge_text": badge_text,
                 "title": item.get("title", ""),
-                "description": item.get("description", "")
+                "description": item.get("description", ""),
+                "patients": item.get("patients"),  # 환자 수 (예: "1,200명")
+                "disease": item.get("disease")  # 질환 (예: "흑색종")
             })
         return result
 
@@ -182,7 +185,7 @@ class NewsletterGenerator:
             "warning": "hot"
         }
 
-        for item in items[:5]:  # 최대 5개
+        for idx, item in enumerate(items[:5], start=1):  # 최대 5개
             change = item.get("change", 0)
 
             # 변동 타입 결정
@@ -199,13 +202,32 @@ class NewsletterGenerator:
                 change_type = "same"
                 change_text = "→ 유지"
 
+            # 순위 변동 정보
+            prev_rank = item.get("prev_rank")  # 전주 순위 (없으면 None = 신규)
+            if prev_rank is None:
+                rank_change_type = "new"
+                rank_display = f"#{idx} 🆕"
+            elif prev_rank > idx:
+                rank_diff = prev_rank - idx
+                rank_change_type = "up"
+                rank_display = f"#{idx} ▲{rank_diff}"
+            elif prev_rank < idx:
+                rank_diff = idx - prev_rank
+                rank_change_type = "down"
+                rank_display = f"#{idx} ▼{rank_diff}"
+            else:
+                rank_change_type = "same"
+                rank_display = f"#{idx} —"
+
             result.append({
                 "name": item.get("name", ""),
                 "count": item.get("count", 0),
                 "change_type": change_type,
                 "change_text": change_text,
                 "event": item.get("event"),
-                "event_type": event_type_map.get(item.get("event_type"), "approved")
+                "event_type": event_type_map.get(item.get("event_type"), "approved"),
+                "rank_change_type": rank_change_type,
+                "rank_display": rank_display
             })
         return result
 
@@ -259,7 +281,8 @@ def create_sample_data() -> dict:
 
         "headline": {
             "title": "FDA, 버텍스 CRISPR 겸상적혈구 치료제 최종 승인",
-            "summary": "2012년 CRISPR 발견 이후 11년 만에 실제 환자 치료제로 FDA 승인을 획득했습니다. 버텍스와 CRISPR Therapeutics가 공동 개발한 이 치료제는 유전자 편집 기술을 활용해 겸상적혈구병 환자의 조혈모세포를 교정합니다. 이번 승인은 유전자 치료의 새로운 시대를 여는 이정표로 평가받고 있습니다."
+            "summary": "2012년 CRISPR 발견 이후 11년 만에 실제 환자 치료제로 FDA 승인을 획득했습니다. 버텍스와 CRISPR Therapeutics가 공동 개발한 이 치료제는 유전자 편집 기술을 활용해 겸상적혈구병 환자의 조혈모세포를 교정합니다. 이번 승인은 유전자 치료의 새로운 시대를 여는 이정표로 평가받고 있습니다.",
+            "why_important": "CRISPR 기술의 첫 FDA 승인 - 유전자 치료 시대의 본격적인 시작"
         },
 
         "regulatory": [
@@ -284,17 +307,22 @@ def create_sample_data() -> dict:
             {
                 "type": "phase3_positive",
                 "title": "BioNTech 개인맞춤 암백신, 흑색종 재발률 44% 감소",
-                "description": "mRNA 네오항원 백신 + 키트루다 병용. 무재발 생존기간 유의미하게 연장"
+                "description": "mRNA 네오항원 백신 + 키트루다 병용. 무재발 생존기간 유의미하게 연장",
+                "disease": "흑색종",
+                "patients": "1,089명"
             },
             {
                 "type": "new_trial",
                 "title": "알닐람, RNAi 기반 심부전 치료제 Phase 3 시작",
-                "description": "ATTR 심근병증 대상. 기존 약물 대비 6개월마다 1회 투여"
+                "description": "ATTR 심근병증 대상. 기존 약물 대비 6개월마다 1회 투여",
+                "disease": "ATTR 심근병증",
+                "patients": "약 800명 모집 예정"
             },
             {
                 "type": "stopped",
                 "title": "바이오젠, SMA 유전자치료제 임상 조기 중단",
-                "description": "안전성 우려로 환자 등록 중단. 간독성 이슈 조사 중"
+                "description": "안전성 우려로 환자 등록 중단. 간독성 이슈 조사 중",
+                "disease": "척수성 근위축증(SMA)"
             }
         ],
 
@@ -326,6 +354,7 @@ def create_sample_data() -> dict:
                 "name": "GLP-1",
                 "count": 45,
                 "change": 23,
+                "prev_rank": 2,  # 전주 2위 → 이번주 1위 (▲1)
                 "event": "경구제 승인",
                 "event_type": "approval"
             },
@@ -333,6 +362,7 @@ def create_sample_data() -> dict:
                 "name": "CRISPR",
                 "count": 38,
                 "change": 156,
+                "prev_rank": None,  # 신규 진입 (🆕)
                 "event": "첫 승인",
                 "event_type": "first_approval"
             },
@@ -340,6 +370,7 @@ def create_sample_data() -> dict:
                 "name": "CAR-T",
                 "count": 32,
                 "change": 12,
+                "prev_rank": 1,  # 전주 1위 → 이번주 3위 (▼2)
                 "event": None,
                 "event_type": None
             },
@@ -347,6 +378,7 @@ def create_sample_data() -> dict:
                 "name": "mRNA 백신",
                 "count": 28,
                 "change": 8,
+                "prev_rank": 4,  # 전주 4위 → 이번주 4위 (—)
                 "event": "암백신 Phase 3",
                 "event_type": "phase3"
             },
@@ -354,6 +386,7 @@ def create_sample_data() -> dict:
                 "name": "ADC",
                 "count": 25,
                 "change": -5,
+                "prev_rank": 3,  # 전주 3위 → 이번주 5위 (▼2)
                 "event": None,
                 "event_type": None
             }

@@ -258,7 +258,7 @@ export const DailyBriefing: React.FC<DailyBriefingProps> = ({ isOpen, onClose })
             </div>
           )}
 
-          {error && (
+          {error && viewMode === 'topics' && (
             <div className="flex flex-col items-center justify-center py-32">
               <p className="text-red-400 text-lg mb-4">{error}</p>
               <button

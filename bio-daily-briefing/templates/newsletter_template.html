@@ -129,6 +129,22 @@
             color: #4B5563;
             line-height: 1.7;
         }
+        .headline-why {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            border-left: 4px solid #D97706;
+            border-radius: 0 8px 8px 0;
+            font-size: 13px;
+            font-weight: 500;
+            color: #92400E;
+        }
+        .headline-why-icon {
+            font-size: 16px;
+        }
 
         /* Two Column */
         .two-column {
@@ -188,6 +204,30 @@
             font-size: 13px;
             color: #6B7280;
             line-height: 1.6;
+        }
+        .news-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .news-meta-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: #F3F4F6;
+            border-radius: 4px;
+            font-size: 11px;
+            color: #6B7280;
+        }
+        .news-meta-item.patients {
+            background: #DBEAFE;
+            color: #1D4ED8;
+        }
+        .news-meta-item.disease {
+            background: #FCE7F3;
+            color: #BE185D;
         }
 
         /* Research Grid */
@@ -250,9 +290,10 @@
             padding: 0 0 12px 0;
             border-bottom: 1px solid #E5E7EB;
         }
-        .topics-table th:nth-child(2),
+        .topics-table th:nth-child(1),
         .topics-table th:nth-child(3),
-        .topics-table th:nth-child(4) {
+        .topics-table th:nth-child(4),
+        .topics-table th:nth-child(5) {
             text-align: center;
         }
         .topics-table td {
@@ -260,9 +301,10 @@
             border-bottom: 1px solid #F3F4F6;
             font-size: 14px;
         }
-        .topics-table td:nth-child(2),
+        .topics-table td:nth-child(1),
         .topics-table td:nth-child(3),
-        .topics-table td:nth-child(4) {
+        .topics-table td:nth-child(4),
+        .topics-table td:nth-child(5) {
             text-align: center;
         }
         .topic-name { font-weight: 600; color: #1F2937; }
@@ -270,6 +312,25 @@
         .topic-change-up { color: #16A34A; font-weight: 500; }
         .topic-change-down { color: #DC2626; font-weight: 500; }
         .topic-change-same { color: #9CA3AF; }
+        .topic-rank {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .topic-rank-up {
+            color: #16A34A;
+        }
+        .topic-rank-down {
+            color: #DC2626;
+        }
+        .topic-rank-same {
+            color: #9CA3AF;
+        }
+        .topic-rank-new {
+            color: #7C3AED;
+        }
         .topic-event {
             display: inline-block;
             padding: 3px 8px;
@@ -401,6 +462,12 @@
                 <span class="headline-label">🚨 오늘의 헤드라인</span>
                 <h2 class="headline-title">{{ headline_title }}</h2>
                 <p class="headline-summary">{{ headline_summary }}</p>
+                {% if headline_why %}
+                <div class="headline-why">
+                    <span class="headline-why-icon">💡</span>
+                    <span>왜 중요한가: {{ headline_why }}</span>
+                </div>
+                {% endif %}
             </section>
 
             <!-- Two Column: Regulatory + Clinical -->
@@ -426,6 +493,16 @@
                         <span class="news-badge badge-{{ item.badge_type }}">{{ item.badge_text }}</span>
                         <h4 class="news-title">{{ item.title }}</h4>
                         <p class="news-desc">{{ item.description }}</p>
+                        {% if item.patients or item.disease %}
+                        <div class="news-meta">
+                            {% if item.disease %}
+                            <span class="news-meta-item disease">🎯 {{ item.disease }}</span>
+                            {% endif %}
+                            {% if item.patients %}
+                            <span class="news-meta-item patients">👥 {{ item.patients }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                     </article>
                     {% endfor %}
                     {% if not clinical_trials %}
@@ -459,6 +536,7 @@
                 <table class="topics-table">
                     <thead>
                         <tr>
+                            <th>순위</th>
                             <th>키워드</th>
                             <th>논문 수</th>
                             <th>주간 변동</th>
@@ -468,6 +546,11 @@
                     <tbody>
                         {% for item in hot_topics %}
                         <tr>
+                            <td>
+                                <span class="topic-rank topic-rank-{{ item.rank_change_type }}">
+                                    {{ item.rank_display }}
+                                </span>
+                            </td>
                             <td class="topic-name">{{ item.name }}</td>
                             <td class="topic-count">{{ item.count }}건</td>
                             <td class="topic-change-{{ item.change_type }}">{{ item.change_text }}</td>
@@ -482,7 +565,7 @@
                         {% endfor %}
                         {% if not hot_topics %}
                         <tr>
-                            <td colspan="4" style="text-align: center; color: #9CA3AF;">핫토픽 데이터가 없습니다.</td>
+                            <td colspan="5" style="text-align: center; color: #9CA3AF;">핫토픽 데이터가 없습니다.</td>
                         </tr>
                         {% endif %}
                     </tbody>
