@@ -34,6 +34,9 @@ data/chroma_db/
 data/papers/
 *.pdf
 
+# ChromaDB local storage
+chroma_db/
+
 # Output directory
 output/
 

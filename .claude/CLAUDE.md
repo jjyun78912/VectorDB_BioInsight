@@ -102,7 +102,8 @@ VectorDB_BioInsight/
 │       │   ├── chat.py                # AI chat endpoints (Gemini)
 │       │   ├── crawler.py             # Web crawler endpoints
 │       │   ├── news.py                # BIO Research Daily endpoints
-│       │   └── graph.py               # Knowledge graph endpoints
+│       │   ├── graph.py               # Knowledge graph endpoints
+│       │   └── briefing.py            # Daily Briefing API endpoints ✅ NEW
 │       └── core/                      # Core Python modules ✅
 │           ├── config.py              # Configuration (API keys)
 │           ├── pdf_parser.py          # PDF text extraction
@@ -124,12 +125,22 @@ VectorDB_BioInsight/
 │       │   ├── KnowledgeGraph.tsx     # 3D Galaxy visualization
 │       │   ├── TrendingPapers.tsx     # Trending papers section
 │       │   ├── BioResearchDaily.tsx   # BIO 연구 데일리
+│       │   ├── DailyBriefing.tsx      # Daily Briefing component ✅ NEW
 │       │   └── Glow.tsx               # UI effects
 │       ├── services/
 │       │   └── client.ts              # API client
 │       └── package.json
 ├── scripts/
 │   └── pubmed_collector.py            # PubMed paper collection script
+├── bio-daily-briefing/                # Daily Briefing automation ✅ NEW
+│   ├── src/
+│   │   ├── aggregator.py              # Multi-source news aggregation
+│   │   ├── newsletter_v2.py           # Newsletter generation
+│   │   └── sources/                   # Data source fetchers
+│   │       ├── biorxiv_fetcher.py     # bioRxiv preprints
+│   │       ├── clinicaltrials_fetcher.py  # Clinical trials
+│   │       └── fda_fetcher.py         # FDA announcements
+│   └── test_v2.py                     # Test scripts
 ├── data/
 │   └── papers/                        # Disease domain folders
 │       └── {domain}/                  # JSON paper files
@@ -425,7 +436,40 @@ GET  /api/news/trending           # Trending research topics
 POST /api/news/generate           # Generate AI summary
 ```
 
-### 1.8. RNA-seq Cancer Analyst Agent ✅ CONFIGURED (2025-01-03)
+### 1.8. Daily Briefing System ✅ IMPLEMENTED (2025-01-05)
+
+**Purpose**: AI-curated daily bio/healthcare research trends and news automation
+
+**Location**:
+- Frontend: `frontend/react_app/components/DailyBriefing.tsx`
+- Backend: `backend/app/api/routes/briefing.py`
+- Automation: `bio-daily-briefing/`
+
+**Key Features**:
+
+| Feature | Description |
+|---------|-------------|
+| Multi-source Aggregation | bioRxiv, ClinicalTrials.gov, FDA announcements |
+| Hot Topic Detection | Keyword-based trending topic identification |
+| AI Newsletter | Automated newsletter generation with Gemini |
+| Category Filtering | Oncology, Immunotherapy, Gene Therapy, etc. |
+
+**Data Sources** (`bio-daily-briefing/src/sources/`):
+
+| Source | File | Description |
+|--------|------|-------------|
+| bioRxiv | `biorxiv_fetcher.py` | Preprint papers |
+| ClinicalTrials | `clinicaltrials_fetcher.py` | Clinical trial updates |
+| FDA | `fda_fetcher.py` | FDA drug approvals & announcements |
+
+**API Endpoints**:
+```
+GET  /api/briefing/daily           # Get daily briefing
+GET  /api/briefing/trends          # Hot topics and trends
+POST /api/briefing/generate        # Generate AI briefing
+```
+
+### 1.9. RNA-seq Cancer Analyst Agent ✅ CONFIGURED (2025-01-03)
 
 **Purpose**: Specialized Claude agent for RNA-seq cancer research analysis
 
@@ -445,7 +489,7 @@ POST /api/news/generate           # Generate AI summary
 
 **Usage**: Invoke via Claude Code with `subagent_type='rnaseq-cancer-analyst'`
 
-### 1.9. RNA-seq Full Pipeline ✅ IMPLEMENTED (2025-01-04)
+### 1.10. RNA-seq Full Pipeline ✅ IMPLEMENTED (2025-01-04)
 
 **Purpose**: Complete RNA-seq analysis pipeline with DESeq2 integration via rpy2
 
