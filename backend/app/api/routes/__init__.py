@@ -12,6 +12,7 @@ from .trends import router as trends_router
 from .citations import router as citations_router
 from .dynamic_trends import router as dynamic_trends_router
 from .research_gaps import router as research_gaps_router
+from .briefing import router as briefing_router
 
 router = APIRouter()
 
@@ -24,3 +25,4 @@ router.include_router(trends_router, prefix="/trends", tags=["trends"])
 router.include_router(citations_router, prefix="/citations", tags=["citations"])
 router.include_router(dynamic_trends_router, prefix="/dynamic-trends", tags=["dynamic-trends"])
 router.include_router(research_gaps_router, prefix="/research-gaps", tags=["research-gaps"])
+router.include_router(briefing_router, prefix="/briefing", tags=["briefing"])

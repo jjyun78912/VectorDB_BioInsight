@@ -9,11 +9,12 @@ import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
+import { DailyBriefing } from './components/DailyBriefing';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
-  Library, FileSearch, Zap
+  Library, FileSearch, Zap, Newspaper
 } from 'lucide-react';
 
 // Paper type for Literature Review
@@ -34,6 +35,7 @@ const AppContent: React.FC = () => {
   const [showLiteratureReview, setShowLiteratureReview] = useState(false);
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(false);
 
   // Language context
   const { t } = useLanguage();
@@ -105,7 +107,7 @@ const AppContent: React.FC = () => {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
               {/* Literature Review */}
               <button
                 onClick={() => setShowLiteratureReview(true)}
@@ -170,6 +172,23 @@ const AppContent: React.FC = () => {
                   Visualize connections between genes, diseases, and research in 3D
                 </p>
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 group-hover:gap-2 transition-all">
+                  Open Tool <ArrowRight className="w-4 h-4" />
+                </span>
+              </button>
+
+              {/* Daily Briefing */}
+              <button
+                onClick={() => setShowBriefing(true)}
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Newspaper className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="font-bold text-gray-900 mb-2">Daily Briefing</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  AI-curated daily bio/healthcare research trends and news
+                </p>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-purple-600 group-hover:gap-2 transition-all">
                   Open Tool <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
@@ -240,6 +259,7 @@ const AppContent: React.FC = () => {
       />
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
+      <DailyBriefing isOpen={showBriefing} onClose={() => setShowBriefing(false)} />
 
     </div>
   );
