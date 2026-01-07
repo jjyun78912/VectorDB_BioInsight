@@ -144,6 +144,18 @@ VectorDB_BioInsight/
 ├── data/
 │   └── papers/                        # Disease domain folders
 │       └── {domain}/                  # JSON paper files
+├── rnaseq_pipeline/                   # 6-Agent RNA-seq Pipeline ✅ NEW
+│   ├── __init__.py
+│   ├── pipeline.py                    # Main orchestrator
+│   ├── agents/
+│   │   ├── agent1_deg.py              # DESeq2 analysis
+│   │   ├── agent2_network.py          # Co-expression network
+│   │   ├── agent3_pathway.py          # GO/KEGG enrichment
+│   │   ├── agent4_validation.py       # DB validation + v2.0 interpretation
+│   │   ├── agent5_visualization.py    # Plots generation
+│   │   └── agent6_report.py           # HTML report
+│   └── utils/
+│       └── base_agent.py              # Base agent class
 ├── chroma_db/                         # Vector database storage
 ├── docs/
 │   ├── PRD.md
@@ -540,6 +552,84 @@ from rnaseq_test_results.rnaseq_full_pipeline import RNAseqPipeline
 pipeline = RNAseqPipeline(output_dir='results')
 results = pipeline.run_full_pipeline(use_synthetic=True)
 ```
+
+### 1.11. RNA-seq 6-Agent Pipeline ✅ IMPLEMENTED (2025-01-07)
+
+**Purpose**: Modular 6-agent pipeline for comprehensive RNA-seq cancer analysis with v2.0 conservative interpretation
+
+**Location**: `rnaseq_pipeline/`
+
+**Architecture**:
+
+```
+rnaseq_pipeline/
+├── __init__.py
+├── pipeline.py                 # Main orchestrator
+├── agents/
+│   ├── agent1_deg.py          # DESeq2 differential expression
+│   ├── agent2_network.py      # Co-expression network analysis
+│   ├── agent3_pathway.py      # GO/KEGG pathway enrichment
+│   ├── agent4_validation.py   # DB validation + v2.0 interpretation ⭐
+│   ├── agent5_visualization.py # Volcano, heatmap, network plots
+│   └── agent6_report.py       # HTML report generation
+└── utils/
+    └── base_agent.py          # Base class with logging, I/O
+```
+
+**6-Agent Flow**:
+
+| Agent | Name | Input | Output |
+|-------|------|-------|--------|
+| Agent 1 | DEG Analysis | count_matrix.csv, metadata.csv | deg_significant.csv, normalized_counts.csv |
+| Agent 2 | Network | deg_significant.csv, normalized_counts.csv | hub_genes.csv, network_edges.csv |
+| Agent 3 | Pathway | deg_significant.csv | pathway_*.csv, gene_to_pathway.csv |
+| Agent 4 | Validation | All above | interpretation_report.json (v2.0) |
+| Agent 5 | Visualization | All above | volcano.png, heatmap.png, network.png |
+| Agent 6 | Report | All above | analysis_report.html |
+
+**v2.0 Conservative Interpretation** (Agent 4):
+
+핵심 원칙:
+- **비인과적 언어**: "drives/induces/controls" 대신 "is associated with/may reflect"
+- **DB 매칭**: DB match ≠ proof, DB absence ≠ irrelevance
+- **Hub 유전자**: Network centrality ≠ biological importance
+- **Pathway**: Statistical enrichment ≠ causal mechanism
+
+출력 구조:
+```json
+{
+  "v2_interpretation": {
+    "observation": "Pattern-focused observations",
+    "supporting_evidence": { "deg_statistics": {}, "network_analysis": {}, ... },
+    "interpretation": "Conservative, non-causal interpretation",
+    "limitations": ["RNA-seq measures transcripts, not proteins", ...],
+    "methodology_note": "No causal claims, no novel regulator labeling"
+  }
+}
+```
+
+**Tested on Real Data** (GSE81089 Lung Cancer):
+- 175 samples (67 Histology 1 vs 108 Histology 2)
+- 5,752 DEGs identified
+- 20 hub gene candidates
+- Full HTML + PDF report generated
+
+**Usage**:
+```python
+from rnaseq_pipeline.pipeline import RNAseqPipeline
+
+pipeline = RNAseqPipeline(
+    input_dir='data/gse81089/',
+    output_dir='results/',
+    config={'cancer_type': 'lung_cancer'}
+)
+results = pipeline.run_all()
+```
+
+**Key Technical Fixes**:
+- DESeq2 `counts` → `BiocGenerics.counts()` for rpy2 compatibility
+- Vectorized correlation matrix for large DEG sets (5000+ genes)
+- Entrez ID → Gene Symbol conversion via mygene for Enrichr
 
 ### 2. RNA-seq Analysis Module
 

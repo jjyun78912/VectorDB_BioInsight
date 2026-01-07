@@ -1,0 +1,32 @@
+2026-01-07 11:22:03,052 - agent3_pathway - INFO - ============================================================
+2026-01-07 11:22:03,052 - agent3_pathway - INFO - Starting agent3_pathway
+2026-01-07 11:22:03,052 - agent3_pathway - INFO - ============================================================
+2026-01-07 11:22:03,052 - agent3_pathway - INFO - Validating inputs...
+2026-01-07 11:22:03,052 - agent3_pathway - INFO - Loading deg_significant.csv...
+2026-01-07 11:22:03,053 - agent3_pathway - INFO -   -> 62 rows, 4 columns
+2026-01-07 11:22:03,053 - agent3_pathway - INFO - DEGs for pathway analysis: 62
+2026-01-07 11:22:03,053 - agent3_pathway - INFO - Input validation passed
+2026-01-07 11:22:03,053 - agent3_pathway - INFO - Running analysis...
+2026-01-07 11:22:03,053 - agent3_pathway - INFO - Running pathway enrichment for 62 genes
+2026-01-07 11:22:03,053 - agent3_pathway - INFO - Running enrichment for GO_Biological_Process_2023...
+2026-01-07 11:22:07,505 - agent3_pathway - INFO - Saved pathway_go_bp.csv: 20 rows
+2026-01-07 11:22:07,506 - agent3_pathway - INFO - Running enrichment for GO_Molecular_Function_2023...
+2026-01-07 11:22:11,343 - agent3_pathway - INFO - Saved pathway_go_mf.csv: 6 rows
+2026-01-07 11:22:11,343 - agent3_pathway - INFO - Running enrichment for GO_Cellular_Component_2023...
+2026-01-07 11:22:14,915 - agent3_pathway - ERROR - Enrichr failed for GO_Cellular_Component_2023: 'overlap'
+2026-01-07 11:22:14,916 - agent3_pathway - INFO - Saved pathway_go_cc.csv: 0 rows
+2026-01-07 11:22:14,916 - agent3_pathway - INFO - Running enrichment for KEGG_2021_Human...
+2026-01-07 11:22:18,918 - agent3_pathway - INFO - Saved pathway_kegg.csv: 20 rows
+2026-01-07 11:22:18,920 - agent3_pathway - INFO - Saved pathway_summary.csv: 15 rows
+2026-01-07 11:22:18,929 - agent3_pathway - INFO - Saved gene_to_pathway.csv: 20 rows
+2026-01-07 11:22:18,929 - agent3_pathway - INFO - Pathway Analysis Complete:
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -   Databases analyzed: 4
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -     GO_Biological_Process_2023: 65 significant terms
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -     GO_Molecular_Function_2023: 6 significant terms
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -     GO_Cellular_Component_2023: 0 significant terms
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -     KEGG_2021_Human: 72 significant terms
+2026-01-07 11:22:18,929 - agent3_pathway - INFO -   Total significant terms: 143
+2026-01-07 11:22:18,931 - agent3_pathway - INFO - Validating outputs...
+2026-01-07 11:22:18,941 - agent3_pathway - INFO - Output validation passed
+2026-01-07 11:22:18,941 - agent3_pathway - INFO - agent3_pathway completed successfully!
+2026-01-07 11:22:18,942 - agent3_pathway - INFO - Saved meta_agent3_pathway.json

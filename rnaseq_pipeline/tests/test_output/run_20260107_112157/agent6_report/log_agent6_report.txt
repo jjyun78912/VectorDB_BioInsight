@@ -1,0 +1,26 @@
+2026-01-07 11:22:23,504 - agent6_report - INFO - ============================================================
+2026-01-07 11:22:23,504 - agent6_report - INFO - Starting agent6_report
+2026-01-07 11:22:23,504 - agent6_report - INFO - ============================================================
+2026-01-07 11:22:23,504 - agent6_report - INFO - Validating inputs...
+2026-01-07 11:22:23,504 - agent6_report - INFO - Input validation passed
+2026-01-07 11:22:23,504 - agent6_report - INFO - Running analysis...
+2026-01-07 11:22:23,506 - agent6_report - INFO - Loaded deg_significant.csv: 62 rows
+2026-01-07 11:22:23,508 - agent6_report - INFO - Loaded deg_all_results.csv: 500 rows
+2026-01-07 11:22:23,509 - agent6_report - INFO - Loaded hub_genes.csv: 10 rows
+2026-01-07 11:22:23,510 - agent6_report - INFO - Loaded network_nodes.csv: 62 rows
+2026-01-07 11:22:23,512 - agent6_report - INFO - Loaded pathway_summary.csv: 15 rows
+2026-01-07 11:22:23,518 - agent6_report - INFO - Loaded integrated_gene_table.csv: 62 rows
+2026-01-07 11:22:23,520 - agent6_report - INFO - Loaded db_matched_genes.csv: 17 rows
+2026-01-07 11:22:23,520 - agent6_report - INFO - Loaded interpretation_report.json
+2026-01-07 11:22:23,532 - agent6_report - INFO - Loaded figure: network_graph.png
+2026-01-07 11:22:23,533 - agent6_report - INFO - Loaded figure: volcano_plot.png
+2026-01-07 11:22:23,534 - agent6_report - INFO - Loaded figure: interpretation_summary.png
+2026-01-07 11:22:23,534 - agent6_report - INFO - Loaded figure: pca_plot.png
+2026-01-07 11:22:23,535 - agent6_report - INFO - Loaded figure: pathway_barplot.png
+2026-01-07 11:22:23,535 - agent6_report - INFO - Loaded figure: heatmap_top50.png
+2026-01-07 11:22:23,573 - agent6_report - INFO - Saved report_data.json
+2026-01-07 11:22:23,598 - agent6_report - INFO - Report generated: /Users/admin/VectorDB_BioInsight/rnaseq_pipeline/tests/test_output/run_20260107_112157/agent6_report/report.html
+2026-01-07 11:22:23,599 - agent6_report - INFO - Validating outputs...
+2026-01-07 11:22:23,599 - agent6_report - INFO - Output validation passed
+2026-01-07 11:22:23,599 - agent6_report - INFO - agent6_report completed successfully!
+2026-01-07 11:22:23,599 - agent6_report - INFO - Saved meta_agent6_report.json

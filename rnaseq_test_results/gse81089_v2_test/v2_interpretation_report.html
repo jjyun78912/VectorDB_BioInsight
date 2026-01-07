@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNA-seq Analysis - v2.0 Interpretation Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e8e8e8;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .card h2 .icon { font-size: 1.5rem; }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stat-box {
+            background: rgba(0,212,255,0.1);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid rgba(0,212,255,0.2);
+        }
+        .stat-box .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .stat-box .label {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-top: 0.3rem;
+        }
+        
+        .observation-text {
+            line-height: 1.8;
+            font-size: 1.05rem;
+            color: #ddd;
+        }
+        
+        .interpretation-text {
+            background: rgba(123,44,191,0.15);
+            border-left: 4px solid #7b2cbf;
+            padding: 1rem 1.5rem;
+            border-radius: 0 8px 8px 0;
+            line-height: 1.8;
+            font-style: italic;
+        }
+        
+        .limitations-list {
+            list-style: none;
+        }
+        .limitations-list li {
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.5rem;
+            background: rgba(255,107,107,0.1);
+            border-radius: 8px;
+            border-left: 3px solid #ff6b6b;
+            font-size: 0.95rem;
+        }
+        .limitations-list li::before {
+            content: "⚠️ ";
+        }
+        
+        .evidence-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .evidence-box {
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            padding: 1rem;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .evidence-box h4 {
+            color: #00d4ff;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+        .evidence-box .note {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 0.5rem;
+            font-style: italic;
+        }
+        
+        .principles-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .principle-tag {
+            background: rgba(0,212,255,0.15);
+            color: #00d4ff;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            border: 1px solid rgba(0,212,255,0.3);
+        }
+        
+        .hub-genes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .hub-genes-table th, .hub-genes-table td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .hub-genes-table th {
+            background: rgba(0,212,255,0.1);
+            color: #00d4ff;
+            font-weight: 600;
+        }
+        .hub-genes-table tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        .tag {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-right: 0.3rem;
+        }
+        .tag-novel { background: #7b2cbf; color: white; }
+        .tag-hub { background: #00d4ff; color: #1a1a2e; }
+        
+        .methodology-note {
+            background: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #aaa;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .up { color: #ff6b6b; }
+        .down { color: #4ecdc4; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧬 RNA-seq v2.0 Interpretation Report</h1>
+        <p class="subtitle">GSE81089 Lung Cancer - Histology Comparison (Conservative Analysis)</p>
+
+        <div class="card">
+            <h2><span class="icon">📊</span> Analysis Summary</h2>
+            <div class="summary-grid">
+                <div class="stat-box">
+                    <div class="value">5,752</div>
+                    <div class="label">Total DEGs</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">3,266</div>
+                    <div class="label">Upregulated</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">2,486</div>
+                    <div class="label">Downregulated</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">20</div>
+                    <div class="label">Hub Candidates</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">0</div>
+                    <div class="label">DB Matched</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">20</div>
+                    <div class="label">Novel Candidates</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">🔍</span> Observation</h2>
+            <p class="observation-text">A total of 5752 differentially expressed genes were identified (3266 upregulated, 2486 downregulated). Network analysis identified 20 genes with high connectivity (hub candidates). Note: Network centrality is a topological property and does not directly imply biological importance. No DEGs were found in major cancer gene databases (COSMIC, OncoKB). This does not indicate irrelevance; databases have limited coverage and are biased toward well-studied genes.</p>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">📋</span> Supporting Evidence</h2>
+            <div class="evidence-grid">
+                <div class="evidence-box">
+                    <h4>DEG Statistics</h4>
+                    <p>Total: <strong>5,752</strong></p>
+                    <p>Up: <span class="up">3,266</span> / Down: <span class="down">2,486</span></p>
+                </div>
+                <div class="evidence-box">
+                    <h4>Network Analysis</h4>
+                    <p>Hub candidates: <strong>20</strong></p>
+                    <p class="note">Hub status based on network topology only</p>
+                </div>
+                <div class="evidence-box">
+                    <h4>Database Validation</h4>
+                    <p>Matched: <strong>0</strong></p>
+                    <p>DBs: COSMIC Tier1, OncoKB</p>
+                    <p class="note">Database coverage is incomplete; absence does not imply irrelevance</p>
+                </div>
+                <div class="evidence-box">
+                    <h4>Pathway Enrichment</h4>
+                    <p>Genes mapped: <strong>0</strong></p>
+                    <p class="note">Enrichment is statistical association, not causal mechanism</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">💡</span> Interpretation</h2>
+            <div class="interpretation-text">
+                The large number of DEGs may reflect broad transcriptional changes associated with the comparison groups. This is consistent with heterogeneous biological states but makes identification of specific functional drivers challenging without additional evidence. Hub genes were identified that are not in cancer databases. These may represent novel candidates, but database absence could also reflect limited prior study rather than biological novelty. Functional validation would be required to assess their significance.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">⚠️</span> Limitations</h2>
+            <ul class="limitations-list">
+                <li>RNA-seq measures transcript abundance, not protein levels or activity.</li>
+                <li>Differential expression is a statistical finding; biological importance is not guaranteed.</li>
+                <li>Cancer gene databases have limited coverage and are biased toward well-studied genes.</li>
+                <li>Network hub status is a topological property that does not directly indicate regulatory importance.</li>
+                <li>Pathway enrichment shows statistical association, not mechanistic causation.</li>
+                <li>This analysis does not distinguish tumor-intrinsic signals from microenvironment effects.</li>
+                <li>All findings are correlative and require experimental validation for causal inference.</li>
+
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">🎯</span> Hub Gene Candidates (Top 10)</h2>
+            <table class="hub-genes-table">
+                <thead>
+                    <tr>
+                        <th>Gene ID</th>
+                        <th>Log2FC</th>
+                        <th>Hub Score</th>
+                        <th>Tags</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td><strong>3852</strong></td>
+                        <td class="up">+8.69</td>
+                        <td>0.419</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>1825</strong></td>
+                        <td class="up">+7.40</td>
+                        <td>0.436</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>1830</strong></td>
+                        <td class="up">+8.68</td>
+                        <td>0.452</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>3854</strong></td>
+                        <td class="up">+7.95</td>
+                        <td>0.497</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>286887</strong></td>
+                        <td class="up">+7.63</td>
+                        <td>0.507</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>105371755</strong></td>
+                        <td class="down">-2.63</td>
+                        <td>0.520</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>7080</strong></td>
+                        <td class="down">-3.25</td>
+                        <td>0.641</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>121391</strong></td>
+                        <td class="up">+7.29</td>
+                        <td>0.994</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>6928</strong></td>
+                        <td class="down">-3.44</td>
+                        <td>0.589</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>100506237</strong></td>
+                        <td class="down">-3.21</td>
+                        <td>0.632</td>
+                        <td><span class="tag tag-novel">NOVEL_CANDIDATE</span><span class="tag tag-hub">HUB_GENE</span></td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2><span class="icon">📜</span> Interpretation Principles</h2>
+            <div class="principles-list">
+                <span class="principle-tag">No causal claims - only associations and patterns</span>
+                <span class="principle-tag">Hub status alone does not imply biological importance</span>
+                <span class="principle-tag">Database absence does not mean irrelevance</span>
+                <span class="principle-tag">Pathway enrichment provides context, not causality</span>
+                <span class="principle-tag">TME genes may reflect microenvironment composition</span>
+                <span class="principle-tag">All conclusions require experimental validation</span>
+
+            </div>
+            <div class="methodology-note">
+                This interpretation follows conservative principles: no causal claims, no labeling of novel regulators or therapeutic targets, and explicit acknowledgment of analysis limitations.
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

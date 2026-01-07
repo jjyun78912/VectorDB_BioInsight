@@ -1,0 +1,33 @@
+2026-01-07 11:21:57,320 - agent1_deg - INFO - ============================================================
+2026-01-07 11:21:57,320 - agent1_deg - INFO - Starting agent1_deg
+2026-01-07 11:21:57,320 - agent1_deg - INFO - ============================================================
+2026-01-07 11:21:57,320 - agent1_deg - INFO - Validating inputs...
+2026-01-07 11:21:57,320 - agent1_deg - INFO - Loading count_matrix.csv...
+2026-01-07 11:21:57,322 - agent1_deg - INFO -   -> 500 rows, 9 columns
+2026-01-07 11:21:57,322 - agent1_deg - INFO - Loading metadata.csv...
+2026-01-07 11:21:57,323 - agent1_deg - INFO -   -> 8 rows, 3 columns
+2026-01-07 11:21:57,323 - agent1_deg - INFO - Count matrix: 500 genes, 8 samples
+2026-01-07 11:21:57,323 - agent1_deg - INFO - Conditions: {'tumor', 'normal'}
+2026-01-07 11:21:57,323 - agent1_deg - INFO - Input validation passed
+2026-01-07 11:21:57,323 - agent1_deg - INFO - Running analysis...
+2026-01-07 11:21:57,323 - agent1_deg - INFO - Initializing R environment...
+2026-01-07 11:22:01,064 - agent1_deg - INFO - After filtering (min_count=10): 500 genes
+2026-01-07 11:22:01,064 - agent1_deg - INFO - Converting to R objects...
+2026-01-07 11:22:01,071 - agent1_deg - INFO - Creating DESeqDataSet...
+2026-01-07 11:22:01,208 - agent1_deg - INFO - Running DESeq2 (this may take a while)...
+2026-01-07 11:22:02,098 - agent1_deg - INFO - Extracting results for contrast: tumor vs normal
+2026-01-07 11:22:02,228 - agent1_deg - INFO - Getting normalized counts...
+2026-01-07 11:22:02,229 - agent1_deg - WARNING - DESeq2 failed: module 'DESeq2' has no attribute 'counts'
+2026-01-07 11:22:02,229 - agent1_deg - WARNING - Using synthetic DEG analysis (DESeq2 unavailable)
+2026-01-07 11:22:02,585 - agent1_deg - INFO - Saved deg_all_results.csv: 500 rows
+2026-01-07 11:22:02,586 - agent1_deg - INFO - Saved deg_significant.csv: 62 rows
+2026-01-07 11:22:02,590 - agent1_deg - INFO - Saved normalized_counts.csv: 500 rows
+2026-01-07 11:22:02,590 - agent1_deg - INFO - DEG Analysis Complete:
+2026-01-07 11:22:02,590 - agent1_deg - INFO -   Total genes analyzed: 500
+2026-01-07 11:22:02,590 - agent1_deg - INFO -   Significant DEGs: 62
+2026-01-07 11:22:02,590 - agent1_deg - INFO -   Upregulated: 35
+2026-01-07 11:22:02,590 - agent1_deg - INFO -   Downregulated: 27
+2026-01-07 11:22:02,590 - agent1_deg - INFO - Validating outputs...
+2026-01-07 11:22:02,591 - agent1_deg - INFO - Output validation passed
+2026-01-07 11:22:02,591 - agent1_deg - INFO - agent1_deg completed successfully!
+2026-01-07 11:22:02,592 - agent1_deg - INFO - Saved meta_agent1_deg.json

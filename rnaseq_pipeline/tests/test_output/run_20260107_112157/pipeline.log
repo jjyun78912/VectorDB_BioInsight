@@ -1,0 +1,26 @@
+2026-01-07 11:21:57,318 - rnaseq_pipeline - INFO - Starting RNA-seq Pipeline
+2026-01-07 11:21:57,318 - rnaseq_pipeline - INFO - Run directory: /Users/admin/VectorDB_BioInsight/rnaseq_pipeline/tests/test_output/run_20260107_112157
+2026-01-07 11:21:57,319 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:21:57,319 - rnaseq_pipeline - INFO - Running agent1_deg
+2026-01-07 11:21:57,319 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:02,593 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:02,593 - rnaseq_pipeline - INFO - Running agent2_network
+2026-01-07 11:22:02,593 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:03,052 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:03,052 - rnaseq_pipeline - INFO - Running agent3_pathway
+2026-01-07 11:22:03,052 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:18,946 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:18,950 - rnaseq_pipeline - INFO - Running agent4_validation
+2026-01-07 11:22:18,950 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:18,986 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:18,986 - rnaseq_pipeline - INFO - Running agent5_visualization
+2026-01-07 11:22:18,986 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:23,502 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:23,502 - rnaseq_pipeline - INFO - Running agent6_report
+2026-01-07 11:22:23,502 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:23,605 - rnaseq_pipeline - INFO - ============================================================
+2026-01-07 11:22:23,606 - rnaseq_pipeline - INFO - Pipeline Complete
+2026-01-07 11:22:23,606 - rnaseq_pipeline - INFO - Completed: 6 agents
+2026-01-07 11:22:23,606 - rnaseq_pipeline - INFO - Failed: 0 agents
+2026-01-07 11:22:23,606 - rnaseq_pipeline - INFO - Results: /Users/admin/VectorDB_BioInsight/rnaseq_pipeline/tests/test_output/run_20260107_112157
+2026-01-07 11:22:23,606 - rnaseq_pipeline - INFO - ============================================================

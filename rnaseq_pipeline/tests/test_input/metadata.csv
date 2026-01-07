@@ -1,0 +1,9 @@
+sample_id,condition,batch
+Tumor_1,tumor,batch1
+Tumor_2,tumor,batch1
+Tumor_3,tumor,batch1
+Tumor_4,tumor,batch1
+Normal_1,normal,batch2
+Normal_2,normal,batch2
+Normal_3,normal,batch2
+Normal_4,normal,batch2

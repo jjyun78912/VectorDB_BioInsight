@@ -1,0 +1,29 @@
+2026-01-07 11:22:18,952 - agent4_validation - INFO - ============================================================
+2026-01-07 11:22:18,952 - agent4_validation - INFO - Starting agent4_validation
+2026-01-07 11:22:18,952 - agent4_validation - INFO - ============================================================
+2026-01-07 11:22:18,952 - agent4_validation - INFO - Validating inputs...
+2026-01-07 11:22:18,952 - agent4_validation - INFO - Loading deg_significant.csv...
+2026-01-07 11:22:18,954 - agent4_validation - INFO -   -> 62 rows, 4 columns
+2026-01-07 11:22:18,954 - agent4_validation - INFO - Loading hub_genes.csv...
+2026-01-07 11:22:18,958 - agent4_validation - INFO -   -> 10 rows, 8 columns
+2026-01-07 11:22:18,958 - agent4_validation - INFO - Loading gene_to_pathway.csv...
+2026-01-07 11:22:18,959 - agent4_validation - INFO -   -> 20 rows, 5 columns
+2026-01-07 11:22:18,959 - agent4_validation - INFO - DEGs to validate: 62
+2026-01-07 11:22:18,959 - agent4_validation - INFO - Hub genes available: 10
+2026-01-07 11:22:18,959 - agent4_validation - INFO - Genes with pathway info: 20
+2026-01-07 11:22:18,959 - agent4_validation - INFO - Input validation passed
+2026-01-07 11:22:18,960 - agent4_validation - INFO - Running analysis...
+2026-01-07 11:22:18,960 - agent4_validation - INFO - Starting validation for cancer type: lung_cancer
+2026-01-07 11:22:18,977 - agent4_validation - INFO - Saved integrated_gene_table.csv: 62 rows
+2026-01-07 11:22:18,979 - agent4_validation - INFO - Saved db_matched_genes.csv: 17 rows
+2026-01-07 11:22:18,983 - agent4_validation - INFO - Saved interpretation_report.json
+2026-01-07 11:22:18,983 - agent4_validation - INFO - Validation & Interpretation Complete:
+2026-01-07 11:22:18,983 - agent4_validation - INFO -   Total DEGs: 62
+2026-01-07 11:22:18,983 - agent4_validation - INFO -   DB matched: 17 (27.4%)
+2026-01-07 11:22:18,983 - agent4_validation - INFO -   High confidence: 0
+2026-01-07 11:22:18,983 - agent4_validation - INFO -   Novel candidates (hub but not in DB): 7
+2026-01-07 11:22:18,983 - agent4_validation - INFO -   Requires validation: 38
+2026-01-07 11:22:18,983 - agent4_validation - INFO - Validating outputs...
+2026-01-07 11:22:18,984 - agent4_validation - INFO - Output validation passed
+2026-01-07 11:22:18,984 - agent4_validation - INFO - agent4_validation completed successfully!
+2026-01-07 11:22:18,984 - agent4_validation - INFO - Saved meta_agent4_validation.json
