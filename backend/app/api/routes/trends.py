@@ -244,7 +244,7 @@ async def get_recent_citation_velocity(keyword: str) -> float:
         if older > 0:
             return (recent / older) * 100
         return 100.0 if recent > 0 else 0.0
-    except:
+    except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as e:
         return 0.0
 
 

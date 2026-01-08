@@ -187,8 +187,8 @@ async def generate_newsletter():
                 if len(parts) > 3:
                     try:
                         issue_numbers.append(int(parts[3]))
-                    except:
-                        pass
+                    except (ValueError, IndexError) as e:
+                        pass  # Invalid filename format
             next_issue = max(issue_numbers) + 1 if issue_numbers else 1
         else:
             next_issue = 1
@@ -231,8 +231,8 @@ async def get_briefing_archive():
                     issue_number=data.get("issue_number", 0),
                     filename=filepath.name
                 ))
-            except:
-                continue
+            except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+                continue  # Skip invalid briefing files
 
         return archive
 

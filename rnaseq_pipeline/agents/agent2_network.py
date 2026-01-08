@@ -197,8 +197,8 @@ class NetworkAgent(BaseAgent):
                             subgraph = G.subgraph(component)
                             ev = nx.eigenvector_centrality(subgraph, max_iter=1000)
                             eigenvector.update(ev)
-            except:
-                eigenvector = {n: 0.0 for n in G.nodes()}
+            except (nx.PowerIterationFailedConvergence, ZeroDivisionError) as e:
+                eigenvector = {n: 0.0 for n in G.nodes()}  # Fallback on convergence failure
         else:
             eigenvector = {n: 0.0 for n in G.nodes()}
 

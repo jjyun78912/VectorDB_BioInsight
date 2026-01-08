@@ -391,8 +391,8 @@ class PubMedCollector:
                     texts.append(text_elem.text)
 
             return "\n\n".join(texts) if texts else None
-        except:
-            return None
+        except ET.ParseError as e:
+            return None  # Invalid XML format
 
     def _extract_text_from_pmc_xml(self, xml_text: str) -> Optional[str]:
         """Extract text from PMC XML format."""
@@ -408,8 +408,8 @@ class PubMedCollector:
                     texts.append(text.strip())
 
             return "\n\n".join(texts) if texts else None
-        except:
-            return None
+        except ET.ParseError as e:
+            return None  # Invalid XML format
 
     def collect_papers(self, target_count: int = 30, with_fulltext: bool = True) -> list[PaperInfo]:
         """

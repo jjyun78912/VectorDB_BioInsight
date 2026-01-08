@@ -470,8 +470,8 @@ class PaperAgent:
         """Delete the session data."""
         try:
             self.vector_store.reset()
-        except:
-            pass
+        except Exception as e:
+            pass  # Cleanup failures are non-critical
 
 
 # Session manager

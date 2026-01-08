@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest backend/tests/ -v --cov=backend/app --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: |
+          pip install flake8 black
+
+      - name: Check code formatting (black)
+        run: |
+          black --check --diff backend/ rnaseq_pipeline/ --exclude node_modules
+        continue-on-error: true
+
+      - name: Lint with flake8
+        run: |
+          # E501: line too long (relaxed for now)
+          # W503: line break before binary operator
+          flake8 backend/app/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 backend/app/ --count --exit-zero --max-line-length=120 --ignore=E501,W503 --statistics

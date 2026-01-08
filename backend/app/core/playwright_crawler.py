@@ -224,7 +224,7 @@ class PlaywrightDeepCrawler:
             # Wait for content to load
             try:
                 await page.wait_for_selector(config["wait_for"], timeout=10000)
-            except:
+            except TimeoutError:
                 pass  # Continue even if selector not found
 
             # Find PDF link
@@ -282,8 +282,8 @@ class PlaywrightDeepCrawler:
                     pdf_path = self.download_dir / filename
                     pdf_path.write_bytes(content)
                     return str(pdf_path)
-            except:
-                pass
+            except (asyncio.TimeoutError, IOError, Exception) as e:
+                pass  # PDF download failed
 
             return None
         finally:
@@ -312,8 +312,8 @@ class PlaywrightDeepCrawler:
             # Wait for content
             try:
                 await page.wait_for_selector(config["wait_for"], timeout=10000)
-            except:
-                pass
+            except TimeoutError:
+                pass  # Continue even if selector not found
 
             # Extract title
             title = ""

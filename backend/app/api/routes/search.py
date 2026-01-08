@@ -410,8 +410,8 @@ async def search_papers(
                         paper_data["keywords"] = full_data.get("keywords", [])[:10]
                         paper_data["journal"] = full_data.get("journal", "")
                         paper_data["has_fulltext"] = bool(full_data.get("full_text"))
-                except:
-                    pass
+                except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+                    pass  # Paper metadata not available
 
         # Sort by score and take top_k
         sorted_papers = sorted(
@@ -484,8 +484,8 @@ async def find_similar_papers(
                             source_paper = json.load(f)
                             source_title = source_paper.get("title", pmid)
                             source_keywords = set(source_paper.get("keywords", []))
-                    except:
-                        pass
+                    except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+                        pass  # Source paper metadata not available
 
                 # Enrich similar papers with abstracts from JSON files
                 enriched_papers = []
@@ -501,8 +501,8 @@ async def find_similar_papers(
                                 abstract = paper_data.get("abstract", "")[:300]
                                 other_keywords = set(paper_data.get("keywords", []))
                                 common_keywords = list(source_keywords & other_keywords)[:5]
-                        except:
-                            pass
+                        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
+                            pass  # Paper metadata not available
 
                     enriched_papers.append(SimilarPaper(
                         pmid=paper["pmid"],

@@ -201,8 +201,8 @@ class DEGAgent(BaseAgent):
             try:
                 _, pval = stats.ttest_ind(g1, g2)
                 pvalues.append(pval)
-            except:
-                pvalues.append(1.0)
+            except (ValueError, RuntimeWarning) as e:
+                pvalues.append(1.0)  # Assign non-significant p-value on error
 
         pvalues = np.array(pvalues)
 

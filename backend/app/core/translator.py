@@ -85,8 +85,8 @@ Translate the English text to Korean.
             if lang in ['ko', 'en', 'other']:
                 return lang
             return 'en'  # Default to English
-        except:
-            return 'en'
+        except Exception as e:
+            return 'en'  # Default to English on any error
 
     def translate_to_english(self, text: str) -> str:
         """Translate Korean text to English."""

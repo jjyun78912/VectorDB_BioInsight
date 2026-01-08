@@ -1,9 +1,62 @@
 """Configuration settings for the BioInsight RAG system."""
 import os
+import logging
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ═══════════════════════════════════════════════════════════════
+# Logging Configuration
+# ═══════════════════════════════════════════════════════════════
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv(
+    "LOG_FORMAT",
+    "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
+)
+LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def setup_logging(name: str = "bioinsight") -> logging.Logger:
+    """
+    Configure and return a logger for the application.
+
+    Args:
+        name: Logger name (usually module name)
+
+    Returns:
+        Configured logger instance
+    """
+    logger = logging.getLogger(name)
+
+    # Avoid duplicate handlers
+    if logger.handlers:
+        return logger
+
+    logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
+
+    logger.addHandler(console_handler)
+
+    # Optionally add file handler
+    log_file = os.getenv("LOG_FILE")
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+        file_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
+        logger.addHandler(file_handler)
+
+    return logger
+
+
+# Create default logger
+logger = setup_logging("bioinsight")
 
 # Paths - Navigate from backend/app/core/ to project root
 BASE_DIR = Path(__file__).parent.parent.parent.parent  # backend/app/core -> backend/app -> backend -> root

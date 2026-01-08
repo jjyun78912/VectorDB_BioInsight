@@ -33,11 +33,14 @@ from datetime import datetime, timedelta
 from urllib.parse import quote, urljoin
 import xml.etree.ElementTree as ET
 
-from .config import PAPERS_DIR, CHROMA_DIR
+from .config import PAPERS_DIR, CHROMA_DIR, setup_logging
 from .text_splitter import BioPaperSplitter, TextChunk
 from .pubmed_fulltext_crawler import get_fulltext_crawler
 from .core_paper_reranker import CorePaperReranker, get_reranker
 from .lens_classifier import LensClassifier, get_lens_classifier, Lens
+
+# Module logger
+logger = setup_logging(__name__)
 
 
 # API Endpoints
@@ -387,7 +390,7 @@ class WebCrawlerAgent:
         try:
             data = await self._fetch_json(session, PUBMED_SEARCH_URL, params)
             return int(data.get("esearchresult", {}).get("count", 0))
-        except:
+        except (aiohttp.ClientError, KeyError, ValueError, TypeError) as e:
             return 0
 
     async def calculate_publication_surge(
@@ -450,7 +453,7 @@ class WebCrawlerAgent:
         try:
             surge = await self.calculate_publication_surge(session, keywords)
         except Exception as e:
-            print(f"Surge calculation failed for {category}: {e}")
+            logger.warning(f"Surge calculation failed for {category}: {e}")
             surge = 1.0  # Default to neutral surge
 
         # Cache the result
@@ -491,7 +494,7 @@ class WebCrawlerAgent:
                 await self._rate_limit("crossref")
                 paper = await self._fetch_from_crossref(session, doi)
             except Exception as e:
-                print(f"CrossRef fetch failed: {e}")
+                logger.warning(f"CrossRef fetch failed: {e}")
 
             # Enrich with Semantic Scholar (citations, references)
             if paper:
@@ -499,7 +502,7 @@ class WebCrawlerAgent:
                     await self._rate_limit("semantic_scholar")
                     paper = await self._enrich_with_semantic_scholar(session, paper)
                 except Exception as e:
-                    print(f"Semantic Scholar enrichment failed: {e}")
+                    logger.warning(f"Semantic Scholar enrichment failed: {e}")
 
             # Try Semantic Scholar as primary if CrossRef failed
             if not paper:
@@ -507,7 +510,7 @@ class WebCrawlerAgent:
                     await self._rate_limit("semantic_scholar")
                     paper = await self._fetch_from_semantic_scholar(session, doi)
                 except Exception as e:
-                    print(f"Semantic Scholar fetch failed: {e}")
+                    logger.warning(f"Semantic Scholar fetch failed: {e}")
 
             return paper
 
@@ -953,7 +956,7 @@ class WebCrawlerAgent:
                 if paper:
                     papers.append(paper)
         except ET.ParseError as e:
-            print(f"XML parse error: {e}")
+            logger.error(f"XML parse error: {e}")
 
         return papers
 
@@ -1138,8 +1141,8 @@ class WebCrawlerAgent:
                     try:
                         await self._rate_limit("semantic_scholar")
                         paper = await self._enrich_with_semantic_scholar(session, paper)
-                    except:
-                        pass
+                    except (aiohttp.ClientError, asyncio.TimeoutError, KeyError) as e:
+                        pass  # Enrichment is optional, continue without it
 
                 # Recalculate scores with new data (velocity + surge)
                 paper._calculate_scores()
@@ -1174,7 +1177,7 @@ class WebCrawlerAgent:
                 )
                 results[category] = papers
             except Exception as e:
-                print(f"Error fetching {category}: {e}")
+                logger.error(f"Error fetching {category}: {e}")
                 results[category] = []
 
         return results
@@ -1239,7 +1242,7 @@ class WebCrawlerAgent:
                 if paper:
                     results.append(paper)
             except Exception as e:
-                print(f"Error fetching DOI {doi}: {e}")
+                logger.error(f"Error fetching DOI {doi}: {e}")
 
         return results
 
@@ -1306,7 +1309,7 @@ class WebCrawlerAgent:
                 return papers
 
             except Exception as e:
-                print(f"Error finding similar papers: {e}")
+                logger.error(f"Error finding similar papers: {e}")
                 # Fallback to keyword search
                 return await self._fallback_similar_search(session, pmid, max_results)
 
@@ -1344,7 +1347,7 @@ class WebCrawlerAgent:
             return papers
 
         except Exception as e:
-            print(f"Fallback similar search failed: {e}")
+            logger.warning(f"Fallback similar search failed: {e}")
             return []
 
     # ==================== Full Text Retrieval ====================
@@ -1403,10 +1406,10 @@ class FullTextFetcher:
                 try:
                     result = await strategy_func(arg)
                     if result and len(result) > 500:
-                        print(f"Successfully fetched full text via {name}")
+                        logger.info(f"Successfully fetched full text via {name}")
                         return result
                 except Exception as e:
-                    print(f"{name} failed: {e}")
+                    logger.debug(f"{name} failed: {e}")
 
         # Try to get PMCID from DOI if needed
         if doi and not pmcid:
@@ -1417,7 +1420,7 @@ class FullTextFetcher:
                 if paper and paper.pmcid:
                     return await self.fetch(pmcid=paper.pmcid, use_playwright=False)
             except Exception as e:
-                print(f"DOI to PMCID lookup failed: {e}")
+                logger.warning(f"DOI to PMCID lookup failed: {e}")
 
         # Last resort: Playwright
         if use_playwright and pmid:
@@ -1426,7 +1429,7 @@ class FullTextFetcher:
                 if result:
                     return result
             except Exception as e:
-                print(f"PubMed links fetch failed: {e}")
+                logger.warning(f"PubMed links fetch failed: {e}")
 
         return None
 
@@ -1501,7 +1504,7 @@ class FullTextFetcher:
             return None
 
         except Exception as e:
-            print(f"PMC OA fetch error: {e}")
+            logger.warning(f"PMC OA fetch error: {e}")
             return None
 
     async def _fetch_from_europe_pmc(
@@ -1532,7 +1535,7 @@ class FullTextFetcher:
                 return self._parse_pmc_xml(xml_text)
 
         except Exception as e:
-            print(f"Europe PMC fetch error: {e}")
+            logger.warning(f"Europe PMC fetch error: {e}")
             return None
 
     def _parse_pmc_xml(self, xml_text: str) -> str:
@@ -1593,7 +1596,7 @@ class FullTextFetcher:
             return full_text.strip() if len(full_text) > 100 else None
 
         except ET.ParseError as e:
-            print(f"XML parse error: {e}")
+            logger.error(f"XML parse error: {e}")
             return None
 
     async def _fetch_from_unpaywall(self, session: aiohttp.ClientSession, doi: str) -> Optional[str]:
@@ -1628,7 +1631,7 @@ class FullTextFetcher:
                         return await self._fetch_from_europe_pmc(session, None, f"PMC{pmcid_match.group(1)}")
 
                 # If it's a direct PDF/HTML, we need Playwright to extract
-                print(f"Unpaywall found OA version: {oa_url}")
+                logger.info(f"Unpaywall found OA version: {oa_url}")
 
                 # Try to fetch if it's XML/HTML
                 if not oa_url.endswith('.pdf'):
@@ -1639,13 +1642,13 @@ class FullTextFetcher:
                                 if 'xml' in content_type:
                                     xml_text = await oa_response.text()
                                     return self._parse_pmc_xml(xml_text)
-                    except:
-                        pass
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                        pass  # OA fetch failed, continue to next option
 
                 return None
 
         except Exception as e:
-            print(f"Unpaywall fetch error: {e}")
+            logger.warning(f"Unpaywall fetch error: {e}")
             return None
 
     async def _fetch_via_pubmed_links(self, pmid: str) -> Optional[str]:
@@ -1668,7 +1671,7 @@ class FullTextFetcher:
                 if not publisher_url:
                     return None
 
-                print(f"Found publisher link: {publisher_url}")
+                logger.info(f"Found publisher link: {publisher_url}")
 
                 # Extract full text from publisher site
                 result = await crawler.extract_full_text(publisher_url)
@@ -1687,7 +1690,7 @@ class FullTextFetcher:
         except ImportError:
             return None
         except Exception as e:
-            print(f"PubMed links fetch error: {e}")
+            logger.warning(f"PubMed links fetch error: {e}")
             return None
 
     async def _get_pubmed_fulltext_link(self, crawler, pubmed_url: str) -> Optional[str]:
@@ -1726,7 +1729,7 @@ class FullTextFetcher:
                 await page.close()
 
         except Exception as e:
-            print(f"Error getting PubMed full text link: {e}")
+            logger.warning(f"Error getting PubMed full text link: {e}")
             return None
 
 

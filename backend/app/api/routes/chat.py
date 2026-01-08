@@ -889,8 +889,8 @@ Content:
                     seen_titles.add(paper_title)
 
             related_papers = related_papers[:3]
-        except:
-            pass
+        except Exception as e:
+            pass  # Related papers search is optional
 
         return PaperAnalysis(
             pmid=request.pmid,

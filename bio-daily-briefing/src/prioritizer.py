@@ -147,8 +147,8 @@ class NewsPrioritizer:
                     score += 20
                 elif days_old <= 3:
                     score += 10
-            except:
-                pass
+            except (ValueError, TypeError) as e:
+                pass  # Invalid date format
 
         return score
 

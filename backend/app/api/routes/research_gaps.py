@@ -212,7 +212,7 @@ async def get_pubmed_count(query: str) -> int:
                 match = re.search(r'<Count>(\d+)</Count>', response.text)
                 return int(match.group(1)) if match else 0
             return 0
-    except:
+    except (httpx.HTTPError, asyncio.TimeoutError, ValueError) as e:
         return 0
 
 
