@@ -6,277 +6,480 @@
 **BioInsight AI** - 바이오·헬스케어 연구자를 위한 AI 기반 통합 연구 지원 플랫폼
 
 ### 1.2 제품 비전
-바이오 연구자들이 데이터 분석, 문헌 해석, 예측 모델링을 하나의 플랫폼에서 수행할 수 있도록 하여, 연구 생산성을 혁신적으로 향상시키는 차세대 연구 지원 도구
+바이오 연구자들이 논문 분석, 데이터 해석, 예측 모델링을 하나의 플랫폼에서 수행할 수 있도록 하여, 연구 생산성을 혁신적으로 향상시키는 차세대 연구 지원 도구
 
 ### 1.3 핵심 가치 제안
-> "단순 분석 툴이 아니라, 데이터 분석 + 논문 지식 통합 + ML 실험까지 일괄 제공하는 최초의 바이오 AI 플랫폼"
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  BioInsight AI = 연구의 모든 단계를 지원                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  📚 논문 발견  →  🔬 데이터 분석  →  💡 해석 지원           │
+│                                                             │
+│  • Paper RAG        • RNA-seq        • RAG 해석            │
+│  • 실시간 검색      • Proteomics     • ML 예측             │
+│  • 트렌딩 논문      • Genomics       • Guardrail           │
+│  • 일일 브리핑      • Drug Discovery                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1.4 핵심 철학
+
+> **"연구자의 발견을 가속화하되, 판단은 연구자에게"**
+
+BioInsight AI는 연구자가 더 빠르게 정보를 찾고, 더 깊이 분석하고, 더 넓은 맥락에서 해석할 수 있도록 돕습니다. 그러나 최종 판단과 결론은 항상 연구자의 몫입니다.
+
+**4대 핵심 가치**:
+
+| 가치 | 설명 | 적용 예시 |
+|------|------|----------|
+| **정보 접근성** | 흩어진 정보를 한 곳에서, 언어 장벽 해소 | 논문 검색, 한국어 요약 |
+| **분석 자동화** | 반복 작업 대행, 연구자는 해석에 집중 | RNA-seq 파이프라인 |
+| **맥락적 해석** | 기존 지식과 연결, 근거 기반 해석 | RAG, PMID 인용 |
+| **불확실성 투명성** | 한계 명시, 과도한 확신 방지 | Guardrail, 경고문 |
 
 ---
 
 ## 2. 타겟 사용자
 
-| 사용자 유형 | 특성 | 주요 니즈 |
-|------------|------|----------|
-| 대학/연구소 연구원 | Wet Lab 중심, 코딩 경험 제한적 | 쉬운 데이터 분석, 논문 해석 지원 |
-| 바이오 스타트업 | 빠른 결과 도출 필요, 리소스 제한 | 비용 효율적인 분석 도구 |
-| 제약사 R&D | 대규모 데이터, 규제 준수 필요 | 신뢰성 있는 분석, 재현성 |
+### 2.1 사용자 유형
 
----
+| 유형 | 특성 | 주요 니즈 | 주로 쓰는 기능 |
+|------|------|----------|---------------|
+| **대학원생/박사후** | 논문 작성 중 | 논문 검색, 해석 지원 | Paper RAG, 검색 |
+| **Wet Lab 연구자** | 실험 데이터 보유 | 데이터 해석, 논문 근거 | RNA-seq, RAG 해석 |
+| **임상 연구자** | 환자 샘플 보유 | 빠른 예측, 분류 | ML 예측 |
+| **바이오인포 연구자** | 분석 전문가 | 고급 분석 도구 | 전체 파이프라인 |
+| **제약사 연구원** | 약물 개발 | 타겟 발굴, 스크리닝 | Drug Discovery |
 
-## 3. 문제 정의
+### 2.2 주요 사용 시나리오
 
-### 3.1 연구자 Pain Points
-
-| 문제 영역 | 구체적 상황 | 영향 |
-|----------|------------|------|
-| 논문 해석 부담 | 복잡한 구조, 전문 용어로 1편당 2-4시간 소요 | 연구 시간 50% 이상 문헌 리뷰에 소모 |
-| RNA-seq 분석 장벽 | DESeq2, apeglm 등 전문 도구 러닝커브 | Wet Lab 연구자의 데이터 활용 제한 |
-| 정보 통합 부재 | 논문, DEG 결과, pathway 연결 도구 없음 | 단편적 분석, 인사이트 도출 어려움 |
-| 정보 과부하 | PubMed 매일 수백 편 신규 논문 | 최신 연구 트렌드 파악 불가 |
-
-### 3.2 기존 솔루션 한계
-
-| 기존 도구 | 제공 기능 | 미비점 |
-|----------|----------|--------|
-| DESeq2 | DE 통계 분석 | ML 없음, 코딩 필수 |
-| GEO2R | 웹 기반 DE 분석 | ML/논문 해석 없음 |
-| Galaxy | 워크플로우 기반 NGS | 논문 지식 통합 없음 |
-| Tempus/Owkin | AI 정밀의료 | 일반 연구자 접근 불가 |
-
----
-
-## 4. 기능 요구사항
-
-### 4.1 논문 분석 모듈 (Paper Analysis)
-
-#### 4.1.1 PDF 업로드 및 파싱
-- **기능**: PDF 업로드 시 자동으로 제목/초록/본문 구조 구분
-- **입력**: PDF 파일 (최대 50MB)
-- **출력**: 구조화된 논문 데이터 (JSON 형식)
-- **우선순위**: P0 (필수)
-
-#### 4.1.2 문헌 임베딩 생성
-- **기능**: PubMedBERT 기반 벡터 임베딩 생성
-- **목적**: 유사 논문 검색, 의미 기반 Q&A 지원
-- **우선순위**: P0 (필수)
-
-#### 4.1.3 핵심 요약 및 Q&A
-- **기능**: LLM 기반 논문 핵심 내용 요약 및 질의응답
-- **요약 항목**: 연구 목적, 방법론, 주요 결과, 결론
-- **우선순위**: P0 (필수)
-
-#### 4.1.4 유사 논문 추천
-- **기능**: ChromaDB 벡터 검색 기반 관련 논문 추천
-- **출력**: Top 10 유사 논문 리스트 (제목, 저자, 유사도 점수)
-- **우선순위**: P1 (중요)
-
-### 4.2 RNA-seq 분석 모듈 (RNA-seq Analysis)
-
-#### 4.2.1 데이터 업로드
-- **기능**: Count Matrix 및 Metadata 파일 업로드
-- **지원 형식**: CSV, TSV, Excel
-- **검증**: 데이터 무결성 검사, 샘플-메타데이터 매칭 확인
-- **우선순위**: P0 (필수)
-
-#### 4.2.2 DESeq2 자동 분석
-- **기능**: R DESeq2 기반 Differential Expression 분석 자동 수행
-- **포함 기능**:
-  - 정규화 (TPM, FPKM, VST)
-  - Batch Correction (ComBat, Limma)
-  - apeglm/ashr 기반 로그폴드 조정
-- **우선순위**: P0 (필수)
-
-#### 4.2.3 시각화 자동 생성
-- **기능**: 분석 결과 시각화 자동 생성
-- **차트 유형**:
-  - Volcano Plot (DEG 분포)
-  - PCA Plot (샘플 클러스터링)
-  - Heatmap (발현 패턴)
-- **우선순위**: P0 (필수)
-
-#### 4.2.4 Pathway/GO 분석
-- **기능**: clusterProfiler 연동 기능 해석 분석
-- **출력**: 
-  - KEGG Pathway Enrichment
-  - GO Term Enrichment (BP, MF, CC)
-- **우선순위**: P1 (중요)
-
-### 4.4 AI 연구 어시스턴트 (Research Assistant)
-
-#### 4.4.1 RNA-seq → 질병 연관성 분석 ⭐ 핵심 기능
-- **기능**: RNA-seq 데이터 업로드 → DEG 식별 → 각 유전자의 질병 연관성 자동 검색
-- **출력 예시**:
+**시나리오 1: 논문 작성 중인 대학원생**
 ```
-  Gene: TP53 ↑ 3.2x (p < 0.001)
-  ├─ Li-Fraumeni Syndrome     Score: 0.95 [OMIM]
-  ├─ Hepatocellular Carcinoma Score: 0.87 [TCGA]
-  └─ Therapeutic: p53 reactivators (APR-246)
+"이 유전자에 대한 최신 논문 찾아줘"
+→ Real-time Search + Paper RAG
+→ 관련 논문 요약 + Q&A
 ```
-- **데이터 소스**: DisGeNET, OMIM, ClinVar, COSMIC, TCGA
-- **우선순위**: P0 (필수)
 
-#### 4.4.2 통합 Q&A 챗봇
-- **기능**: 논문 + DEG + 질병 연관성 종합 답변 (RAG 기반)
-- **지원 질문 예시**:
-  - "TP53이 상향 발현되면 어떤 질병과 관련있나?"
-  - "내 DEG 중 치료 타겟이 있는 유전자는?"
-  - "BRCA1과 관련된 최신 논문 요약해줘"
-- **기술**: GROBID + Docling → ChromaDB → Claude
-- **우선순위**: P1 (중요)
+**시나리오 2: DEG 결과를 해석해야 하는 연구자**
+```
+"RNA-seq 결과가 나왔는데 어떻게 해석해야 하지?"
+→ RNA-seq Pipeline + RAG 해석
+→ 논문 기반 해석 + Gene Status Cards
+```
 
-#### 4.4.3 실험 아이디어 제안
-- **기능**: 분석 결과 기반 후속 실험/연구 방향 제안
-- **예시**:
-  - "EGFR 상향 + KRAS 변이 → TKI 저항성 가능성, MET 억제제 병용 고려"
-  - "DNA repair pathway enrichment → PARP 억제제 감수성 확인 실험 제안"
-- **우선순위**: P2 (권장)
+**시나리오 3: 새 환자 샘플을 분류해야 하는 임상 연구자**
+```
+"이 샘플이 어떤 암 유형인지 빠르게 파악하고 싶어"
+→ ML 예측 (CatBoost)
+→ 즉시 분류 + TCGA 비교
+```
 
 ---
 
-## 5. 비기능 요구사항
+## 3. 기능 구성
 
-### 5.1 성능 요구사항
-| 항목 | 요구사항 |
-|------|----------|
-| 논문 분석 | 1편당 30초 이내 |
-| RNA-seq 분석 | 10,000 유전자 기준 5분 이내 |
-| ML 모델 학습 | 1,000 샘플 기준 10분 이내 |
-| API 응답시간 | 95% 요청 2초 이내 |
-
-### 5.2 보안 요구사항
-- 사용자 데이터 암호화 (전송 중 TLS 1.3, 저장 시 AES-256)
-- 개인정보 처리 GDPR/PIPA 준수
-- 역할 기반 접근 제어 (RBAC)
-
-### 5.3 확장성 요구사항
-- 동시 사용자 1,000명 이상 지원
-- 수평적 확장 가능한 아키텍처
-
----
-
-## 6. 기술 아키텍처
-
-### 6.1 기술 스택
-
-| 레이어 | 기술 |
-|--------|------|
-| Backend | Python, FastAPI, rpy2, sklearn, XGBoost |
-| Frontend | Streamlit (MVP) → React + Tailwind (정식) |
-| Database | PostgreSQL, ChromaDB |
-| AI/ML | PubMedBERT/BioBERT, GPT-4o/Claude, LangChain |
-| 인프라 | AWS/GCP, Docker, CI/CD |
-
-### 6.2 시스템 구성도
+### 3.1 플랫폼 구조
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Frontend                             │
-│              (Streamlit MVP / React 정식)                    │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    API Gateway                              │
-│                     (FastAPI)                               │
-└────┬────────────┬────────────┬────────────┬─────────────────┘
-     │            │            │            │
-     ▼            ▼            ▼            ▼
-┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────────┐
-│ Paper   │ │ RNA-seq │ │   ML    │ │   AI        │
-│ Analysis│ │ Analysis│ │ Predict │ │ Assistant   │
-│ Service │ │ Service │ │ Service │ │   Service   │
-└────┬────┘ └────┬────┘ └────┬────┘ └──────┬──────┘
-     │            │            │            │
-     └────────────┴────────────┴────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Data Layer                               │
-│     PostgreSQL (결과)  │  ChromaDB (임베딩)  │  S3 (파일)   │
+│  BioInsight AI                                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  CORE FEATURES (핵심 기능)                          │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │                                                     │   │
+│  │  [1] Paper RAG           [2] Real-time Search      │   │
+│  │      • PDF 업로드            • PubMed 검색         │   │
+│  │      • 임베딩/인덱싱         • bioRxiv 검색        │   │
+│  │      • 요약/Q&A              • 트렌딩 논문         │   │
+│  │                                                     │   │
+│  │  [3] Knowledge Graph     [4] Daily Briefing        │   │
+│  │      • 3D 시각화             • AI 뉴스 다이제스트  │   │
+│  │      • 관계 탐색             • 한국어/영어 지원    │   │
+│  │                                                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  ANALYSIS MODULES (분석 모듈)                       │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │                                                     │   │
+│  │  [A] RNA-seq Pipeline    [B] Proteomics            │   │
+│  │      • 6-Agent 분석          • MS 데이터 분석      │   │
+│  │      • ML 예측 (CatBoost)    • PPI 네트워크        │   │
+│  │      • RAG 해석                                     │   │
+│  │      • GRNFormer                                    │   │
+│  │                                                     │   │
+│  │  [C] Genomics            [D] Drug Discovery        │   │
+│  │      • 변이 분석             • 타겟 발굴           │   │
+│  │      • 임상적 해석           • 리포지셔닝          │   │
+│  │                                                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 7. 사용자 플로우
+### 3.2 Core Features (핵심 기능) - ✅ 완료
 
-### 7.1 논문 분석 Flow
+#### 3.2.1 Paper RAG
+
+| 항목 | 내용 |
+|------|------|
+| **기능** | PDF 업로드 → 임베딩 → 요약 → Q&A |
+| **기술** | PubMedBERT, ChromaDB, LLM |
+| **상태** | ✅ 완료 |
+
+**사용자 플로우**:
 ```
-PDF 업로드 → 자동 파싱 → 임베딩 생성 → 요약/Q&A → 유사 논문 추천
+PDF 업로드 → 텍스트 추출 → 청킹 → 임베딩 → 저장
+                                          ↓
+        사용자 질문 → 검색 → LLM 답변 생성 ← 관련 청크
 ```
 
-### 7.2 RNA-seq 분석 Flow
+#### 3.2.2 Real-time Search
+
+| 항목 | 내용 |
+|------|------|
+| **기능** | PubMed, bioRxiv, Semantic Scholar 실시간 검색 |
+| **기술** | PubMed E-utilities, CrossRef API |
+| **상태** | ✅ 완료 |
+
+**지원 소스**:
+- PubMed (메타데이터, 초록)
+- bioRxiv (프리프린트)
+- Semantic Scholar (유사 논문, 인용)
+- CrossRef (DOI 메타데이터)
+
+#### 3.2.3 Knowledge Graph
+
+| 항목 | 내용 |
+|------|------|
+| **기능** | 논문/유전자/질병 관계 3D 시각화 |
+| **기술** | react-force-graph-3d |
+| **상태** | ✅ 완료 |
+
+#### 3.2.4 Daily Briefing
+
+| 항목 | 내용 |
+|------|------|
+| **기능** | AI 기반 연구 뉴스 다이제스트 |
+| **소스** | bioRxiv, ClinicalTrials, FDA |
+| **상태** | ✅ 완료 |
+
+---
+
+### 3.3 Analysis Modules (분석 모듈)
+
+#### 3.3.1 Module A: RNA-seq Pipeline
+
+**Status**: 6-Agent 파이프라인 ✅ 완료, ML/RAG 📋 예정
+
+**Architecture**:
+
 ```
-데이터 업로드 → 품질 검사 → DESeq2 분석 → 시각화 → Pathway 분석 → ML 예측 → 리포트
+┌─────────────────────────────────────────────────────────────┐
+│  사용자 데이터 업로드                                       │
+│  (Count Matrix + Metadata)                                  │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  6-AGENT PIPELINE                           ✅ 완료        │
+├─────────────────────────────────────────────────────────────┤
+│  [Agent 1] DESeq2 → DEG 분석                ✅             │
+│  [Agent 2] Network → Hub gene 탐지          ✅             │
+│  [Agent 3] Pathway → GO/KEGG enrichment     ✅             │
+│  [Agent 4] DB 검증 (DisGeNET, OMIM, COSMIC) ✅             │
+│  [Agent 5] 시각화 (Volcano, Heatmap, etc.)  ✅             │
+│  [Agent 6] HTML 리포트 생성                 ✅             │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│  확장 모듈 (예정)                           📋             │
+├─────────────────────────────────────────────────────────────┤
+│  [ML] CatBoost + SHAP (샘플 분류)           📋             │
+│  [ML] GRNFormer (유전자 교란 예측)          📋             │
+│  [RAG] 논문 기반 해석                       📋             │
+│  [Guardrail] 불확실성 명시                  📋             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 7.3 통합 분석 Flow
+**현재 구현 상태**:
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| 6-Agent Pipeline | ✅ 완료 | `rnaseq_pipeline/agents/` |
+| Orchestrator | ✅ 완료 | `rnaseq_pipeline/orchestrator.py` |
+| API 통합 | 📋 예정 | 미구현 |
+| ML 예측 | 📋 예정 | 미구현 |
+| RAG 해석 | 📋 예정 | 미구현 |
+| Guardrail | 📋 예정 | 미구현 |
+
+**예정 ML Components**:
+
+| Component | Purpose | Hardware | Status |
+|-----------|---------|----------|--------|
+| CatBoost + SHAP | 샘플 분류, 중요 유전자 | CPU | 📋 예정 |
+| GRNFormer | 유전자 교란 예측 | GPU (온디맨드) | 📋 예정 |
+
+**예정 Pre-trained Models** (TCGA 기반):
+
+| Cancer Type | Samples | Status |
+|-------------|---------|--------|
+| Pancreatic (PAAD) | ~350 | 📋 예정 |
+| Lung (LUAD/LUSC) | ~1,000 | 📋 예정 |
+| Breast (BRCA) | ~1,200 | 📋 예정 |
+| Multi-cancer | ~11,000 | 📋 예정 |
+
+#### 3.3.2 Module B: Proteomics 📋
+
+**Status**: 예정
+
+**계획**:
+- MS 데이터 분석
+- Protein-Protein Interaction (PPI) 네트워크
+- Pathway enrichment
+
+#### 3.3.3 Module C: Genomics 📋
+
+**Status**: 예정
+
+**계획**:
+- VCF 파일 분석
+- 변이 주석 (ANNOVAR, VEP)
+- 임상적 의미 해석 (ClinVar)
+
+#### 3.3.4 Module D: Drug Discovery 📋
+
+**Status**: 예정
+
+**계획**:
+- Drug-Target 데이터베이스 연동
+- 분자 도킹 시뮬레이션
+- ADMET 예측
+
+---
+
+## 4. 기대 효과 vs 기대하지 않는 것
+
+### 4.1 기대하는 것 ⭕
+
+| 효과 | 설명 |
+|------|------|
+| 논문 검색 시간 단축 | 실시간 검색 + AI 요약 |
+| 데이터 해석 지원 | RAG 기반 논문 근거 제공 |
+| 새 샘플 즉시 분류 | 사전 학습 ML 모델 |
+| 연구 동향 파악 | Daily Briefing |
+| 맹신 방지 | Guardrail로 한계 명시 |
+
+### 4.2 기대하지 않는 것 ❌
+
+| 항목 | 이유 |
+|------|------|
+| 진단 대체 | ML 예측은 참고용 |
+| 인과관계 확정 | 통계적 연관성만 |
+| 연구자 대체 | 최종 판단은 사용자 |
+| 모든 분석 자동화 | 전문가 검토 필요 |
+
+---
+
+## 5. 기술 아키텍처
+
+### 5.1 기술 스택
+
+| 레이어 | 기술 |
+|--------|------|
+| **Backend** | Python 3.11+, FastAPI |
+| **Frontend** | React + Vite + Tailwind |
+| **Database** | PostgreSQL, ChromaDB |
+| **AI/ML** | Claude, Gemini, CatBoost, SHAP, GRNFormer |
+| **Embeddings** | PubMedBERT, BioBERT |
+| **RAG** | LangChain |
+| **Visualization** | react-force-graph-3d |
+
+### 5.2 프로젝트 구조
+
 ```
-DEG/Pathway 결과 → 관련 문헌 매칭 → 기존 연구 비교 → 인사이트 자동 생성
+VectorDB_BioInsight/
+├── backend/
+│   └── app/
+│       ├── main.py
+│       ├── api/routes/
+│       │   ├── paper.py               # ✅
+│       │   ├── search.py              # ✅
+│       │   ├── chat.py                # ✅
+│       │   ├── crawler.py             # ✅
+│       │   ├── graph.py               # ✅
+│       │   ├── briefing.py            # ✅
+│       │   ├── trends.py              # ✅
+│       │   ├── dynamic_trends.py      # ✅
+│       │   ├── citations.py           # ✅
+│       │   └── research_gaps.py       # ✅
+│       └── core/
+│           ├── pdf_parser.py
+│           ├── embeddings.py
+│           ├── vector_store.py
+│           ├── rag_pipeline.py
+│           └── web_crawler_agent.py
+├── frontend/
+│   └── react_app/
+│       ├── components/
+│       │   ├── Hero.tsx
+│       │   ├── KnowledgeGraph.tsx
+│       │   ├── TrendingPapers.tsx
+│       │   ├── BioResearchDaily.tsx
+│       │   └── DailyBriefing.tsx
+│       └── services/
+├── bio-daily-briefing/
+│   └── src/
+│       ├── aggregator.py
+│       ├── newsletter_v2.py
+│       ├── trend_analyzer.py
+│       ├── prioritizer.py
+│       ├── ai_summarizer.py
+│       └── sources/
+├── rnaseq_pipeline/                   # ✅ 6-Agent 완료
+│   ├── orchestrator.py
+│   ├── agents/
+│   │   ├── agent1_deg.py
+│   │   ├── agent2_network.py
+│   │   ├── agent3_pathway.py
+│   │   ├── agent4_validation.py
+│   │   ├── agent5_visualization.py
+│   │   └── agent6_report.py
+│   └── utils/
+#   ├── ml/                            # 📋 예정
+#   ├── rag/                           # 📋 예정
+#   └── guardrail/                     # 📋 예정
+├── chroma_db/
+├── data/
+└── scripts/
 ```
 
 ---
 
-## 8. 기대 효과
+## 6. 데이터 소스
 
-### 8.1 정량적 효과
+### 6.1 논문/지식
 
-| 지표 | 기존 방식 | BioInsight AI | 개선율 |
-|------|----------|---------------|--------|
-| 논문 분석 시간 | 2-4시간 | 10-30분 | 80-90% 단축 |
-| RNA-seq 분석 | 1-2주 | 수 시간 | 90% 이상 단축 |
-| ML 모델 구축 | 전문가 필요 | 자동 생성 | - |
+| Source | Purpose | Volume |
+|--------|---------|--------|
+| PubMed | 논문 메타데이터 | 3,500만+ |
+| bioRxiv | 프리프린트 | 25만+ |
+| Semantic Scholar | 인용 관계 | - |
 
-### 8.2 정성적 효과
-- 연구 생산성 향상
-- 디지털 전환 가속
-- 연구 품질 향상
-- AI 연구 조력자 역할
+### 6.2 유전자/질병
 
----
-
-## 9. 개발 로드맵
-
-| 단계 | 기간 | 목표 | 주요 산출물 |
-|------|------|------|------------|
-| Phase 1 | 1-3개월 | MVP 개발 | Streamlit 프로토타입 |
-| Phase 2 | 4-6개월 | Beta 출시 | React UI, 파이프라인 통합 |
-| Phase 3 | 7-12개월 | 정식 출시 | 고급 기능, Enterprise 버전 |
+| Source | Purpose | Volume |
+|--------|---------|--------|
+| TCGA | 암 RNA-seq | ~11,000명 |
+| GEO | 공개 발현 데이터 | 수만 |
+| GTEx | 정상 조직 발현 | ~17,000명 |
+| DisGeNET | 유전자-질병 연관 | 100만+ |
+| OMIM | 유전 질환 | 16,000+ |
 
 ---
 
-## 10. 성공 지표 (KPIs)
+## 7. 개발 로드맵
 
-| 카테고리 | 지표 | 목표 (Phase 2) |
-|----------|------|----------------|
-| 사용자 | MAU | 500명 |
-| 사용자 | 리텐션 (D30) | 40% |
-| 제품 | 분석 완료율 | 80% |
-| 제품 | 평균 분석 시간 | 목표 대비 100% |
-| 비즈니스 | NPS | 40점 이상 |
+### Phase 1: Core Features ✅ 완료
+
+| 기능 | 상태 |
+|------|------|
+| Paper RAG | ✅ |
+| Real-time Search | ✅ |
+| Knowledge Graph | ✅ |
+| Daily Briefing | ✅ |
+
+### Phase 2: RNA-seq Module
+
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| 6-Agent Pipeline | ✅ 완료 | `rnaseq_pipeline/` |
+| Orchestrator | ✅ 완료 | 파이프라인 조율 |
+| API 통합 | 📋 예정 | FastAPI 엔드포인트 |
+| TCGA 데이터 수집 | 📋 예정 | Pre-trained 모델용 |
+| CatBoost 모델 학습 | 📋 예정 | 샘플 분류 |
+| SHAP 해석 | 📋 예정 | 피처 중요도 |
+| RAG 해석 | 📋 예정 | 논문 기반 |
+| Guardrail | 📋 예정 | 불확실성 명시 |
+| GRNFormer | 📋 예정 | 유전자 교란 |
+| Gene Status Cards | 📋 예정 | 리포트 확장 |
+
+### Phase 3: Additional Modules 📋 예정
+
+| 모듈 | 예상 기간 |
+|------|----------|
+| Proteomics | 8주 |
+| Genomics | 8주 |
+| Drug Discovery | 12주 |
 
 ---
 
-## 11. 리스크 및 대응 방안
+## 8. 성공 지표 (KPIs)
 
-| 리스크 | 영향도 | 발생 확률 | 대응 방안 |
-|--------|--------|----------|----------|
-| LLM API 비용 증가 | 높음 | 중간 | 캐싱, 로컬 모델 검토 |
-| 분석 정확도 이슈 | 높음 | 낮음 | 전문가 검증, 벤치마크 |
-| 데이터 보안 우려 | 높음 | 낮음 | 온프레미스 옵션 제공 |
-| 경쟁 서비스 출현 | 중간 | 중간 | 차별화 기능 강화 |
+### Core Features
+
+| 지표 | 목표 |
+|------|------|
+| 논문 검색 응답 시간 | < 3초 |
+| Paper RAG 정확도 | > 80% |
+| DAU | 100명 |
+| MAU | 500명 |
+
+### Analysis Modules
+
+| 지표 | 목표 |
+|------|------|
+| RNA-seq 파이프라인 | < 10분 |
+| ML 예측 AUC | > 0.90 |
+| 불확실성 명시율 | 100% |
 
 ---
 
-## 12. 부록
+## 9. 리스크 및 대응
 
-### 12.1 용어 정의
-- **DEG**: Differentially Expressed Gene (차등발현유전자)
-- **Pathway**: 생물학적 신호전달 경로
-- **GO**: Gene Ontology (유전자 기능 분류 체계)
-- **RAG**: Retrieval-Augmented Generation
+| 리스크 | 영향도 | 대응 |
+|--------|--------|------|
+| LLM Hallucination | 높음 | Guardrail, PMID 검증 |
+| ML 과적합 | 높음 | CatBoost, Cross-validation |
+| 사용자 맹신 | 높음 | 경고문, 한계 명시 |
+| 데이터 편향 | 중간 | 다양한 데이터 소스 |
 
-### 12.2 참고 자료
-- DESeq2 Documentation
-- PubMedBERT Paper
-- LangChain Documentation
+---
+
+## 10. 부록
+
+### 10.1 용어 정의
+
+| 용어 | 정의 |
+|------|------|
+| **RAG** | Retrieval-Augmented Generation |
+| **DEG** | Differentially Expressed Gene |
+| **SHAP** | SHapley Additive exPlanations |
+| **GRNFormer** | Gene Regulatory Network Transformer |
+| **Guardrail** | 과도한 해석 방지 안전장치 |
+
+### 10.2 질병 도메인
+
+| Key | Name | Korean |
+|-----|------|--------|
+| `pancreatic_cancer` | Pancreatic Cancer | 췌장암 |
+| `lung_cancer` | Lung Cancer | 폐암 |
+| `breast_cancer` | Breast Cancer | 유방암 |
+| `blood_cancer` | Blood Cancer | 혈액암 |
+| `glioblastoma` | Glioblastoma | 교모세포종 |
+| `alzheimer` | Alzheimer's Disease | 알츠하이머 |
+
+### 10.3 변경 이력
+
+| 버전 | 날짜 | 변경 사항 |
+|------|------|-----------|
+| 1.0 | 2024.12 | 초안 작성 |
+| 2.0 | 2025.01 | RNA-seq ML/RAG 추가 |
+| 3.0 | 2025.01 | 범용 플랫폼 구조 재정의 |
+| 3.1 | 2025.01 | 실제 구조와 동기화 (6-Agent ✅, ML/RAG 📋) |

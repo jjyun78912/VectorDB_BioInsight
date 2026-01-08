@@ -2,7 +2,89 @@
 
 ## Project Overview
 
-BioInsight AI is an AI-powered integrated research platform for bio/healthcare researchers. This document provides guidelines for AI assistants working on this project.
+**BioInsight AI**는 바이오·헬스케어 연구자를 위한 AI 기반 통합 연구 지원 플랫폼입니다.
+
+---
+
+## 핵심 철학
+
+> **"연구자의 발견을 가속화하되, 판단은 연구자에게"**
+
+BioInsight AI는 연구자가 더 빠르게 정보를 찾고, 더 깊이 분석하고, 더 넓은 맥락에서 해석할 수 있도록 돕습니다. 그러나 최종 판단과 결론은 항상 연구자의 몫입니다.
+
+### 4대 핵심 가치
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  [1] 정보 접근성 향상 (Accessibility)                       │
+│      • 흩어진 논문/데이터를 한 곳에서                       │
+│      • 언어 장벽 해소 (한국어 ↔ 영어)                       │
+│      • 복잡한 정보의 구조화된 요약                          │
+│                                                             │
+│  [2] 분석 자동화 (Automation)                               │
+│      • 반복적 분석 작업 대행                                │
+│      • 표준 파이프라인 제공                                 │
+│      • 연구자는 해석에 집중                                 │
+│                                                             │
+│  [3] 맥락적 해석 지원 (Contextualization)                   │
+│      • 기존 지식과 연결                                     │
+│      • 근거 기반 해석 (PMID 인용)                           │
+│      • 유사 연구와 비교                                     │
+│                                                             │
+│  [4] 불확실성 투명성 (Transparency)                         │
+│      • 한계와 주의사항 명시                                 │
+│      • 과도한 확신 방지                                     │
+│      • 검증 방법 제안                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 기능별 철학 적용
+
+| 기능 | 접근성 | 자동화 | 맥락화 | 투명성 |
+|------|--------|--------|--------|--------|
+| **Paper RAG** | 논문 검색/요약 | 임베딩 자동화 | Q&A로 맥락 제공 | 출처 명시 |
+| **Real-time Search** | 다중 소스 통합 | 실시간 수집 | 트렌드 파악 | 소스 표시 |
+| **Daily Briefing** | 뉴스 큐레이션 | 자동 다이제스트 | 분야별 정리 | 원문 링크 |
+| **RNA-seq** | 분석 진입장벽 낮춤 | 6-Agent 파이프라인 | RAG 해석, TCGA 비교 | Guardrail |
+| **ML 예측** | 즉시 예측 | 사전학습 모델 | SHAP 설명 | "참고용" 명시 |
+
+---
+
+## 플랫폼 구성
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  BioInsight AI - 바이오/헬스케어 통합 연구 플랫폼           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  CORE FEATURES (핵심 기능)                          │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │  [1] Paper RAG        - 논문 분석 & Q&A       ✅    │   │
+│  │  [2] Real-time Search - PubMed/bioRxiv 검색   ✅    │   │
+│  │  [3] Knowledge Graph  - 3D 시각화             ✅    │   │
+│  │  [4] Daily Briefing   - AI 연구 뉴스          ✅    │   │
+│  │  [5] Trends/Citations - 트렌드/인용 분석      ✅    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  ANALYSIS MODULES (분석 모듈)                       │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │  [A] RNA-seq Pipeline                               │   │
+│  │      • 6-Agent (DEG→Network→Pathway→Valid→Viz→Report) ✅ │
+│  │      • ML 예측 (CatBoost, GRNFormer)          📋    │   │
+│  │      • RAG 해석 + Guardrail                   📋    │   │
+│  │  [B] Proteomics       - 단백질 분석           📋    │   │
+│  │  [C] Genomics         - 변이 분석             📋    │   │
+│  │  [D] Drug Discovery   - 약물 탐색             📋    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+✅ = 완료  📋 = 예정
+```
 
 ---
 
@@ -11,81 +93,20 @@ BioInsight AI is an AI-powered integrated research platform for bio/healthcare r
 ### Backend
 - **Language**: Python 3.11+
 - **Framework**: FastAPI
-- **R Integration**: rpy2 (for DESeq2)
-- **ML Libraries**: scikit-learn, XGBoost, SHAP
+- **AI/LLM**: Claude API, Gemini API
 
 ### Frontend
-- **MVP**: Streamlit
-- **Production**: React + Vite + Tailwind CSS ✅ IMPLEMENTED
-- **3D Visualization**: react-force-graph-3d (Galaxy View)
+- **Framework**: React + Vite + Tailwind CSS
+- **Visualization**: react-force-graph-3d (Knowledge Graph)
 
-### Database
-- **Relational**: PostgreSQL (analysis results, user data)
-- **Vector DB**: ChromaDB (paper embeddings)
-- **File Storage**: AWS S3 / GCP Cloud Storage
-
-### AI/ML
+### Database & Storage
+- **Relational**: PostgreSQL
+- **Vector DB**: ChromaDB
 - **Embeddings**: PubMedBERT, BioBERT
-- **LLM**: Gemini 2.0 Flash (Primary), GPT-4o, Claude (via API)
-- **RAG Framework**: LangChain
-- **Real-time APIs**: PubMed E-utilities, CrossRef, Semantic Scholar
 
-### Infrastructure
-- **Cloud**: AWS / GCP
-- **Containerization**: Docker
-- **CI/CD**: GitHub Actions
-
----
-
-## Disease Domains
-
-Supported disease domains for paper collection and analysis:
-
-| Key | Name | Korean | Status |
-|-----|------|--------|--------|
-| `pancreatic_cancer` | Pancreatic Cancer | 췌장암 | ✅ |
-| `blood_cancer` | Blood Cancer | 혈액암 | ✅ |
-| `glioblastoma` | Glioblastoma | 교모세포종 | ✅ |
-| `alzheimer` | Alzheimer's Disease | 알츠하이머 | ✅ |
-| `pcos` | Polycystic Ovary Syndrome | 다낭성난소증후군 | ✅ |
-| `pheochromocytoma` | Pheochromocytoma | 갈색세포종 | ✅ |
-| `lung_cancer` | Lung Cancer | 폐암 | ✅ NEW |
-| `breast_cancer` | Breast Cancer | 유방암 | ✅ NEW |
-| `colorectal_cancer` | Colorectal Cancer | 대장암 | ✅ NEW |
-| `liver_cancer` | Liver Cancer | 간암 | ✅ NEW |
-| `rnaseq_transcriptomics` | RNA-seq & Transcriptomics | RNA-seq 전사체학 | ✅ NEW |
-
----
-
-## RNA-seq Analysis Stack
-
-### Python Packages
-
-| Category | Package | Version | Purpose |
-|----------|---------|---------|---------|
-| **Data Collection** | GEOparse | 2.0.4 | GEO dataset download |
-| | pysradb | 2.5.1 | SRA metadata query |
-| **Preprocessing** | scanpy | 1.11.5 | Single-cell analysis |
-| | anndata | 0.12.7 | Data structures |
-| | scvi-tools | 1.4.1 | Deep learning single-cell |
-| **Statistics** | rpy2 | 3.6.4 | R integration |
-| **GRN Inference** | arboreto | 0.1.6 | GENIE3 implementation |
-| | pyscenic | 0.12.1 | SCENIC pipeline |
-| **Network Analysis** | networkx | 3.6.1 | Graph algorithms |
-| | python-igraph | 1.0.0 | High-performance graphs |
-| **Functional Analysis** | gseapy | 1.1.11 | GSEA in Python |
-| | goatools | 1.5.2 | GO analysis |
-| **ML/Stats** | scikit-learn | 1.8.0 | Machine learning |
-| | scipy | 1.16.3 | Scientific computing |
-
-### R Packages (Bioconductor)
-
-| Package | Purpose |
-|---------|---------|
-| DESeq2 | Bulk RNA-seq differential expression |
-| edgeR | Alternative DEG analysis |
-| limma | Microarray/RNA-seq analysis |
-| clusterProfiler | GO/KEGG pathway enrichment |
+### Analysis-specific
+- **RNA-seq**: DESeq2 (R), CatBoost, SHAP, GRNFormer
+- **RAG**: LangChain
 
 ---
 
@@ -101,11 +122,14 @@ VectorDB_BioInsight/
 │       │   ├── search.py              # Vector search endpoints
 │       │   ├── chat.py                # AI chat endpoints (Gemini)
 │       │   ├── crawler.py             # Web crawler endpoints
-│       │   ├── news.py                # BIO Research Daily endpoints
 │       │   ├── graph.py               # Knowledge graph endpoints
-│       │   └── briefing.py            # Daily Briefing API endpoints ✅ NEW
-│       └── core/                      # Core Python modules ✅
-│           ├── config.py              # Configuration (API keys)
+│       │   ├── briefing.py            # Daily Briefing API
+│       │   ├── trends.py              # Trending topics API
+│       │   ├── dynamic_trends.py      # Dynamic trend analysis
+│       │   ├── citations.py           # Citation management
+│       │   └── research_gaps.py       # Research gap analysis
+│       └── core/
+│           ├── config.py              # Configuration
 │           ├── pdf_parser.py          # PDF text extraction
 │           ├── text_splitter.py       # Bio-aware text chunking
 │           ├── embeddings.py          # PubMedBERT embeddings
@@ -116,562 +140,527 @@ VectorDB_BioInsight/
 │           ├── rag_pipeline.py        # RAG pipeline
 │           ├── summarizer.py          # AI summarization
 │           ├── translator.py          # Korean ↔ English
-│           └── web_crawler_agent.py   # PubMed/CrossRef crawler ✅
+│           └── web_crawler_agent.py   # PubMed/CrossRef crawler
 ├── frontend/
-│   └── react_app/                     # Production React app ✅
-│       ├── App.tsx                    # Main app component
+│   └── react_app/
+│       ├── App.tsx
 │       ├── components/
-│       │   ├── Hero.tsx               # Search + PubMedResults modal
+│       │   ├── Hero.tsx               # Search + PubMedResults
 │       │   ├── KnowledgeGraph.tsx     # 3D Galaxy visualization
-│       │   ├── TrendingPapers.tsx     # Trending papers section
+│       │   ├── TrendingPapers.tsx     # Trending papers
 │       │   ├── BioResearchDaily.tsx   # BIO 연구 데일리
-│       │   ├── DailyBriefing.tsx      # Daily Briefing component ✅ NEW
+│       │   ├── DailyBriefing.tsx      # Daily Briefing
 │       │   └── Glow.tsx               # UI effects
 │       ├── services/
 │       │   └── client.ts              # API client
 │       └── package.json
-├── scripts/
-│   └── pubmed_collector.py            # PubMed paper collection script
-├── bio-daily-briefing/                # Daily Briefing automation ✅ NEW
+├── bio-daily-briefing/                # Daily Briefing automation
 │   ├── src/
-│   │   ├── aggregator.py              # Multi-source news aggregation
-│   │   ├── newsletter_v2.py           # Newsletter generation
-│   │   └── sources/                   # Data source fetchers
-│   │       ├── biorxiv_fetcher.py     # bioRxiv preprints
-│   │       ├── clinicaltrials_fetcher.py  # Clinical trials
-│   │       └── fda_fetcher.py         # FDA announcements
-│   └── test_v2.py                     # Test scripts
-├── data/
-│   └── papers/                        # Disease domain folders
-│       └── {domain}/                  # JSON paper files
-├── rnaseq_pipeline/                   # 6-Agent RNA-seq Pipeline ✅ NEW
-│   ├── __init__.py
-│   ├── pipeline.py                    # Main orchestrator
+│   │   ├── aggregator.py              # Multi-source aggregation
+│   │   ├── newsletter_v2.py           # Newsletter generator v2
+│   │   ├── trend_analyzer.py          # Trend analysis
+│   │   ├── prioritizer.py             # Content prioritization
+│   │   ├── ai_summarizer.py           # AI-based summarization
+│   │   ├── pubmed_fetcher.py          # PubMed data fetcher
+│   │   ├── scheduler.py               # Scheduled tasks
+│   │   ├── config/
+│   │   │   └── hot_topics.py          # Hot topic configuration
+│   │   └── sources/
+│   │       ├── biorxiv_fetcher.py
+│   │       ├── clinicaltrials_fetcher.py
+│   │       └── fda_fetcher.py
+│   └── test_v2.py
+├── rnaseq_pipeline/                   # RNA-seq 6-Agent Pipeline ✅
+│   ├── orchestrator.py                # Pipeline orchestrator
 │   ├── agents/
-│   │   ├── agent1_deg.py              # DESeq2 analysis
-│   │   ├── agent2_network.py          # Co-expression network
+│   │   ├── agent1_deg.py              # DESeq2 DEG analysis
+│   │   ├── agent2_network.py          # Network/Hub gene detection
 │   │   ├── agent3_pathway.py          # GO/KEGG enrichment
-│   │   ├── agent4_validation.py       # DB validation + v2.0 interpretation
-│   │   ├── agent5_visualization.py    # Plots generation
-│   │   └── agent6_report.py           # HTML report
-│   └── utils/
-│       └── base_agent.py              # Base agent class
-├── chroma_db/                         # Vector database storage
+│   │   ├── agent4_validation.py       # DB validation (DisGeNET, OMIM)
+│   │   ├── agent5_visualization.py    # Volcano, Heatmap, Network plots
+│   │   └── agent6_report.py           # HTML report generation
+│   ├── utils/
+│   │   └── base_agent.py              # Base agent class
+│   └── tests/
+│       └── test_pipeline.py
+├── chroma_db/                         # Vector DB storage
+├── data/
+│   └── papers/                        # 수집된 논문
+├── scripts/
+│   ├── pubmed_collector.py            # PubMed paper collector
+│   ├── cli.py                         # CLI interface
+│   ├── verify_indexing.py             # Indexing verification
+│   └── test_api.py                    # API testing
 ├── docs/
 │   ├── PRD.md
-│   ├── API.md
-│   └── EMBEDDING_RAG_ANALYSIS.md      # RAG architecture analysis
+│   └── API.md
 ├── .claude/
-│   ├── CLAUDE.md                      # This file
-│   ├── PRD.md
-│   └── agents/
-│       └── rnaseq-cancer-analyst.md   # RNA-seq analysis agent
-├── main.py                            # CLI entry point
+│   └── CLAUDE.md
 ├── requirements.txt
-└── .env                               # API keys (GEMINI_API_KEY, etc.)
+└── .env
+
+# ═══════════════════════════════════════════════════════════════
+#  📋 예정 (미구현)
+# ═══════════════════════════════════════════════════════════════
+# rnaseq_pipeline/
+#   ├── ml/                            # ML 예측 모듈
+#   │   ├── predictor.py               # CatBoost
+#   │   ├── explainer.py               # SHAP
+#   │   └── tcga_comparator.py         # TCGA 비교
+#   ├── rag/                           # RAG 해석 모듈
+#   │   ├── paper_retriever.py
+#   │   └── interpreter.py
+#   └── guardrail/                     # 불확실성 명시
+#       └── validator.py
+# models/                              # 사전 학습 ML 모델
+#   └── rnaseq/
+#       ├── pancreatic_cancer/
+#       ├── lung_cancer/
+#       └── breast_cancer/
 ```
 
 ---
 
-## Development Guidelines
+## Core Features (핵심 기능)
 
-### Code Style
+### 1. Paper RAG ✅
 
-#### Python
-- Follow PEP 8
-- Use type hints for all functions
-- Docstrings in Google style format
-- Maximum line length: 100 characters
+**Purpose**: 논문 PDF 업로드 → 임베딩 → 요약 → Q&A
 
-```python
-def analyze_rnaseq(
-    count_matrix: pd.DataFrame,
-    metadata: pd.DataFrame,
-    design_formula: str = "~ condition"
-) -> AnalysisResult:
-    """
-    Perform RNA-seq differential expression analysis.
-    
-    Args:
-        count_matrix: Gene expression count matrix (genes x samples)
-        metadata: Sample metadata with condition information
-        design_formula: DESeq2 design formula
-        
-    Returns:
-        AnalysisResult containing DEG list and statistics
-        
-    Raises:
-        ValidationError: If input data format is invalid
-    """
-    pass
-```
-
-#### React/TypeScript
-- Use functional components with hooks
-- Follow Airbnb style guide
-- Use TypeScript for type safety
-
-### Git Workflow
-
-#### Branch Naming
-- `feature/` - New features (e.g., `feature/paper-embedding`)
-- `bugfix/` - Bug fixes (e.g., `bugfix/deg-calculation`)
-- `hotfix/` - Urgent production fixes
-- `refactor/` - Code refactoring
-
-#### Commit Messages
-Follow Conventional Commits:
-```
-feat: add volcano plot visualization
-fix: correct p-value adjustment in DEG analysis
-docs: update API documentation
-refactor: optimize embedding generation
-test: add unit tests for ML service
-```
-
-### API Design
-
-RESTful API conventions:
-- Use plural nouns for resources
-- Return appropriate HTTP status codes
-- Include pagination for list endpoints
-
-**Current API Endpoints**:
-
-```
-# Search & Papers
-GET    /api/search?query=...              # Vector search
-GET    /api/search/papers?query=...       # Paper-level search
-GET    /api/search/similar/{pmid}         # Similar papers (local DB)
-
-# Crawler (Real-time)
-GET    /api/crawler/search?q=...          # PubMed live search
-GET    /api/crawler/trending/{category}   # Trending papers
-GET    /api/crawler/similar/{pmid}        # Similar papers (PubMed elink)
-POST   /api/crawler/fetch/doi             # Fetch by DOI
-POST   /api/crawler/fetch/url             # Fetch by URL
-
-# Chat (Gemini AI)
-POST   /api/chat/ask-abstract             # Q&A on paper abstract
-POST   /api/chat/summarize-abstract       # Summarize abstract
-POST   /api/chat/analyze                  # Analyze paper
-
-# Graph
-GET    /api/graph/                        # Knowledge graph data
-```
-
----
-
-## Core Modules
-
-### 1. Paper Analysis Module (Vector DB) ✅ IMPLEMENTED
-
-**Purpose**: Process uploaded PDFs, generate embeddings, provide summaries and Q&A
-
-**Key Components**:
-- PDF Parser (PyMuPDF/pdfplumber)
-- Text Chunker (LangChain)
-- Embedding Generator (PubMedBERT)
-- Vector Store (ChromaDB)
-- LLM Summarizer
-
-**Flow**:
-```
-PDF Upload → Parse → Chunk → Embed → Store → Summarize
-```
-
-#### Implementation Status (2025-01-03)
-
-**Location**: `backend/app/core/` directory
-
-| Component | File | Status |
-|-----------|------|--------|
-| PDF Parser | `backend/app/core/pdf_parser.py` | ✅ Complete |
-| Text Splitter | `backend/app/core/text_splitter.py` | ✅ Complete |
-| Embeddings | `backend/app/core/embeddings.py` | ✅ Complete |
-| Vector Store | `backend/app/core/vector_store.py` | ✅ Complete |
-| Indexer | `backend/app/core/indexer.py` | ✅ Complete |
-| Search | `backend/app/core/search.py` | ✅ Complete |
-| Reranker | `backend/app/core/reranker.py` | ✅ Complete |
-| RAG Pipeline | `backend/app/core/rag_pipeline.py` | ✅ Complete |
-| CLI | `main.py` | ✅ Complete |
-
-> 📖 **See also**: `docs/EMBEDDING_RAG_ANALYSIS.md` for detailed RAG architecture analysis
-
-**Key Features Implemented**:
-
-1. **Font-based Section Detection**
-   - Detects section headers by font size/bold
-   - Handles variations: "Methods", "METHODS", "Materials and Methods"
-   - Extracts subsections from Methods (Statistical Analysis, Patients, etc.)
-
-2. **Section-aware Chunking**
-   - RecursiveCharacterTextSplitter with bio-specific separators
-   - Preserves section context in metadata
-   - Chunk size: 1000, Overlap: 200
-
-3. **PubMedBERT Embeddings**
-   - Model: `pritamdeka/S-PubMedBert-MS-MARCO`
-   - 768-dimensional vectors
-   - Optimized for biomedical retrieval
-
-4. **ChromaDB with Rich Metadata**
-   ```python
-   metadata = {
-       "paper_title": str,
-       "doi": str,
-       "year": str,
-       "section": str,        # Abstract, Methods, Results, etc.
-       "parent_section": str, # For subsections
-       "disease_domain": str, # e.g., "pheochromocytoma"
-       "keywords": str,
-       "chunk_index": int,
-       "source_file": str
-   }
-   ```
-
-5. **Disease-Domain Collections**
-   - Supports multiple disease domains
-   - Collection naming: `bio_papers_{domain}`
-   - Current: `bio_papers_pheochromocytoma`
-
-**Usage**:
-
-```bash
-# Index papers
-python main.py index -d pheochromocytoma -p ./data/papers/
-
-# Search
-python main.py search -d pheochromocytoma -q "RET mutation" -k 5
-
-# Section-filtered search
-python main.py search -d pheochromocytoma -q "RNA seq" -s Methods
-
-# Stats
-python main.py stats -d pheochromocytoma
-```
-
-**Python API**:
-
-```python
-from backend.app.core.indexer import create_indexer
-from backend.app.core.search import create_searcher
-
-# Indexing
-indexer = create_indexer(disease_domain="pheochromocytoma")
-indexer.index_pdf("./paper.pdf")
-
-# Searching
-searcher = create_searcher(disease_domain="pheochromocytoma")
-results = searcher.search("catecholamine synthesis", top_k=5)
-results = searcher.search_methods("RNA extraction protocol")
-```
-
-**Current Stats** (Pheochromocytoma Collection):
-- Papers: 5
-- Chunks: 521
-- Sections: 8 types (Methods, Background, Conclusion, Abstract, Results, Discussion, Patients, Treatment)
-
-### 1.5. Web Crawler Agent ✅ IMPLEMENTED (2024-12-29)
-
-**Purpose**: Real-time paper fetching from PubMed, CrossRef, Semantic Scholar
-
-**Location**: `backend/app/core/web_crawler_agent.py`, `backend/app/api/routes/crawler.py`
-
-**Key Features**:
-
-| Feature | Endpoint | Description |
-|---------|----------|-------------|
-| PubMed Search | `GET /api/crawler/search?q=...` | Real-time hybrid search (latest + high-impact) |
-| Trending Papers | `GET /api/crawler/trending/{category}` | 8 categories, major journals filter |
-| Similar Papers | `GET /api/crawler/similar/{pmid}` | PubMed elink API for related articles |
-| DOI Fetch | `POST /api/crawler/fetch/doi` | CrossRef + Semantic Scholar enrichment |
-| URL Import | `POST /api/crawler/fetch/url` | Supports DOI, PubMed, PMC URLs |
-
-**Trending Categories**:
-- oncology, immunotherapy, gene_therapy, neurology
-- infectious_disease, ai_medicine, genomics, drug_discovery
-
-**Major Journals Filter** (High-Impact):
-- Nature, Science, Cell, NEJM, Lancet, JAMA
-- Nature Medicine, Nature Genetics, Cell Metabolism
-- PNAS, JCO, Blood, Gut, etc.
-
-### 1.6. React Frontend ✅ IMPLEMENTED (2024-12-29)
-
-**Location**: `frontend/react_app/`
-
-**Key Components**:
+**Location**: `backend/app/core/`
 
 | Component | File | Description |
 |-----------|------|-------------|
-| Hero | `components/Hero.tsx` | Main search interface with 3 modes |
-| PubMedResults | `components/Hero.tsx` | Split-view modal with paper list + detail |
-| KnowledgeGraph | `components/KnowledgeGraph.tsx` | 3D Galaxy visualization |
-| TrendingPapers | `components/TrendingPapers.tsx` | Real-time trending papers |
-
-**Search Modes**:
-1. **Local DB** - Search indexed papers in ChromaDB
-2. **PubMed Live** - Real-time PubMed search with hybrid ranking
-3. **DOI/URL** - Import specific paper by identifier
-
-**Galaxy Visualization**:
-- 3-layer graph: Source Paper → Similar Papers (15+) → Keywords (20+)
-- Color-coded by similarity score (green→yellow→orange→red)
-- Interactive 3D navigation with zoom-to-node
-
-**AI Chat Features**:
-- Ask questions about paper abstract
-- Summarize paper content
-- Perplexity-style inline citations
-
-### 1.7. BIO 연구 데일리 ✅ IMPLEMENTED (2025-01-02)
-
-**Purpose**: AI-powered daily research news digest for bio/healthcare researchers
-
-**Location**: `frontend/react_app/src/pages/BioResearchDaily.tsx`, `backend/app/api/routes/news.py`
-
-**Key Features**:
-
-| Feature | Description |
-|---------|-------------|
-| Multi-source News | PubMed, bioRxiv, medRxiv, Nature News |
-| AI Summarization | Gemini-powered Korean summaries |
-| Category Filtering | Oncology, Immunotherapy, Genomics, etc. |
-| i18n Support | Korean/English interface |
-| Real-time Updates | Daily automated collection |
+| PDF Parser | `pdf_parser.py` | PDF 텍스트 추출 |
+| Text Splitter | `text_splitter.py` | Bio-aware 청킹 |
+| Embeddings | `embeddings.py` | PubMedBERT 임베딩 |
+| Vector Store | `vector_store.py` | ChromaDB 저장/검색 |
+| RAG Pipeline | `rag_pipeline.py` | 검색 + LLM 생성 |
 
 **API Endpoints**:
 ```
-GET  /api/news/daily              # Get daily news digest
-GET  /api/news/trending           # Trending research topics
-POST /api/news/generate           # Generate AI summary
+POST   /api/paper/upload         # PDF 업로드
+POST   /api/paper/analyze        # 논문 분석
+POST   /api/chat/ask             # Q&A
 ```
 
-### 1.8. Daily Briefing System ✅ IMPLEMENTED (2025-01-05)
+---
 
-**Purpose**: AI-curated daily bio/healthcare research trends and news automation
+### 2. Real-time Search (Web Crawler) ✅
 
-**Location**:
-- Frontend: `frontend/react_app/components/DailyBriefing.tsx`
-- Backend: `backend/app/api/routes/briefing.py`
-- Automation: `bio-daily-briefing/`
+**Purpose**: PubMed, bioRxiv, Semantic Scholar 실시간 검색
 
-**Key Features**:
+**Location**: `backend/app/core/web_crawler_agent.py`
 
-| Feature | Description |
-|---------|-------------|
-| Multi-source Aggregation | bioRxiv, ClinicalTrials.gov, FDA announcements |
-| Hot Topic Detection | Keyword-based trending topic identification |
-| AI Newsletter | Automated newsletter generation with Gemini |
-| Category Filtering | Oncology, Immunotherapy, Gene Therapy, etc. |
-
-**Data Sources** (`bio-daily-briefing/src/sources/`):
-
-| Source | File | Description |
-|--------|------|-------------|
-| bioRxiv | `biorxiv_fetcher.py` | Preprint papers |
-| ClinicalTrials | `clinicaltrials_fetcher.py` | Clinical trial updates |
-| FDA | `fda_fetcher.py` | FDA drug approvals & announcements |
+**Features**:
+- PubMed E-utilities API
+- CrossRef DOI 검색
+- Semantic Scholar 유사 논문 추천
+- 트렌딩 논문 수집
 
 **API Endpoints**:
 ```
-GET  /api/briefing/daily           # Get daily briefing
-GET  /api/briefing/trends          # Hot topics and trends
-POST /api/briefing/generate        # Generate AI briefing
+GET    /api/crawler/search?q=...           # 실시간 검색
+GET    /api/crawler/trending/{category}    # 트렌딩 논문
+GET    /api/crawler/similar/{pmid}         # 유사 논문
+POST   /api/crawler/fetch/doi              # DOI로 가져오기
 ```
 
-### 1.9. RNA-seq Cancer Analyst Agent ✅ CONFIGURED (2025-01-03)
+---
 
-**Purpose**: Specialized Claude agent for RNA-seq cancer research analysis
+### 3. Knowledge Graph ✅
 
-**Location**: `.claude/agents/rnaseq-cancer-analyst.md`
+**Purpose**: 논문/유전자/질병 관계 3D 시각화
 
-**Capabilities**:
+**Location**: `frontend/react_app/components/KnowledgeGraph.tsx`
 
-| Feature | Tools/Methods |
-|---------|---------------|
-| Data Collection | GEO, TCGA, SRA via GEOparse, pysradb |
-| Preprocessing | Bulk: DESeq2 normalization, Single-cell: scanpy, scvi-tools |
-| Differential Expression | DESeq2, edgeR, Wilcoxon rank-sum |
-| GRN Inference | GRNformer, GENIE3, SCENIC |
-| Network Analysis | Hub gene detection, centrality metrics |
-| Functional Analysis | GO, KEGG, GSEA via gseapy, clusterProfiler |
-| Validation | DisGeNET, COSMIC, OMIM queries |
+**Features**:
+- react-force-graph-3d 기반
+- 논문 간 인용 관계
+- 유전자-질병 연결
+- 실시간 인터랙션
 
-**Usage**: Invoke via Claude Code with `subagent_type='rnaseq-cancer-analyst'`
-
-### 1.10. RNA-seq Full Pipeline ✅ IMPLEMENTED (2025-01-04)
-
-**Purpose**: Complete RNA-seq analysis pipeline with DESeq2 integration via rpy2
-
-**Location**: `rnaseq_test_results/rnaseq_full_pipeline.py`
-
-**Pipeline Steps**:
-
-| Step | Description | Tools |
-|------|-------------|-------|
-| 1. Data Collection | GEO/SRA download, synthetic data generation | GEOparse, pysradb |
-| 2. DESeq2 Analysis | Differential expression via rpy2 | DESeq2 (R), rpy2 |
-| 3. Network Analysis | Co-expression network, hub gene detection | networkx, Spearman correlation |
-| 4. Pathway Enrichment | GO/KEGG functional analysis | gseapy |
-| 5. Validation | Known cancer gene validation | Custom gene database |
-| 6. Report Generation | Comprehensive analysis report | pandas |
-
-**rpy2-DESeq2 Integration**:
-```python
-# Python에서 R의 DESeq2 호출
-from rpy2.robjects.packages import importr
-from rpy2.robjects.conversion import localconverter
-
-deseq2 = importr('DESeq2')
-with localconverter(ro.default_converter + pandas2ri.converter):
-    counts_r = ro.conversion.py2rpy(counts_df)  # pandas → R
-    # DESeq2 실행
-    results_r = run_deseq2(counts_r, metadata_r)
-    results_df = ro.conversion.rpy2py(results_r)  # R → pandas
+**API Endpoints**:
+```
+GET    /api/graph/                # 그래프 데이터
+GET    /api/graph/node/{id}       # 노드 상세
 ```
 
-**Output Files**:
+---
+
+### 4. Daily Briefing ✅
+
+**Purpose**: AI 기반 연구 뉴스 다이제스트
+
+**Location**: `bio-daily-briefing/`
+
+**Sources**:
+- bioRxiv preprints
+- ClinicalTrials.gov
+- FDA announcements
+
+**Features**:
+- Multi-source aggregation
+- LLM 기반 요약
+- 한국어/영어 지원
+
+**API Endpoints**:
 ```
-rnaseq_test_results/test_run/
-├── analysis_report.txt      # 전체 분석 리포트
-├── deseq2_all_results.csv   # 전체 DESeq2 결과
-├── deseq2_significant.csv   # 유의미한 DEG
-├── hub_genes.csv            # Hub 유전자 + 중심성 점수
-├── normalized_counts.csv    # 정규화된 발현량
-├── pathway_enrichment.csv   # GO/Pathway 분석 결과
-├── raw_counts.csv           # 원본 count 데이터
-└── metadata.csv             # 샘플 메타데이터
+GET    /api/briefing/today        # 오늘의 브리핑
+GET    /api/briefing/history      # 이전 브리핑
 ```
 
-**Usage**:
-```python
-from rnaseq_test_results.rnaseq_full_pipeline import RNAseqPipeline
+---
 
-pipeline = RNAseqPipeline(output_dir='results')
-results = pipeline.run_full_pipeline(use_synthetic=True)
-```
+## Analysis Modules (분석 모듈)
 
-### 1.11. RNA-seq 6-Agent Pipeline ✅ IMPLEMENTED (2025-01-07)
+### Module A: RNA-seq Pipeline
 
-**Purpose**: Modular 6-agent pipeline for comprehensive RNA-seq cancer analysis with v2.0 conservative interpretation
+**Purpose**: RNA-seq 데이터 분석 + ML 예측 + RAG 해석
 
 **Location**: `rnaseq_pipeline/`
 
 **Architecture**:
 
 ```
-rnaseq_pipeline/
-├── __init__.py
-├── pipeline.py                 # Main orchestrator
-├── agents/
-│   ├── agent1_deg.py          # DESeq2 differential expression
-│   ├── agent2_network.py      # Co-expression network analysis
-│   ├── agent3_pathway.py      # GO/KEGG pathway enrichment
-│   ├── agent4_validation.py   # DB validation + v2.0 interpretation ⭐
-│   ├── agent5_visualization.py # Volcano, heatmap, network plots
-│   └── agent6_report.py       # HTML report generation
-└── utils/
-    └── base_agent.py          # Base class with logging, I/O
+┌─────────────────────────────────────────────────────────────┐
+│  RNA-seq Analysis Pipeline                                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  STAGE 1: COMPUTE (6-Agent)                     ✅ 완료    │
+│  ─────────────────────────────────────────────────────────  │
+│  [Agent 1] DESeq2 → DEG 분석                    ✅         │
+│  [Agent 2] Network → Hub gene 탐지              ✅         │
+│  [Agent 3] Pathway → GO/KEGG enrichment         ✅         │
+│  [Agent 4] DB 검증 (DisGeNET, OMIM, COSMIC)     ✅         │
+│  [Agent 5] 시각화 (Volcano, Heatmap, Network)   ✅         │
+│  [Agent 6] HTML 리포트                          ✅         │
+│                                                             │
+│  STAGE 2: PREDICT + INTERPRET                   📋 예정    │
+│  ─────────────────────────────────────────────────────────  │
+│  [ML] CatBoost + SHAP (샘플 분류)               📋         │
+│  [ML] GRNFormer (유전자 교란 예측)              📋         │
+│  [RAG] 논문 기반 해석                           📋         │
+│  [Guardrail] 불확실성 명시                      📋         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**6-Agent Flow**:
+**현재 구현 상태**:
 
-| Agent | Name | Input | Output |
-|-------|------|-------|--------|
-| Agent 1 | DEG Analysis | count_matrix.csv, metadata.csv | deg_significant.csv, normalized_counts.csv |
-| Agent 2 | Network | deg_significant.csv, normalized_counts.csv | hub_genes.csv, network_edges.csv |
-| Agent 3 | Pathway | deg_significant.csv | pathway_*.csv, gene_to_pathway.csv |
-| Agent 4 | Validation | All above | interpretation_report.json (v2.0) |
-| Agent 5 | Visualization | All above | volcano.png, heatmap.png, network.png |
-| Agent 6 | Report | All above | analysis_report.html |
+| Component | Status | Location |
+|-----------|--------|----------|
+| 6-Agent Pipeline | ✅ 완료 | `rnaseq_pipeline/agents/` |
+| Orchestrator | ✅ 완료 | `rnaseq_pipeline/orchestrator.py` |
+| ML 예측 (CatBoost) | 📋 예정 | 미구현 |
+| RAG 해석 | 📋 예정 | 미구현 |
+| Guardrail | 📋 예정 | 미구현 |
+| Pre-trained Models | 📋 예정 | 미구현 |
 
-**v2.0 Conservative Interpretation** (Agent 4):
+**예정 ML Components**:
 
-핵심 원칙:
-- **비인과적 언어**: "drives/induces/controls" 대신 "is associated with/may reflect"
-- **DB 매칭**: DB match ≠ proof, DB absence ≠ irrelevance
-- **Hub 유전자**: Network centrality ≠ biological importance
-- **Pathway**: Statistical enrichment ≠ causal mechanism
+| Component | Purpose | Hardware | Status |
+|-----------|---------|----------|--------|
+| CatBoost + SHAP | 샘플 분류, 중요 유전자 | CPU | 📋 예정 |
+| GRNFormer | 유전자 교란 예측 | GPU (온디맨드) | 📋 예정 |
 
-출력 구조:
-```json
-{
-  "v2_interpretation": {
-    "observation": "Pattern-focused observations",
-    "supporting_evidence": { "deg_statistics": {}, "network_analysis": {}, ... },
-    "interpretation": "Conservative, non-causal interpretation",
-    "limitations": ["RNA-seq measures transcripts, not proteins", ...],
-    "methodology_note": "No causal claims, no novel regulator labeling"
-  }
-}
+**예정 Pre-trained Models** (TCGA 기반):
+
+| Cancer Type | TCGA Code | Status |
+|-------------|-----------|--------|
+| Pancreatic Cancer | PAAD | 📋 예정 |
+| Lung Cancer | LUAD/LUSC | 📋 예정 |
+| Breast Cancer | BRCA | 📋 예정 |
+| Multi-cancer | ALL | 📋 예정 |
+
+**API Endpoints** (예정):
+```
+# 📋 예정 - 현재 미구현
+POST   /api/rnaseq/analyze           # 전체 파이프라인
+POST   /api/rnaseq/predict           # ML 예측만
+POST   /api/rnaseq/perturbation      # GRNFormer
+POST   /api/rnaseq/interpret         # RAG 해석만
+GET    /api/rnaseq/genes/{symbol}    # 유전자 조회
+GET    /api/rnaseq/reports/{id}      # 리포트 조회
 ```
 
-**Tested on Real Data** (GSE81089 Lung Cancer):
-- 175 samples (67 Histology 1 vs 108 Histology 2)
-- 5,752 DEGs identified
-- 20 hub gene candidates
-- Full HTML + PDF report generated
+**Gene Status Card 출력**:
 
-**Usage**:
+```
+═══════════════════════════════════════════════════════════════
+  Gene Status Card: KRAS
+═══════════════════════════════════════════════════════════════
+
+  EXPRESSION STATUS (DESeq2)
+  Direction: ↑ Upregulated (4.2x)
+  P-value: 2.3e-09 (adjusted: 5.1e-07)
+
+  ML PREDICTION (CatBoost + SHAP)
+  샘플 분류: 췌장암 확률 87%
+  KRAS 기여도 (SHAP): +0.45 (1위)
+  TCGA 비교: 패턴 일치 ✅
+
+  DISEASE ASSOCIATIONS (DB)
+  1. Pancreatic Cancer  Score: 0.95 [COSMIC]
+  2. Lung Adenocarcinoma  Score: 0.89 [TCGA]
+
+  RAG INTERPRETATION (논문 기반)
+  • KRAS 변이는 췌장암의 90% 이상에서 발견됨 [PMID: 29625050]
+
+  LIMITATIONS (Guardrail)
+  ⚠️ ML 예측은 진단이 아니며, 참고용입니다.
+  ⚠️ SHAP 순위는 "분류 기여도"입니다.
+
+  SUGGESTED VALIDATIONS
+  • KRAS 변이 확인 (Sanger sequencing)
+  • 단백질 수준 확인 (Western blot)
+```
+
+---
+
+### Module B: Proteomics 📋 (예정)
+
+**Purpose**: 단백질 발현 분석, 상호작용 네트워크
+
+**계획**:
+- MS 데이터 분석
+- Protein-Protein Interaction (PPI) 네트워크
+- Pathway enrichment
+
+---
+
+### Module C: Genomics 📋 (예정)
+
+**Purpose**: 유전체 변이 분석
+
+**계획**:
+- VCF 파일 분석
+- 변이 주석 (ANNOVAR, VEP)
+- 임상적 의미 해석
+
+---
+
+### Module D: Drug Discovery 📋 (예정)
+
+**Purpose**: 약물-타겟 탐색, 리포지셔닝
+
+**계획**:
+- Drug-Target 데이터베이스 연동
+- 분자 도킹 시뮬레이션
+- ADMET 예측
+
+---
+
+## Disease Domains
+
+| Key | Name | Korean | Status |
+|-----|------|--------|--------|
+| `pancreatic_cancer` | Pancreatic Cancer | 췌장암 | ✅ |
+| `blood_cancer` | Blood Cancer | 혈액암 | ✅ |
+| `glioblastoma` | Glioblastoma | 교모세포종 | ✅ |
+| `alzheimer` | Alzheimer's Disease | 알츠하이머 | ✅ |
+| `pcos` | Polycystic Ovary Syndrome | 다낭성난소증후군 | ✅ |
+| `pheochromocytoma` | Pheochromocytoma | 갈색세포종 | ✅ |
+| `lung_cancer` | Lung Cancer | 폐암 | ✅ |
+| `breast_cancer` | Breast Cancer | 유방암 | ✅ |
+| `colorectal_cancer` | Colorectal Cancer | 대장암 | ✅ |
+| `liver_cancer` | Liver Cancer | 간암 | ✅ |
+| `rnaseq_transcriptomics` | RNA-seq & Transcriptomics | RNA-seq 전사체학 | ✅ |
+
+---
+
+## Data Sources
+
+### 논문/지식 (Core Features)
+
+| Source | Purpose | Volume |
+|--------|---------|--------|
+| PubMed | 논문 메타데이터, 초록 | 3,500만+ |
+| bioRxiv | 프리프린트 | 25만+ |
+| Semantic Scholar | 인용 관계, 유사 논문 | - |
+| CrossRef | DOI 메타데이터 | - |
+
+### 유전자/질병 (Analysis Modules)
+
+| Source | Purpose | Volume |
+|--------|---------|--------|
+| TCGA | 암 RNA-seq | ~11,000명 |
+| GEO | 공개 발현 데이터 | 수만 데이터셋 |
+| GTEx | 정상 조직 발현 | ~17,000명 |
+| DisGeNET | 유전자-질병 연관 | 100만+ |
+| OMIM | 유전 질환 | 16,000+ |
+| COSMIC | 암 체세포 변이 | - |
+
+---
+
+## API Endpoints (전체)
+
+```
+# ═══════════════════════════════════════════════════════════════
+#  CORE FEATURES ✅ 구현됨
+# ═══════════════════════════════════════════════════════════════
+
+# Paper Analysis
+POST   /api/paper/upload
+POST   /api/paper/analyze
+GET    /api/search?query=...
+GET    /api/search/papers?query=...
+
+# Real-time Search (Crawler)
+GET    /api/crawler/search?q=...
+GET    /api/crawler/trending/{category}
+GET    /api/crawler/similar/{pmid}
+POST   /api/crawler/fetch/doi
+POST   /api/crawler/fetch/url
+
+# AI Chat
+POST   /api/chat/ask
+POST   /api/chat/ask-abstract
+POST   /api/chat/summarize-abstract
+POST   /api/chat/analyze
+
+# Knowledge Graph
+GET    /api/graph/
+GET    /api/graph/node/{id}
+
+# Daily Briefing
+GET    /api/briefing/today
+GET    /api/briefing/history
+
+# Trends & Analysis
+GET    /api/trends/...
+GET    /api/dynamic-trends/...
+GET    /api/citations/...
+GET    /api/research-gaps/...
+
+# ═══════════════════════════════════════════════════════════════
+#  ANALYSIS MODULES 📋 예정 (API 미구현)
+# ═══════════════════════════════════════════════════════════════
+
+# RNA-seq Pipeline (예정)
+# POST   /api/rnaseq/analyze
+# POST   /api/rnaseq/predict
+# POST   /api/rnaseq/perturbation
+# POST   /api/rnaseq/interpret
+# GET    /api/rnaseq/genes/{symbol}
+# GET    /api/rnaseq/reports/{id}
+
+# Proteomics (예정)
+# POST   /api/proteomics/analyze
+
+# Genomics (예정)
+# POST   /api/genomics/analyze
+
+# Drug Discovery (예정)
+# POST   /api/drug/search
+```
+
+---
+
+## Code Patterns & Guidelines
+
+### 출력 언어 (한국어 기본)
+
 ```python
-from rnaseq_pipeline.pipeline import RNAseqPipeline
+# ✅ Correct
+interpretation = "KRAS 상향 발현은 췌장암에서 흔히 관찰됩니다."
 
-pipeline = RNAseqPipeline(
-    input_dir='data/gse81089/',
-    output_dir='results/',
-    config={'cancer_type': 'lung_cancer'}
-)
-results = pipeline.run_all()
+# ❌ Wrong
+interpretation = "KRAS upregulation is commonly observed in pancreatic cancer."
 ```
 
-**Key Technical Fixes**:
-- DESeq2 `counts` → `BiocGenerics.counts()` for rpy2 compatibility
-- Vectorized correlation matrix for large DEG sets (5000+ genes)
-- Entrez ID → Gene Symbol conversion via mygene for Enrichr
+### 불확실성 명시 (필수)
 
-### 2. RNA-seq Analysis Module
+```python
+# ✅ Correct
+result = {
+    "prediction": "췌장암 확률 87%",
+    "confidence": "high",
+    "warning": "⚠️ 예측이며 진단이 아닙니다",
+    "limitations": ["샘플 수 제한", "단일 시점"],
+    "suggested_validations": ["조직검사 확인"]
+}
 
-**Purpose**: Automated differential expression analysis with visualizations
-
-**Key Components**:
-- Data Validator
-- DESeq2 Wrapper (rpy2)
-- Normalizer (TPM/FPKM/VST)
-- Batch Corrector (ComBat)
-- Visualizer (matplotlib/plotly)
-- Pathway Analyzer (clusterProfiler)
-
-**Flow**:
-```
-Upload → Validate → Normalize → DESeq2 → Visualize → Pathway → Report
+# ❌ Wrong
+result = {"prediction": "이 환자는 췌장암입니다"}
 ```
 
-### 3. ML Prediction Module
+### PMID 인용 (필수)
 
-**Purpose**: Build and evaluate classification models from gene signatures
+```python
+# ✅ Correct
+interpretation = "KRAS는 췌장암의 90%에서 변이가 관찰됨 [PMID: 29625050]"
 
-**Key Components**:
-- Feature Selector
-- Model Trainer (XGBoost, RF, SVM)
-- Cross Validator
-- SHAP Explainer
-
-**Flow**:
-```
-Select Features → Train → Validate → Explain → Export
+# ❌ Wrong
+interpretation = "KRAS는 췌장암의 주요 원인이다"  # 출처 없음
 ```
 
-### 4. AI Research Assistant
+---
 
-**Purpose**: Integrated Q&A combining paper knowledge, DEG results, and pathway information
+## DO / DON'T Checklist
 
-**Key Components**:
-- Context Builder
-- RAG Pipeline
-- Response Generator
-- Citation Linker
+### 전체 플랫폼 공통
+
+| DO ✅ | DON'T ❌ |
+|-------|---------|
+| 출처/근거 명시 (PMID, URL) | 출처 없는 주장 |
+| 한계/주의사항 안내 | 불확실성 숨김 |
+| 한국어 우선 출력 | 영문 전용 |
+| 후속 조치 제안 | 제안 없이 종료 |
+| 원문 링크 제공 | 요약만 제공 |
+
+### Paper RAG / 검색
+
+| DO ✅ | DON'T ❌ |
+|-------|---------|
+| 관련 논문 PMID 인용 | 출처 없는 정보 |
+| 검색 결과 개수 명시 | "많은 논문이 있다" |
+| 원문 확인 권장 | AI 요약만 신뢰 유도 |
+
+### 분석 모듈 (RNA-seq 등)
+
+| DO ✅ | DON'T ❌ |
+|-------|---------|
+| 결과를 "상태"로 제시 | 확정적 결론 |
+| ML 예측 = "참고용" 명시 | "진단"으로 표현 |
+| 통계적 한계 설명 | 샘플 수 무시 |
+| 검증 실험 제안 | 검증 없이 결론 |
+
+### Daily Briefing
+
+| DO ✅ | DON'T ❌ |
+|-------|---------|
+| 원문 소스 링크 제공 | 요약만 제공 |
+| 날짜/시점 명시 | 시점 없는 정보 |
+| 분야/카테고리 구분 | 무분별한 나열 |
+
+---
+
+## Development Roadmap
+
+### Core Features
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Paper RAG | ✅ Done | PDF 분석, 임베딩, Q&A |
+| Web Crawler | ✅ Done | PubMed, bioRxiv 검색 |
+| Knowledge Graph | ✅ Done | 3D 시각화 |
+| Daily Briefing | ✅ Done | AI 뉴스 다이제스트 |
+| Trends & Citations | ✅ Done | 트렌드 분석, 인용 관리 |
+
+### Analysis Modules
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| RNA-seq: 6-Agent Pipeline | ✅ Done | DEG, Network, Pathway, Validation, Viz, Report |
+| RNA-seq: API 통합 | 📋 Planned | FastAPI 엔드포인트 |
+| RNA-seq: ML (CatBoost) | 📋 Planned | 사전 학습 분류기 |
+| RNA-seq: RAG 해석 | 📋 Planned | 논문 기반 해석 |
+| RNA-seq: Guardrail | 📋 Planned | 불확실성 명시 |
+| RNA-seq: GRNFormer | 📋 Planned | 유전자 교란 예측 |
+| Proteomics | 📋 Planned | 단백질 분석 |
+| Genomics | 📋 Planned | 변이 분석 |
+| Drug Discovery | 📋 Planned | 약물 탐색 |
 
 ---
 
@@ -679,162 +668,55 @@ Select Features → Train → Validate → Explain → Export
 
 ### Prerequisites
 - Python 3.11+
-- R 4.3+ (with DESeq2, clusterProfiler)
-- Node.js 18+ (for React)
-- Docker & Docker Compose
+- Node.js 18+
+- R 4.3+ (for DESeq2)
 - PostgreSQL 15+
 
-### Local Development
+### Installation
 
 ```bash
 # Clone repository
 git clone https://github.com/org/bioinsight-ai.git
 cd bioinsight-ai
 
-# Create virtual environment
+# Backend setup
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-.\venv\Scripts\activate   # Windows
+source venv/bin/activate
+pip install -r requirements.txt
 
-# Install dependencies
-pip install -r backend/requirements.txt
+# Frontend setup
+cd frontend/react_app
+npm install
 
-# Install R packages
-Rscript -e "install.packages(c('DESeq2', 'apeglm', 'clusterProfiler'))"
-
-# Set environment variables
+# Environment variables
 cp .env.example .env
-# Edit .env with your configurations
 
-# Run database migrations
-alembic upgrade head
-
-# Start development server
-uvicorn app.main:app --reload
-```
-
-### Docker Development
-
-```bash
-docker-compose up --build
+# Start servers
+uvicorn backend.app.main:app --reload  # Backend
+npm run dev                              # Frontend
 ```
 
 ---
 
 ## Testing
 
-### Running Tests
-
 ```bash
 # All tests
 pytest
 
-# With coverage
-pytest --cov=app --cov-report=html
-
-# Specific module
-pytest tests/test_rnaseq.py
-
-# Integration tests
-pytest tests/integration/ -v
+# Specific modules
+pytest tests/test_paper_rag.py -v
+pytest tests/test_crawler.py -v
+pytest tests/test_rnaseq_pipeline.py -v
 ```
-
-### Test Categories
-- **Unit Tests**: Individual function testing
-- **Integration Tests**: API endpoint testing
-- **E2E Tests**: Full workflow testing
-
----
-
-## Key Technical Decisions
-
-### Why rpy2 for DESeq2?
-DESeq2 is the gold standard for RNA-seq analysis. Rather than reimplementing in Python, we use rpy2 to call R functions directly, ensuring statistical accuracy and reproducibility.
-
-### Why ChromaDB for Embeddings?
-ChromaDB offers:
-- Simple Python API
-- Persistent storage
-- Efficient similarity search
-- Good integration with LangChain
-
-### Why Multiple LLM Support?
-Different LLMs have different strengths. Supporting GPT-4o, Claude, and Gemini allows:
-- Fallback options
-- Cost optimization
-- Performance comparison
-
----
-
-## Common Tasks
-
-### Adding a New API Endpoint
-
-1. Create route in `backend/app/api/routes/`
-2. Add service logic in `backend/app/services/`
-3. Define Pydantic models in `backend/app/models/`
-4. Register route in `backend/app/api/routes/__init__.py`
-5. Write tests in `backend/tests/`
-
-### Adding a New Visualization
-
-1. Add visualization function in `backend/app/services/visualizer.py`
-2. Return plot as base64 or save to storage
-3. Create frontend component to display
-
-### Updating Embedding Model
-
-1. Update model in `backend/app/core/embeddings.py`
-2. Re-embed existing papers (migration script)
-3. Update ChromaDB collection
-4. See `docs/EMBEDDING_RAG_ANALYSIS.md` for model comparison
-
----
-
-## Troubleshooting
-
-### rpy2 Installation Issues
-```bash
-# Ensure R is in PATH
-export R_HOME=/usr/lib/R
-
-# Install with specific R
-pip install rpy2 --install-option="--r-home=/usr/lib/R"
-```
-
-### DESeq2 Memory Issues
-For large datasets, increase R memory limit:
-```r
-options(java.parameters = "-Xmx8g")
-```
-
-### ChromaDB Performance
-For large collections, consider:
-- Batch insertions
-- Index optimization
-- Pagination for queries
 
 ---
 
 ## Resources
 
-### Documentation
-- [FastAPI Docs](https://fastapi.tiangolo.com/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [ChromaDB Documentation](https://docs.trychroma.com/)
+- [PubMedBERT](https://huggingface.co/microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract)
 - [DESeq2 Vignette](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html)
-- [LangChain Docs](https://python.langchain.com/)
-- [ChromaDB Docs](https://docs.trychroma.com/)
-
-### Papers
-- DESeq2: Love et al., 2014
-- PubMedBERT: Gu et al., 2021
-- SHAP: Lundberg & Lee, 2017
-
----
-
-## Contact
-
-For questions about this project:
-- Technical Lead: [Name]
-- Product Owner: [Name]
-- Repository: [URL]
+- [CatBoost Documentation](https://catboost.ai/docs/)
+- [SHAP Documentation](https://shap.readthedocs.io/)
