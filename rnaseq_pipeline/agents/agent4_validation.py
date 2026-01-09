@@ -32,6 +32,20 @@ from enum import Enum
 
 from ..utils.base_agent import BaseAgent
 
+# Gene ID conversion
+try:
+    import mygene
+    HAS_MYGENE = True
+except ImportError:
+    HAS_MYGENE = False
+
+# RAG interpretation
+try:
+    from ..rag.gene_interpreter import GeneRAGInterpreter, create_interpreter
+    HAS_RAG = True
+except ImportError:
+    HAS_RAG = False
+
 
 class ConfidenceLevel(str, Enum):
     """Interpretation confidence levels."""
@@ -128,7 +142,11 @@ class ValidationAgent(BaseAgent):
                 "high": 5.0,
                 "medium": 3.0,
                 "low": 1.5
-            }
+            },
+            # RAG interpretation settings
+            "enable_rag": True,  # Enable RAG-based literature interpretation
+            "rag_max_genes": 20,  # Max genes to interpret via RAG (top by score)
+            "rag_top_k": 5  # Number of papers to retrieve per gene
         }
 
         merged_config = {**default_config, **(config or {})}
@@ -137,6 +155,9 @@ class ValidationAgent(BaseAgent):
         self.deg_significant: Optional[pd.DataFrame] = None
         self.hub_genes: Optional[pd.DataFrame] = None
         self.gene_to_pathway: Optional[pd.DataFrame] = None
+        self.ensembl_to_symbol: Dict[str, str] = {}  # Ensembl ID -> Gene Symbol mapping
+        self.rag_interpreter: Optional[Any] = None  # RAG interpreter instance
+        self.rag_interpretations: Dict[str, Any] = {}  # gene_symbol -> interpretation
 
     def validate_inputs(self) -> bool:
         """Validate inputs from previous agents."""
@@ -159,14 +180,79 @@ class ValidationAgent(BaseAgent):
         self.logger.info(f"Hub genes available: {len(self.hub_genes)}")
         self.logger.info(f"Genes with pathway info: {len(self.gene_to_pathway)}")
 
+        # Convert Ensembl IDs to Gene Symbols if needed
+        self._build_gene_id_mapping()
+
         return True
 
+    def _build_gene_id_mapping(self):
+        """Build Ensembl ID to Gene Symbol mapping using mygene."""
+        gene_ids = self.deg_significant['gene_id'].tolist()
+
+        # Check if IDs are Ensembl format
+        if not any(str(g).startswith('ENSG') for g in gene_ids[:10]):
+            self.logger.info("Gene IDs appear to be symbols, no conversion needed")
+            # Map to themselves
+            for gene_id in gene_ids:
+                self.ensembl_to_symbol[str(gene_id)] = str(gene_id)
+            return
+
+        if not HAS_MYGENE:
+            self.logger.warning("mygene not installed. Install with: pip install mygene")
+            self.logger.warning("DB matching will not work without gene ID conversion")
+            return
+
+        self.logger.info("Converting Ensembl IDs to Gene Symbols via mygene...")
+
+        try:
+            mg = mygene.MyGeneInfo()
+
+            # Remove version numbers (ENSG00000141510.18 -> ENSG00000141510)
+            clean_ids = [str(g).split('.')[0] for g in gene_ids]
+            unique_ids = list(set(clean_ids))
+
+            # Query in batches
+            batch_size = 1000
+            for i in range(0, len(unique_ids), batch_size):
+                batch = unique_ids[i:i+batch_size]
+                results = mg.querymany(
+                    batch,
+                    scopes='ensembl.gene',
+                    fields='symbol',
+                    species='human',
+                    verbose=False
+                )
+
+                for r in results:
+                    if 'symbol' in r:
+                        self.ensembl_to_symbol[r['query']] = r['symbol']
+
+            # Map versioned IDs to symbols
+            for gene_id in gene_ids:
+                clean_id = str(gene_id).split('.')[0]
+                if clean_id in self.ensembl_to_symbol:
+                    self.ensembl_to_symbol[str(gene_id)] = self.ensembl_to_symbol[clean_id]
+
+            converted = len([g for g in gene_ids if str(g) in self.ensembl_to_symbol])
+            self.logger.info(f"Converted {converted}/{len(gene_ids)} Ensembl IDs to Gene Symbols")
+
+        except Exception as e:
+            self.logger.error(f"Gene ID conversion failed: {e}")
+            self.logger.warning("DB matching may not work correctly")
+
     def _check_database_match(self, gene: str) -> Dict[str, Any]:
-        """Check if gene is in cancer databases."""
+        """Check if gene is in cancer databases.
+
+        Converts Ensembl ID to Gene Symbol if needed before matching.
+        """
+        # Convert Ensembl ID to Gene Symbol
+        gene_symbol = self.ensembl_to_symbol.get(str(gene), gene)
+
         result = {
-            'in_cosmic': gene in self.COSMIC_TIER1_GENES,
-            'in_oncokb': gene in self.ONCOKB_GENES,
-            'cosmic_tier': 1 if gene in self.COSMIC_TIER1_GENES else None,
+            'gene_symbol': gene_symbol,
+            'in_cosmic': gene_symbol in self.COSMIC_TIER1_GENES,
+            'in_oncokb': gene_symbol in self.ONCOKB_GENES,
+            'cosmic_tier': 1 if gene_symbol in self.COSMIC_TIER1_GENES else None,
             'db_sources': []
         }
 
@@ -181,13 +267,15 @@ class ValidationAgent(BaseAgent):
 
     def _check_cancer_type_match(self, gene: str) -> bool:
         """Check if gene is associated with the specific cancer type."""
+        gene_symbol = self.ensembl_to_symbol.get(str(gene), gene)
         cancer_type = self.config["cancer_type"]
         type_genes = self.CANCER_TYPE_GENES.get(cancer_type, set())
-        return gene in type_genes
+        return gene_symbol in type_genes
 
     def _check_tme_related(self, gene: str) -> bool:
         """Check if gene is TME-related."""
-        return gene in self.TME_GENES
+        gene_symbol = self.ensembl_to_symbol.get(str(gene), gene)
+        return gene_symbol in self.TME_GENES
 
     def _get_hub_info(self, gene: str) -> Tuple[bool, float, int]:
         """Get hub gene information."""
@@ -532,6 +620,48 @@ class ValidationAgent(BaseAgent):
             'deg_info': deg_info
         }
 
+    def _run_rag_interpretation(self, top_genes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Run RAG-based literature interpretation for top genes.
+
+        Args:
+            top_genes: List of gene dictionaries with gene_symbol, log2fc, direction
+
+        Returns:
+            Dictionary mapping gene_symbol to RAG interpretation
+        """
+        if not self.config.get('enable_rag', True):
+            self.logger.info("RAG interpretation disabled in config")
+            return {}
+
+        if not HAS_RAG:
+            self.logger.warning("RAG module not available - skipping literature interpretation")
+            return {}
+
+        try:
+            # Initialize RAG interpreter
+            cancer_type = self.config.get('cancer_type', 'breast_cancer')
+            self.rag_interpreter = create_interpreter(cancer_type)
+
+            self.logger.info(f"Running RAG interpretation for {len(top_genes)} genes...")
+
+            # Run interpretation
+            interpretations = self.rag_interpreter.interpret_genes(
+                top_genes,
+                max_genes=self.config.get('rag_max_genes', 20)
+            )
+
+            # Build result dictionary
+            result = {}
+            for interp in interpretations:
+                result[interp.gene_symbol] = interp.to_dict()
+
+            self.logger.info(f"RAG interpretation complete: {len(result)} genes interpreted")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"RAG interpretation failed: {e}")
+            return {}
+
     def run(self) -> Dict[str, Any]:
         """Execute validation and interpretation."""
         self.logger.info(f"Starting validation for cancer type: {self.config['cancer_type']}")
@@ -548,6 +678,7 @@ class ValidationAgent(BaseAgent):
             # Build integrated row
             integrated_rows.append({
                 'gene_id': gene,
+                'gene_symbol': interp['db_info'].get('gene_symbol', gene),
                 'log2FC': row['log2FC'],
                 'padj': row['padj'],
                 'direction': row['direction'],
@@ -569,6 +700,33 @@ class ValidationAgent(BaseAgent):
 
         # DB matched genes
         db_matched_df = integrated_df[integrated_df['db_matched'] == True].copy()
+
+        # === RAG Interpretation for top genes ===
+        # Select top genes (DB-matched + high score) for RAG interpretation
+        top_genes_for_rag = []
+        for _, row in integrated_df.head(self.config.get('rag_max_genes', 20)).iterrows():
+            if row['gene_symbol']:
+                top_genes_for_rag.append({
+                    'gene_symbol': row['gene_symbol'],
+                    'gene_id': row['gene_id'],
+                    'log2fc': row['log2FC'],
+                    'direction': row['direction'],
+                    'padj': row['padj']
+                })
+
+        # Run RAG interpretation
+        self.rag_interpretations = self._run_rag_interpretation(top_genes_for_rag)
+
+        # Add RAG interpretation to integrated table
+        integrated_df['rag_interpretation'] = integrated_df['gene_symbol'].apply(
+            lambda x: self.rag_interpretations.get(x, {}).get('interpretation', '')
+        )
+        integrated_df['rag_citations'] = integrated_df['gene_symbol'].apply(
+            lambda x: len(self.rag_interpretations.get(x, {}).get('citations', []))
+        )
+        integrated_df['rag_pmids'] = integrated_df['gene_symbol'].apply(
+            lambda x: ';'.join(self.rag_interpretations.get(x, {}).get('pmids', []))
+        )
 
         # Save outputs
         self.save_csv(integrated_df, "integrated_gene_table.csv")
@@ -633,10 +791,24 @@ class ValidationAgent(BaseAgent):
                 "Pathway enrichment provides context, not causality",
                 "TME genes may reflect microenvironment composition",
                 "All conclusions require experimental validation"
-            ]
+            ],
+            # RAG interpretation section
+            "rag_interpretation": {
+                "enabled": self.config.get('enable_rag', True) and HAS_RAG,
+                "genes_interpreted": len(self.rag_interpretations),
+                "interpretations": self.rag_interpretations
+            }
         }
 
         self.save_json(report, "interpretation_report.json")
+
+        # Save RAG interpretations separately for easier access
+        if self.rag_interpretations:
+            self.save_json({
+                "cancer_type": self.config["cancer_type"],
+                "genes_interpreted": len(self.rag_interpretations),
+                "interpretations": self.rag_interpretations
+            }, "rag_interpretations.json")
 
         # Log summary
         self.logger.info(f"Validation & Interpretation Complete:")
@@ -645,6 +817,7 @@ class ValidationAgent(BaseAgent):
         self.logger.info(f"  High confidence: {len(high_confidence)}")
         self.logger.info(f"  Novel candidates (hub but not in DB): {len(novel_candidates)}")
         self.logger.info(f"  Requires validation: {len(requires_validation)}")
+        self.logger.info(f"  RAG interpretations: {len(self.rag_interpretations)}")
 
         return {
             "total_deg": len(self.deg_significant),
@@ -659,6 +832,10 @@ class ValidationAgent(BaseAgent):
                 "low": len([i for i in interpretations if i['checklist']['confidence'] == 'low']),
                 "novel_candidate": len(novel_candidates),
                 "requires_validation": len(requires_validation)
+            },
+            "rag_interpretation": {
+                "enabled": self.config.get('enable_rag', True) and HAS_RAG,
+                "genes_interpreted": len(self.rag_interpretations)
             }
         }
 
