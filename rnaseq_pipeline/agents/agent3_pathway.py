@@ -108,10 +108,42 @@ class PathwayAgent(BaseAgent):
         if all(not g.startswith('ENSG') for g in gene_list):
             return gene_list
 
-        # Would need conversion via biomart or similar
-        # For now, assume they're symbols or return original
-        self.logger.warning("Gene ID conversion not implemented - using original IDs")
-        return gene_list
+        # Convert Ensembl IDs to Gene Symbols using mygene
+        self.logger.info("Detected Ensembl IDs - converting to Gene Symbols via mygene...")
+        try:
+            import mygene
+            mg = mygene.MyGeneInfo()
+
+            # Remove version numbers (e.g., ENSG00000141510.18 -> ENSG00000141510)
+            clean_ids = [g.split('.')[0] for g in gene_list]
+
+            # Query in batches of 1000
+            batch_size = 1000
+            all_results = []
+            for i in range(0, len(clean_ids), batch_size):
+                batch = clean_ids[i:i+batch_size]
+                results = mg.querymany(batch, scopes='ensembl.gene', fields='symbol',
+                                       species='human', verbose=False)
+                all_results.extend(results)
+
+            # Build mapping
+            ensembl_to_symbol = {}
+            for r in all_results:
+                if 'symbol' in r:
+                    ensembl_to_symbol[r['query']] = r['symbol']
+
+            # Convert
+            converted = []
+            for g in gene_list:
+                clean_id = g.split('.')[0]
+                if clean_id in ensembl_to_symbol:
+                    converted.append(ensembl_to_symbol[clean_id])
+
+            self.logger.info(f"Converted {len(converted)}/{len(gene_list)} Ensembl IDs to Gene Symbols")
+            return converted
+        except Exception as e:
+            self.logger.warning(f"mygene conversion failed: {e}. Using original IDs.")
+            return gene_list
 
     def _run_enrichr(self, gene_list: List[str], database: str) -> Optional[pd.DataFrame]:
         """Run Enrichr enrichment analysis for a single database."""
@@ -205,8 +237,14 @@ class PathwayAgent(BaseAgent):
 
     def run(self) -> Dict[str, Any]:
         """Execute pathway enrichment analysis."""
-        # Get gene list
-        gene_list = self.deg_significant['gene_id'].tolist()
+        # Get gene list - limit to top 500 by padj to avoid API timeout
+        deg_sorted = self.deg_significant.sort_values('padj')
+        max_genes = self.config.get('max_genes_for_enrichment', 500)
+        if len(deg_sorted) > max_genes:
+            self.logger.info(f"Limiting to top {max_genes} DEGs by padj for enrichment analysis")
+            deg_sorted = deg_sorted.head(max_genes)
+
+        gene_list = deg_sorted['gene_id'].tolist()
         gene_list = self._convert_gene_ids(gene_list)
 
         self.logger.info(f"Running pathway enrichment for {len(gene_list)} genes")
