@@ -48,7 +48,8 @@ class DEGAgent(BaseAgent):
             "log2fc_cutoff": 1.0,
             "condition_column": "condition",
             "min_count_filter": 10,
-            "use_synthetic_fallback": True  # Use synthetic DEG if DESeq2 fails
+            "use_synthetic_fallback": True,  # Use synthetic DEG if DESeq2 fails
+            "use_apeglm_shrinkage": True,  # Apply apeglm LFC shrinkage
         }
 
         merged_config = {**default_config, **(config or {})}
@@ -151,6 +152,44 @@ class DEGAgent(BaseAgent):
             dds,
             contrast=ro.StrVector([condition_col, contrast[0], contrast[1]])
         )
+
+        # Apply apeglm LFC shrinkage if enabled
+        if self.config.get("use_apeglm_shrinkage", True):
+            try:
+                self.logger.info("Applying apeglm LFC shrinkage...")
+                # apeglm requires coef name instead of contrast
+                coef_name = f"{condition_col}_{contrast[0]}_vs_{contrast[1]}"
+
+                # Check if apeglm is available
+                ro.r('if (!requireNamespace("apeglm", quietly = TRUE)) stop("apeglm not installed")')
+
+                # Get result names to find correct coefficient
+                result_names = list(deseq2.resultsNames(dds))
+                self.logger.info(f"Available coefficients: {result_names}")
+
+                # Find the coefficient that matches our contrast
+                matching_coef = None
+                for rn in result_names:
+                    if contrast[0] in rn and contrast[1] in rn:
+                        matching_coef = rn
+                        break
+                    elif condition_col in rn and contrast[0] in rn:
+                        matching_coef = rn
+                        break
+
+                if matching_coef:
+                    self.logger.info(f"Using coefficient: {matching_coef}")
+                    res_shrunk = deseq2.lfcShrink(
+                        dds,
+                        coef=matching_coef,
+                        type="apeglm"
+                    )
+                    res = res_shrunk
+                    self.logger.info("apeglm shrinkage applied successfully")
+                else:
+                    self.logger.warning(f"Could not find matching coefficient for {contrast}, using unshrunk LFC")
+            except Exception as e:
+                self.logger.warning(f"apeglm shrinkage failed: {e}. Using unshrunk LFC.")
 
         # Get normalized counts using BiocGenerics
         self.logger.info("Getting normalized counts...")

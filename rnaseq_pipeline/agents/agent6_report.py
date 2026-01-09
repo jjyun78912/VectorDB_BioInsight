@@ -128,6 +128,16 @@ class ReportAgent(BaseAgent):
                     data['figures'][img_path.stem] = str(img_path)
                 self.logger.info(f"Loaded figure: {img_path.name}")
 
+            # Load interactive HTML files (Plotly)
+            data['interactive_figures'] = {}
+            for html_path in figures_dir.glob("*.html"):
+                try:
+                    with open(html_path, 'r', encoding='utf-8') as f:
+                        data['interactive_figures'][html_path.stem] = f.read()
+                    self.logger.info(f"Loaded interactive figure: {html_path.name}")
+                except Exception as e:
+                    self.logger.warning(f"Error loading {html_path.name}: {e}")
+
         return data
 
     def _calculate_overall_confidence(self, data: Dict) -> tuple:
@@ -266,12 +276,14 @@ class ReportAgent(BaseAgent):
     def _generate_visual_dashboard_html(self, data: Dict) -> str:
         """Generate Level 2: Visual Dashboard (30초 파악)."""
         figures = data.get('figures', {})
+        interactive_figures = data.get('interactive_figures', {})
 
         # Get key figures
         volcano_src = figures.get('volcano_plot', '')
         pathway_src = figures.get('pathway_barplot', '')
         network_src = figures.get('network_graph', '')
         heatmap_src = figures.get('heatmap_top50', '')
+        volcano_interactive = interactive_figures.get('volcano_interactive', '')
 
         # Generate SHAP-like top genes bar
         integrated = data.get('integrated_gene_table', [])
@@ -319,15 +331,40 @@ class ReportAgent(BaseAgent):
             </div>
             '''
 
+        # Volcano plot section with toggle for static/interactive
+        if volcano_interactive:
+            volcano_section = f'''
+                <div class="dashboard-panel main-plot volcano-container">
+                    <div class="volcano-header">
+                        <h4>Volcano Plot</h4>
+                        <div class="view-toggle">
+                            <button class="toggle-btn active" onclick="showVolcanoView('interactive')">🔍 Interactive</button>
+                            <button class="toggle-btn" onclick="showVolcanoView('static')">📊 Static</button>
+                        </div>
+                    </div>
+                    <div id="volcano-interactive" class="volcano-view active">
+                        <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:600px; border:none; border-radius:8px;"></iframe>
+                        <p class="panel-note">💡 마우스로 확대/이동, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
+                    </div>
+                    <div id="volcano-static" class="volcano-view" style="display:none;">
+                        {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
+                    </div>
+                </div>
+            '''
+        else:
+            volcano_section = f'''
+                <div class="dashboard-panel main-plot">
+                    <h4>Volcano Plot</h4>
+                    {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
+                </div>
+            '''
+
         return f'''
         <section class="visual-dashboard" id="visual-dashboard">
             <h2>Visual Dashboard</h2>
 
             <div class="dashboard-grid">
-                <div class="dashboard-panel main-plot">
-                    <h4>Volcano Plot</h4>
-                    {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
-                </div>
+                {volcano_section}
 
                 <div class="dashboard-panel">
                     <h4>Top 10 DEGs (|log2FC|)</h4>
@@ -863,6 +900,53 @@ class ReportAgent(BaseAgent):
                 font-size: 0.75rem;
                 color: var(--gray-500);
                 margin-top: 8px;
+            }
+
+            /* Volcano Toggle */
+            .volcano-container { position: relative; }
+
+            .volcano-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 12px;
+            }
+
+            .view-toggle {
+                display: flex;
+                gap: 4px;
+                background: var(--gray-200);
+                padding: 3px;
+                border-radius: 6px;
+            }
+
+            .toggle-btn {
+                padding: 6px 12px;
+                border: none;
+                border-radius: 4px;
+                background: transparent;
+                color: var(--gray-600);
+                font-size: 0.8rem;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .toggle-btn.active {
+                background: white;
+                color: var(--primary);
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+
+            .toggle-btn:hover:not(.active) {
+                color: var(--gray-900);
+            }
+
+            .volcano-view {
+                display: none;
+            }
+
+            .volcano-view.active {
+                display: block;
             }
 
             /* Gene Bars */
@@ -1453,6 +1537,25 @@ class ReportAgent(BaseAgent):
                     }}
                 }});
             }});
+
+            // Volcano view toggle
+            function showVolcanoView(view) {{
+                const interactiveView = document.getElementById('volcano-interactive');
+                const staticView = document.getElementById('volcano-static');
+                const buttons = document.querySelectorAll('.view-toggle .toggle-btn');
+
+                if (view === 'interactive') {{
+                    interactiveView.classList.add('active');
+                    staticView.classList.remove('active');
+                    buttons[0].classList.add('active');
+                    buttons[1].classList.remove('active');
+                }} else {{
+                    interactiveView.classList.remove('active');
+                    staticView.classList.add('active');
+                    buttons[0].classList.remove('active');
+                    buttons[1].classList.add('active');
+                }}
+            }}
         </script>
         '''
 
