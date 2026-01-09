@@ -349,6 +349,11 @@ class ReportAgent(BaseAgent):
                     <h4>Network Hub</h4>
                     {f'<img src="{network_src}" alt="Network" />' if network_src else '<p class="no-data">No plot available</p>'}
                 </div>
+
+                <div class="dashboard-panel full-width">
+                    <h4>Expression Heatmap (Top 50 DEGs)</h4>
+                    {f'<img src="{heatmap_src}" alt="Heatmap" />' if heatmap_src else '<p class="no-data">No heatmap available</p>'}
+                </div>
             </div>
         </section>
         '''
@@ -837,6 +842,10 @@ class ReportAgent(BaseAgent):
 
             .dashboard-panel.main-plot {
                 grid-row: span 2;
+            }
+
+            .dashboard-panel.full-width {
+                grid-column: 1 / -1;
             }
 
             .dashboard-panel h4 {
