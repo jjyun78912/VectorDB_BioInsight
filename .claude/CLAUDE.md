@@ -74,8 +74,8 @@ BioInsight AI는 연구자가 더 빠르게 정보를 찾고, 더 깊이 분석�
 │  ├─────────────────────────────────────────────────────┤   │
 │  │  [A] RNA-seq Pipeline                               │   │
 │  │      • 6-Agent (DEG→Network→Pathway→Valid→Viz→Report) ✅ │
-│  │      • ML 예측 (CatBoost, GRNFormer)          📋    │   │
-│  │      • RAG 해석 + Guardrail                   📋    │   │
+│  │      • ML 예측 (CatBoost + SHAP)              ✅    │   │
+│  │      • RAG 해석 (Claude + Vector)             ✅    │   │
 │  │  [B] Proteomics       - 단백질 분석           📋    │   │
 │  │  [C] Genomics         - 변이 분석             📋    │   │
 │  │  [D] Drug Discovery   - 약물 탐색             📋    │   │
@@ -207,9 +207,9 @@ VectorDB_BioInsight/
 #   │   ├── predictor.py               # CatBoost
 #   │   ├── explainer.py               # SHAP
 #   │   └── tcga_comparator.py         # TCGA 비교
-#   ├── rag/                           # RAG 해석 모듈
-#   │   ├── paper_retriever.py
-#   │   └── interpreter.py
+├── rag/                               # RAG 해석 모듈 ✅
+│   ├── __init__.py
+│   └── gene_interpreter.py          # Claude API + Vector Search
 #   └── guardrail/                     # 불확실성 명시
 #       └── validator.py
 # models/                              # 사전 학습 ML 모델
@@ -338,9 +338,9 @@ GET    /api/briefing/history      # 이전 브리핑
 │                                                             │
 │  STAGE 2: PREDICT + INTERPRET                   📋 예정    │
 │  ─────────────────────────────────────────────────────────  │
-│  [ML] CatBoost + SHAP (샘플 분류)               📋         │
+│  [ML] CatBoost + SHAP (샘플 분류)               ✅         │
 │  [ML] GRNFormer (유전자 교란 예측)              📋         │
-│  [RAG] 논문 기반 해석                           📋         │
+│  [RAG] 논문 기반 해석 (Claude + Vector)         ✅         │
 │  [Guardrail] 불확실성 명시                      📋         │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -352,25 +352,25 @@ GET    /api/briefing/history      # 이전 브리핑
 |-----------|--------|----------|
 | 6-Agent Pipeline | ✅ 완료 | `rnaseq_pipeline/agents/` |
 | Orchestrator | ✅ 완료 | `rnaseq_pipeline/orchestrator.py` |
-| ML 예측 (CatBoost) | 📋 예정 | 미구현 |
-| RAG 해석 | 📋 예정 | 미구현 |
+| ML 예측 (CatBoost) | ✅ 완료 | `rnaseq_pipeline/ml/` |
+| RAG 해석 | ✅ 완료 | `rnaseq_pipeline/rag/gene_interpreter.py` |
 | Guardrail | 📋 예정 | 미구현 |
-| Pre-trained Models | 📋 예정 | 미구현 |
+| Pre-trained Models | ✅ 완료 | `models/rnaseq/breast/` |
 
-**예정 ML Components**:
+**ML Components**:
 
 | Component | Purpose | Hardware | Status |
 |-----------|---------|----------|--------|
-| CatBoost + SHAP | 샘플 분류, 중요 유전자 | CPU | 📋 예정 |
+| CatBoost + SHAP | 샘플 분류, 중요 유전자 | CPU | ✅ 완료 |
 | GRNFormer | 유전자 교란 예측 | GPU (온디맨드) | 📋 예정 |
 
-**예정 Pre-trained Models** (TCGA 기반):
+**Pre-trained Models** (TCGA 기반):
 
 | Cancer Type | TCGA Code | Status |
 |-------------|-----------|--------|
+| Breast Cancer | BRCA | ✅ 완료 (AUC 0.998) |
 | Pancreatic Cancer | PAAD | 📋 예정 |
 | Lung Cancer | LUAD/LUSC | 📋 예정 |
-| Breast Cancer | BRCA | 📋 예정 |
 | Multi-cancer | ALL | 📋 예정 |
 
 **API Endpoints** (예정):
@@ -653,9 +653,9 @@ interpretation = "KRAS는 췌장암의 주요 원인이다"  # 출처 없음
 | Phase | Status | Description |
 |-------|--------|-------------|
 | RNA-seq: 6-Agent Pipeline | ✅ Done | DEG, Network, Pathway, Validation, Viz, Report |
+| RNA-seq: ML (CatBoost + SHAP) | ✅ Done | TCGA-BRCA 분류기 (AUC 0.998) |
+| RNA-seq: RAG 해석 | ✅ Done | Claude API + PubMedBERT Vector Search |
 | RNA-seq: API 통합 | 📋 Planned | FastAPI 엔드포인트 |
-| RNA-seq: ML (CatBoost) | 📋 Planned | 사전 학습 분류기 |
-| RNA-seq: RAG 해석 | 📋 Planned | 논문 기반 해석 |
 | RNA-seq: Guardrail | 📋 Planned | 불확실성 명시 |
 | RNA-seq: GRNFormer | 📋 Planned | 유전자 교란 예측 |
 | Proteomics | 📋 Planned | 단백질 분석 |
