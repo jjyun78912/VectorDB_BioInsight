@@ -702,17 +702,47 @@ class ValidationAgent(BaseAgent):
         db_matched_df = integrated_df[integrated_df['db_matched'] == True].copy()
 
         # === RAG Interpretation for top genes ===
-        # Select top genes (DB-matched + high score) for RAG interpretation
+        # Priority: Hub genes first (from network analysis), then DB-matched genes
+        # This ensures RAG validates our analysis-derived hub genes against literature
         top_genes_for_rag = []
-        for _, row in integrated_df.head(self.config.get('rag_max_genes', 20)).iterrows():
-            if row['gene_symbol']:
+        rag_max_genes = self.config.get('rag_max_genes', 20)
+
+        # 1. First, add all hub genes (sorted by hub_score descending)
+        hub_genes_df = integrated_df[integrated_df['is_hub'] == True].sort_values('hub_score', ascending=False)
+        for _, row in hub_genes_df.iterrows():
+            if row['gene_symbol'] and len(top_genes_for_rag) < rag_max_genes:
                 top_genes_for_rag.append({
                     'gene_symbol': row['gene_symbol'],
                     'gene_id': row['gene_id'],
                     'log2fc': row['log2FC'],
                     'direction': row['direction'],
-                    'padj': row['padj']
+                    'padj': row['padj'],
+                    'is_hub': True,
+                    'hub_score': row['hub_score']
                 })
+
+        # 2. If still under limit, add DB-matched non-hub genes
+        added_symbols = {g['gene_symbol'] for g in top_genes_for_rag}
+        db_matched_non_hub = integrated_df[
+            (integrated_df['db_matched'] == True) &
+            (integrated_df['is_hub'] == False)
+        ].sort_values('interpretation_score', ascending=False)
+
+        for _, row in db_matched_non_hub.iterrows():
+            if row['gene_symbol'] and row['gene_symbol'] not in added_symbols and len(top_genes_for_rag) < rag_max_genes:
+                top_genes_for_rag.append({
+                    'gene_symbol': row['gene_symbol'],
+                    'gene_id': row['gene_id'],
+                    'log2fc': row['log2FC'],
+                    'direction': row['direction'],
+                    'padj': row['padj'],
+                    'is_hub': False,
+                    'hub_score': 0.0
+                })
+                added_symbols.add(row['gene_symbol'])
+
+        self.logger.info(f"RAG target genes: {len([g for g in top_genes_for_rag if g.get('is_hub')])} hub genes + "
+                        f"{len([g for g in top_genes_for_rag if not g.get('is_hub')])} DB-matched genes")
 
         # Run RAG interpretation
         self.rag_interpretations = self._run_rag_interpretation(top_genes_for_rag)

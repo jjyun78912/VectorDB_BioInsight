@@ -118,13 +118,15 @@ class VisualizationAgent(BaseAgent):
 
         return True
 
-    def _save_figure(self, fig: plt.Figure, name: str) -> List[str]:
+    def _save_figure(self, fig: plt.Figure, name: str, preserve_facecolor: bool = False) -> List[str]:
         """Save figure in multiple formats."""
         saved_files = []
+        # Use figure's facecolor if preserve_facecolor=True, otherwise white
+        facecolor = fig.get_facecolor() if preserve_facecolor else 'white'
         for fmt in self.config["figure_format"]:
             filepath = self.figures_dir / f"{name}.{fmt}"
             fig.savefig(filepath, dpi=self.config["dpi"], bbox_inches='tight',
-                       facecolor='white', edgecolor='none')
+                       facecolor=facecolor, edgecolor='none')
             saved_files.append(str(filepath))
             self.logger.info(f"Saved {filepath.name}")
         plt.close(fig)
@@ -583,7 +585,7 @@ class VisualizationAgent(BaseAgent):
         return self._save_figure(fig, "pca_plot")
 
     def _plot_network(self) -> Optional[List[str]]:
-        """Generate network visualization."""
+        """Generate galaxy-style network visualization with gene symbols."""
         if self.network_edges is None or len(self.network_edges) == 0:
             self.logger.warning("Skipping network plot - no edges")
             return None
@@ -600,56 +602,158 @@ class VisualizationAgent(BaseAgent):
             self.logger.warning("networkx not installed - skipping network plot")
             return None
 
-        # Build graph from edges
+        # Build gene_id to gene_symbol mapping from integrated_gene_table
+        gene_id_to_symbol = {}
+        if self.integrated_table is not None:
+            for _, row in self.integrated_table.iterrows():
+                if pd.notna(row.get('gene_symbol')) and row['gene_symbol']:
+                    gene_id_to_symbol[row['gene_id']] = row['gene_symbol']
+
+        def get_gene_label(gene_id: str) -> str:
+            """Convert ENSG ID to gene symbol, fallback to short ID."""
+            if gene_id in gene_id_to_symbol:
+                return gene_id_to_symbol[gene_id]
+            # Fallback: shorten ENSG ID (ENSG00000122952.17 -> ENSG...2952)
+            if gene_id.startswith('ENSG'):
+                parts = gene_id.split('.')
+                return f"...{parts[0][-4:]}"
+            return gene_id
+
+        # Build graph from edges with gene symbols
         G = nx.Graph()
         for _, row in self.network_edges.iterrows():
-            G.add_edge(row['gene1'], row['gene2'], weight=row['abs_correlation'])
+            label1 = get_gene_label(row['gene1'])
+            label2 = get_gene_label(row['gene2'])
+            G.add_edge(label1, label2, weight=row['abs_correlation'])
 
         if G.number_of_nodes() == 0:
             return None
 
-        # Get hub genes for highlighting
-        hub_set = set(self.hub_genes['gene_id'].tolist())
+        # Get hub genes for highlighting (convert to symbols)
+        hub_set_ids = set(self.hub_genes['gene_id'].tolist())
+        hub_set_labels = {get_gene_label(h) for h in hub_set_ids}
+
+        # Get hub scores for sizing
+        hub_scores = {}
+        for _, row in self.hub_genes.iterrows():
+            label = get_gene_label(row['gene_id'])
+            hub_scores[label] = row.get('hub_score', 0.5)
 
         # Limit to subgraph around hubs for visualization
         if G.number_of_nodes() > 100:
-            # Keep only hub genes and their neighbors
             nodes_to_keep = set()
-            for hub in hub_set:
-                if hub in G:
-                    nodes_to_keep.add(hub)
-                    nodes_to_keep.update(list(G.neighbors(hub))[:10])
+            for hub_label in hub_set_labels:
+                if hub_label in G:
+                    nodes_to_keep.add(hub_label)
+                    nodes_to_keep.update(list(G.neighbors(hub_label))[:10])
             G = G.subgraph(nodes_to_keep).copy()
 
-        # Plot
-        fig, ax = plt.subplots(figsize=self.config["figsize"]["network"])
+        # === Galaxy/Space Theme ===
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(16, 14), facecolor='#0d1117')
+        ax.set_facecolor('#0d1117')
 
-        pos = nx.spring_layout(G, k=2, iterations=50)
+        # Use Kamada-Kawai layout for more organic feel
+        pos = nx.kamada_kawai_layout(G)
 
-        # Node colors based on hub status
-        node_colors = ['#E74C3C' if n in hub_set else '#3498DB' for n in G.nodes()]
-        node_sizes = [300 if n in hub_set else 100 for n in G.nodes()]
+        # Calculate node degrees for sizing non-hub nodes
+        degrees = dict(G.degree())
 
-        nx.draw_networkx_edges(G, pos, alpha=0.3, ax=ax)
-        nx.draw_networkx_nodes(G, pos, node_color=node_colors,
-                               node_size=node_sizes, alpha=0.8, ax=ax)
+        # Node styling - Galaxy theme
+        node_colors = []
+        node_sizes = []
+        node_alphas = []
 
-        # Label hub genes
-        hub_labels = {n: n for n in G.nodes() if n in hub_set}
-        nx.draw_networkx_labels(G, pos, hub_labels, font_size=8, ax=ax)
+        for n in G.nodes():
+            if n in hub_set_labels:
+                # Hub genes: bright stars (gold/orange gradient based on hub_score)
+                score = hub_scores.get(n, 0.5)
+                node_colors.append(plt.cm.YlOrRd(0.5 + score * 0.5))  # Yellow-Orange-Red
+                node_sizes.append(400 + score * 600)  # Size based on hub_score
+                node_alphas.append(0.95)
+            else:
+                # Other genes: distant stars (cyan/blue)
+                deg = degrees.get(n, 1)
+                node_colors.append('#4fc3f7')  # Cyan blue
+                node_sizes.append(80 + deg * 15)  # Size based on degree
+                node_alphas.append(0.7)
 
-        ax.set_title(f'Co-expression Network\n({G.number_of_nodes()} genes, {G.number_of_edges()} edges)')
+        # Draw edges with gradient opacity based on weight
+        edge_weights = [G[u][v].get('weight', 0.5) for u, v in G.edges()]
+        max_weight = max(edge_weights) if edge_weights else 1
+
+        for (u, v), w in zip(G.edges(), edge_weights):
+            alpha = 0.1 + (w / max_weight) * 0.3
+            # Purple-ish edges for galaxy feel
+            ax.plot([pos[u][0], pos[v][0]], [pos[u][1], pos[v][1]],
+                   color='#7c4dff', alpha=alpha, linewidth=0.5, zorder=1)
+
+        # Draw nodes with glow effect
+        # First pass: glow (larger, more transparent)
+        for i, n in enumerate(G.nodes()):
+            if n in hub_set_labels:
+                ax.scatter(pos[n][0], pos[n][1],
+                          s=node_sizes[i] * 2,
+                          c=[node_colors[i]],
+                          alpha=0.2, zorder=2)
+
+        # Second pass: actual nodes
+        for i, n in enumerate(G.nodes()):
+            ax.scatter(pos[n][0], pos[n][1],
+                      s=node_sizes[i],
+                      c=[node_colors[i]],
+                      alpha=node_alphas[i],
+                      edgecolors='white' if n in hub_set_labels else 'none',
+                      linewidths=1.5 if n in hub_set_labels else 0,
+                      zorder=3)
+
+        # Labels for ALL genes (not just hubs)
+        for n in G.nodes():
+            x, y = pos[n]
+            if n in hub_set_labels:
+                # Hub genes: larger, white text with slight offset
+                ax.annotate(n, (x, y),
+                           xytext=(5, 5), textcoords='offset points',
+                           fontsize=9, fontweight='bold', color='white',
+                           ha='left', va='bottom', zorder=4)
+            else:
+                # Other genes: smaller, cyan text
+                ax.annotate(n, (x, y),
+                           xytext=(3, 3), textcoords='offset points',
+                           fontsize=6, color='#80deea', alpha=0.8,
+                           ha='left', va='bottom', zorder=4)
+
+        # Title with galaxy theme (without special characters for font compatibility)
+        ax.set_title('Gene Co-expression Network\nGalaxy View',
+                    fontsize=16, fontweight='bold', color='white', pad=20)
+
+        # Subtitle with stats
+        ax.text(0.5, 0.02, f'{G.number_of_nodes()} genes · {G.number_of_edges()} connections · {len(hub_set_labels)} hub genes',
+               transform=ax.transAxes, ha='center', fontsize=10, color='#b0bec5')
+
         ax.axis('off')
+        ax.set_xlim(ax.get_xlim()[0] - 0.1, ax.get_xlim()[1] + 0.1)
+        ax.set_ylim(ax.get_ylim()[0] - 0.1, ax.get_ylim()[1] + 0.1)
 
-        # Add legend
-        from matplotlib.patches import Patch
+        # Legend with custom styling
+        from matplotlib.lines import Line2D
         legend_elements = [
-            Patch(facecolor='#E74C3C', label='Hub Gene'),
-            Patch(facecolor='#3498DB', label='Other Gene')
+            Line2D([0], [0], marker='o', color='#0d1117', markerfacecolor='#ff9800',
+                   markersize=12, markeredgecolor='white', markeredgewidth=1.5, label='Hub Gene'),
+            Line2D([0], [0], marker='o', color='#0d1117', markerfacecolor='#4fc3f7',
+                   markersize=8, label='Connected Gene'),
+            Line2D([0], [0], color='#7c4dff', linewidth=2, alpha=0.5, label='Co-expression')
         ]
-        ax.legend(handles=legend_elements, loc='upper right')
+        legend = ax.legend(handles=legend_elements, loc='upper right',
+                          facecolor='#161b22', edgecolor='#30363d',
+                          fontsize=9, labelcolor='white')
 
-        return self._save_figure(fig, "network_graph")
+        plt.tight_layout()
+
+        # Reset style to default after this plot
+        result = self._save_figure(fig, "network_graph", preserve_facecolor=True)
+        plt.style.use('default')
+        return result
 
     def _plot_pathway_barplot(self) -> Optional[List[str]]:
         """Generate pathway enrichment barplot."""
@@ -765,6 +869,457 @@ class VisualizationAgent(BaseAgent):
 
         return self._save_figure(fig, "interpretation_summary")
 
+    def _plot_network_3d_interactive(self) -> Optional[str]:
+        """Generate interactive 3D network visualization with Three.js + 3d-force-graph.
+
+        Inspired by Obsidian 3D Graph plugin style with:
+        - Bloom/glow effects
+        - Particle animations on links
+        - Smooth force-directed physics
+        - Dark space theme
+        """
+        if self.network_edges is None or len(self.network_edges) == 0:
+            self.logger.warning("Skipping 3D network - no edges")
+            return None
+
+        if self.hub_genes is None or len(self.hub_genes) == 0:
+            self.logger.warning("Skipping 3D network - no hub genes")
+            return None
+
+        self.logger.info("Generating interactive 3D network (Obsidian-style)...")
+
+        try:
+            import networkx as nx
+            import json
+        except ImportError:
+            self.logger.warning("networkx not installed - skipping 3D network")
+            return None
+
+        # Build gene_id to gene_symbol mapping
+        gene_id_to_symbol = {}
+        if self.integrated_table is not None:
+            for _, row in self.integrated_table.iterrows():
+                if pd.notna(row.get('gene_symbol')) and row['gene_symbol']:
+                    gene_id_to_symbol[row['gene_id']] = row['gene_symbol']
+
+        # Get log2FC and direction for coloring
+        gene_info = {}
+        if self.integrated_table is not None:
+            for _, row in self.integrated_table.iterrows():
+                gene_id = row['gene_id']
+                gene_info[gene_id] = {
+                    'log2FC': row.get('log2FC', 0),
+                    'direction': row.get('direction', 'none'),
+                    'padj': row.get('padj', 1)
+                }
+
+        def get_gene_label(gene_id: str) -> str:
+            if gene_id in gene_id_to_symbol:
+                return gene_id_to_symbol[gene_id]
+            if gene_id.startswith('ENSG'):
+                parts = gene_id.split('.')
+                return f"...{parts[0][-4:]}"
+            return gene_id
+
+        # Build graph
+        G = nx.Graph()
+        for _, row in self.network_edges.iterrows():
+            gene1, gene2 = row['gene1'], row['gene2']
+            label1 = get_gene_label(gene1)
+            label2 = get_gene_label(gene2)
+            G.add_edge(label1, label2, weight=row['abs_correlation'])
+            G.nodes[label1]['gene_id'] = gene1
+            G.nodes[label2]['gene_id'] = gene2
+
+        if G.number_of_nodes() == 0:
+            return None
+
+        # Get hub info
+        hub_set_ids = set(self.hub_genes['gene_id'].tolist())
+        hub_set_labels = {get_gene_label(h) for h in hub_set_ids}
+        hub_scores = {}
+        for _, row in self.hub_genes.iterrows():
+            label = get_gene_label(row['gene_id'])
+            hub_scores[label] = row.get('hub_score', 0.5)
+
+        # Limit graph size
+        if G.number_of_nodes() > 150:
+            nodes_to_keep = set()
+            for hub_label in hub_set_labels:
+                if hub_label in G:
+                    nodes_to_keep.add(hub_label)
+                    nodes_to_keep.update(list(G.neighbors(hub_label))[:8])
+            G = G.subgraph(nodes_to_keep).copy()
+
+        # Prepare data for 3d-force-graph
+        nodes_data = []
+        for node in G.nodes():
+            is_hub = node in hub_set_labels
+            gene_id = G.nodes[node].get('gene_id', '')
+            info = gene_info.get(gene_id, {})
+            log2fc = info.get('log2FC', 0)
+            direction = info.get('direction', 'none')
+            degree = G.degree(node)
+
+            # Color based on direction and hub status
+            if is_hub:
+                if direction == 'up':
+                    color = '#ff6b6b'  # Coral red
+                elif direction == 'down':
+                    color = '#4ecdc4'  # Teal
+                else:
+                    color = '#ffd93d'  # Gold
+            else:
+                if direction == 'up':
+                    color = '#ff9999'
+                elif direction == 'down':
+                    color = '#99dddd'
+                else:
+                    color = '#888888'
+
+            nodes_data.append({
+                'id': node,
+                'name': node,
+                'isHub': is_hub,
+                'hubScore': hub_scores.get(node, 0),
+                'log2FC': round(log2fc, 2),
+                'direction': direction,
+                'degree': degree,
+                'color': color,
+                'size': 8 + hub_scores.get(node, 0) * 15 if is_hub else 4 + degree * 0.5
+            })
+
+        links_data = []
+        for edge in G.edges(data=True):
+            links_data.append({
+                'source': edge[0],
+                'target': edge[1],
+                'weight': round(edge[2].get('weight', 0.5), 3)
+            })
+
+        graph_data = json.dumps({'nodes': nodes_data, 'links': links_data})
+
+        hub_count = len([n for n in nodes_data if n['isHub']])
+        stats_text = f"{len(nodes_data)} genes · {len(links_data)} connections · {hub_count} hub genes"
+
+        # HTML template with 3d-force-graph + Three.js bloom effect
+        html_template = f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Gene Co-expression Network - 3D Galaxy View</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            background: #000011;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }}
+        #container {{ width: 100vw; height: 100vh; }}
+
+        /* Header */
+        .header {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 30px;
+            background: linear-gradient(to bottom, rgba(0,0,17,0.9) 0%, transparent 100%);
+            z-index: 100;
+            pointer-events: none;
+        }}
+        .header h1 {{
+            color: #fff;
+            font-size: 24px;
+            font-weight: 600;
+            text-shadow: 0 0 20px rgba(100,150,255,0.5);
+        }}
+        .header .subtitle {{
+            color: #8b949e;
+            font-size: 14px;
+            margin-top: 5px;
+        }}
+
+        /* Stats bar */
+        .stats {{
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(22,27,34,0.85);
+            border: 1px solid rgba(100,150,255,0.3);
+            border-radius: 25px;
+            padding: 12px 25px;
+            color: #c9d1d9;
+            font-size: 13px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(100,150,255,0.2);
+            z-index: 100;
+        }}
+
+        /* Legend */
+        .legend {{
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            background: rgba(22,27,34,0.85);
+            border: 1px solid rgba(100,150,255,0.3);
+            border-radius: 12px;
+            padding: 15px 20px;
+            color: #c9d1d9;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }}
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }}
+        .legend-dot {{
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            box-shadow: 0 0 10px currentColor;
+        }}
+        .legend-dot.hub-up {{ background: #ff6b6b; color: #ff6b6b; }}
+        .legend-dot.hub-down {{ background: #4ecdc4; color: #4ecdc4; }}
+        .legend-dot.other {{ background: #888; color: #888; }}
+
+        /* Controls */
+        .controls {{
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }}
+        .control-btn {{
+            background: rgba(22,27,34,0.85);
+            border: 1px solid rgba(100,150,255,0.3);
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: #c9d1d9;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+        }}
+        .control-btn:hover {{
+            background: rgba(100,150,255,0.2);
+            border-color: rgba(100,150,255,0.6);
+        }}
+
+        /* Tooltip */
+        .node-tooltip {{
+            position: fixed;
+            background: rgba(13,17,23,0.95);
+            border: 1px solid rgba(100,150,255,0.5);
+            border-radius: 10px;
+            padding: 15px;
+            color: #fff;
+            font-size: 13px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 280px;
+            box-shadow: 0 0 30px rgba(100,150,255,0.3);
+            backdrop-filter: blur(10px);
+            z-index: 200;
+        }}
+        .node-tooltip.visible {{ opacity: 1; }}
+        .node-tooltip h3 {{
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #58a6ff;
+        }}
+        .node-tooltip .hub-badge {{
+            display: inline-block;
+            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+        }}
+        .node-tooltip .stat {{
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }}
+        .node-tooltip .stat:last-child {{ border: none; }}
+        .node-tooltip .stat-label {{ color: #8b949e; }}
+        .node-tooltip .stat-value {{ color: #fff; font-weight: 500; }}
+        .node-tooltip .up {{ color: #ff6b6b; }}
+        .node-tooltip .down {{ color: #4ecdc4; }}
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div class="header">
+        <h1>✧ Gene Co-expression Network</h1>
+        <div class="subtitle">3D Interactive Galaxy View · Drag to rotate · Scroll to zoom · Click node for details</div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot hub-up"></div>Upregulated Hub</div>
+        <div class="legend-item"><div class="legend-dot hub-down"></div>Downregulated Hub</div>
+        <div class="legend-item"><div class="legend-dot other"></div>Connected Gene</div>
+    </div>
+
+    <div class="controls">
+        <button class="control-btn" onclick="toggleLabels()">Toggle Labels</button>
+        <button class="control-btn" onclick="toggleParticles()">Toggle Particles</button>
+        <button class="control-btn" onclick="resetCamera()">Reset View</button>
+    </div>
+
+    <div class="stats">{stats_text}</div>
+
+    <div class="node-tooltip" id="tooltip"></div>
+
+    <script src="https://unpkg.com/3d-force-graph@1"></script>
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script>
+        const graphData = {graph_data};
+
+        let showLabels = true;
+        let showParticles = true;
+
+        // Create the 3D force graph
+        const Graph = ForceGraph3D()
+            (document.getElementById('container'))
+            .graphData(graphData)
+            .backgroundColor('#000011')
+            .showNavInfo(false)
+
+            // Node styling
+            .nodeVal(node => node.size)
+            .nodeColor(node => node.color)
+            .nodeOpacity(0.9)
+            .nodeResolution(16)
+
+            // Node labels
+            .nodeLabel('')  // Disable default label
+            .nodeThreeObject(node => {{
+                if (!showLabels && !node.isHub) return null;
+
+                const sprite = new SpriteText(node.name);
+                sprite.color = node.isHub ? '#ffffff' : '#aaaaaa';
+                sprite.textHeight = node.isHub ? 3 : 2;
+                sprite.fontWeight = node.isHub ? 'bold' : 'normal';
+                sprite.backgroundColor = 'rgba(0,0,0,0.5)';
+                sprite.padding = 1;
+                sprite.borderRadius = 2;
+                return sprite;
+            }})
+            .nodeThreeObjectExtend(true)
+
+            // Link styling
+            .linkWidth(link => 0.3 + link.weight * 0.5)
+            .linkOpacity(0.4)
+            .linkColor(() => '#4466aa')
+
+            // Particles on links
+            .linkDirectionalParticles(link => showParticles ? 2 : 0)
+            .linkDirectionalParticleWidth(1.5)
+            .linkDirectionalParticleSpeed(0.005)
+            .linkDirectionalParticleColor(() => '#88aaff')
+
+            // Force simulation
+            .d3AlphaDecay(0.02)
+            .d3VelocityDecay(0.3)
+            .warmupTicks(100)
+            .cooldownTicks(200)
+
+            // Interactions
+            .onNodeHover(node => {{
+                document.body.style.cursor = node ? 'pointer' : 'default';
+                const tooltip = document.getElementById('tooltip');
+                if (node) {{
+                    const direction = node.direction === 'up' ?
+                        '<span class="up">↑ Upregulated</span>' :
+                        node.direction === 'down' ?
+                        '<span class="down">↓ Downregulated</span>' : 'N/A';
+
+                    tooltip.innerHTML = `
+                        <h3>${{node.name}}${{node.isHub ? '<span class="hub-badge">HUB</span>' : ''}}</h3>
+                        <div class="stat"><span class="stat-label">Expression</span><span class="stat-value">${{direction}}</span></div>
+                        <div class="stat"><span class="stat-label">log2FC</span><span class="stat-value">${{node.log2FC.toFixed(2)}}</span></div>
+                        <div class="stat"><span class="stat-label">Connections</span><span class="stat-value">${{node.degree}}</span></div>
+                        ${{node.isHub ? `<div class="stat"><span class="stat-label">Hub Score</span><span class="stat-value">${{node.hubScore.toFixed(3)}}</span></div>` : ''}}
+                    `;
+                    tooltip.classList.add('visible');
+                }} else {{
+                    tooltip.classList.remove('visible');
+                }}
+            }})
+            .onNodeClick(node => {{
+                // Focus on clicked node
+                const distance = 150;
+                const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
+                Graph.cameraPosition(
+                    {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
+                    node,
+                    2000
+                );
+            }});
+
+        // Add bloom post-processing
+        const bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.5,   // strength
+            0.4,   // radius
+            0.85   // threshold
+        );
+
+        // Track mouse for tooltip positioning
+        document.addEventListener('mousemove', (e) => {{
+            const tooltip = document.getElementById('tooltip');
+            tooltip.style.left = (e.clientX + 15) + 'px';
+            tooltip.style.top = (e.clientY + 15) + 'px';
+        }});
+
+        // Control functions
+        function toggleLabels() {{
+            showLabels = !showLabels;
+            Graph.nodeThreeObject(Graph.nodeThreeObject());  // Refresh
+        }}
+
+        function toggleParticles() {{
+            showParticles = !showParticles;
+            Graph.linkDirectionalParticles(link => showParticles ? 2 : 0);
+        }}
+
+        function resetCamera() {{
+            Graph.cameraPosition({{ x: 0, y: 0, z: 500 }}, {{ x: 0, y: 0, z: 0 }}, 1000);
+        }}
+
+        // Initial camera position
+        setTimeout(() => {{
+            Graph.cameraPosition({{ x: 300, y: 200, z: 300 }});
+        }}, 100);
+    </script>
+
+    <!-- SpriteText for labels -->
+    <script src="https://unpkg.com/three-spritetext@1"></script>
+</body>
+</html>'''
+
+        # Save HTML
+        filepath = self.figures_dir / "network_3d_interactive.html"
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html_template)
+        self.logger.info(f"Saved {filepath.name}")
+
+        return str(filepath)
+
     def run(self) -> Dict[str, Any]:
         """Generate all visualizations."""
         generated_figures = []
@@ -792,8 +1347,9 @@ class VisualizationAgent(BaseAgent):
                 self.logger.error(f"Error generating {name}: {e}")
                 failed_figures.append(name)
 
-        # Generate interactive volcano plot (Plotly)
+        # Generate interactive plots (Plotly)
         if self.config.get("generate_interactive", True):
+            # Interactive volcano plot
             try:
                 interactive_result = self._plot_volcano_interactive()
                 if interactive_result:
@@ -801,6 +1357,15 @@ class VisualizationAgent(BaseAgent):
                     self.logger.info("Interactive volcano plot generated successfully")
             except Exception as e:
                 self.logger.error(f"Error generating interactive volcano: {e}")
+
+            # Interactive 3D network
+            try:
+                network_3d_result = self._plot_network_3d_interactive()
+                if network_3d_result:
+                    interactive_files.append(network_3d_result)
+                    self.logger.info("Interactive 3D network generated successfully")
+            except Exception as e:
+                self.logger.error(f"Error generating 3D network: {e}")
 
         self.logger.info(f"Visualization Complete:")
         self.logger.info(f"  Static figures: {len(generated_figures)} files")

@@ -201,12 +201,38 @@ class DEGAgent(BaseAgent):
             results_df = ro.conversion.rpy2py(base.as_data_frame(res))
             norm_counts_df = ro.conversion.rpy2py(base.as_data_frame(norm_counts))
 
-        # Add gene IDs
+        # Log original columns for debugging
+        self.logger.info(f"DESeq2 result columns: {list(results_df.columns)}")
+        self.logger.info(f"DESeq2 result shape: {results_df.shape}")
+
+        # Dynamically map columns based on what DESeq2 returns
+        # apeglm shrinkage returns: baseMean, log2FoldChange, lfcSE, pvalue, padj (5 cols, no stat)
+        # Normal results return: baseMean, log2FoldChange, lfcSE, stat, pvalue, padj (6 cols)
+        col_mapping = {
+            'baseMean': 'baseMean',
+            'log2FoldChange': 'log2FC',
+            'lfcSE': 'lfcSE',
+            'stat': 'stat',
+            'pvalue': 'pvalue',
+            'padj': 'padj'
+        }
+
+        # Rename existing columns
+        results_df = results_df.rename(columns=col_mapping)
+
+        # Add stat column if missing (apeglm doesn't return it)
+        if 'stat' not in results_df.columns:
+            results_df['stat'] = results_df['log2FC'] / results_df['lfcSE'].replace(0, np.nan)
+
+        # Add gene_id from index
         results_df.insert(0, 'gene_id', count_df.index)
         norm_counts_df.insert(0, 'gene_id', count_df.index)
 
-        # Rename columns
-        results_df.columns = ['gene_id', 'baseMean', 'log2FC', 'lfcSE', 'stat', 'pvalue', 'padj']
+        # Ensure consistent column order
+        expected_cols = ['gene_id', 'baseMean', 'log2FC', 'lfcSE', 'stat', 'pvalue', 'padj']
+        results_df = results_df[expected_cols]
+
+        self.logger.info(f"Final result shape: {results_df.shape}")
 
         return results_df, norm_counts_df
 
