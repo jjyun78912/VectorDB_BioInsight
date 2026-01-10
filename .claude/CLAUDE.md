@@ -107,6 +107,7 @@ BioInsight AI는 연구자가 더 빠르게 정보를 찾고, 더 깊이 분석�
 ### Analysis-specific
 - **RNA-seq**: DESeq2 (R), CatBoost, SHAP, GRNFormer
 - **RAG**: LangChain
+- **Network Visualization**: 3d-force-graph (Three.js), NetworkX, Plotly
 
 ---
 
@@ -177,7 +178,7 @@ VectorDB_BioInsight/
 │   │   ├── agent2_network.py          # Network/Hub gene detection
 │   │   ├── agent3_pathway.py          # GO/KEGG enrichment
 │   │   ├── agent4_validation.py       # DB validation (DisGeNET, OMIM)
-│   │   ├── agent5_visualization.py    # Volcano, Heatmap, Network plots
+│   │   ├── agent5_visualization.py    # Volcano, Heatmap, 2D/3D Network plots
 │   │   └── agent6_report.py           # HTML report generation
 │   ├── utils/
 │   │   └── base_agent.py              # Base agent class
@@ -388,7 +389,7 @@ GET    /api/briefing/trends/summary  # 트렌드 요약
 │  [Agent 2] Network → Hub gene 탐지              ✅         │
 │  [Agent 3] Pathway → GO/KEGG enrichment         ✅         │
 │  [Agent 4] DB 검증 (DisGeNET, OMIM, COSMIC)     ✅         │
-│  [Agent 5] 시각화 (Volcano, Heatmap, Network)   ✅         │
+│  [Agent 5] 시각화 (Volcano, Heatmap, 2D/3D Network) ✅      │
 │  [Agent 6] HTML 리포트                          ✅         │
 │                                                             │
 │  STAGE 2: PREDICT + INTERPRET                   📋 예정    │
@@ -411,6 +412,33 @@ GET    /api/briefing/trends/summary  # 트렌드 요약
 | RAG 해석 | ✅ 완료 | `rnaseq_pipeline/rag/gene_interpreter.py` |
 | Guardrail | 📋 예정 | 미구현 |
 | Pre-trained Models | ✅ 완료 | `models/rnaseq/breast/` |
+| 3D Network Viz | ✅ 완료 | `agent5_visualization.py` |
+
+**RAG Gene Selection Logic** (Hub-First):
+
+```python
+# agent4_validation.py - RAG 유전자 선택 로직
+# 목적: 네트워크 분석에서 도출된 Hub gene을 문헌 기반으로 검증
+
+# 1. Hub gene 우선 선택 (hub_score 내림차순)
+hub_genes_df = integrated_df[integrated_df['is_hub'] == True]
+    .sort_values('hub_score', ascending=False)
+
+# 2. 남은 자리에 DB-matched 유전자 추가
+db_matched_non_hub = integrated_df[
+    (integrated_df['db_matched'] == True) &
+    (integrated_df['is_hub'] == False)
+]
+
+# 결과: Hub gene 100% 포함 (이전: 65% → 현재: 100%)
+```
+
+**Network Visualization Types**:
+
+| Type | Library | Features |
+|------|---------|----------|
+| Galaxy 2D | Matplotlib | 어두운 우주 배경, glow 효과, 전체 라벨 |
+| Obsidian 3D | 3d-force-graph + Three.js | 파티클 애니메이션, 회전/줌, 클릭 포커스 |
 
 **ML Components**:
 
@@ -775,3 +803,19 @@ pytest tests/test_rnaseq_pipeline.py -v
 - [DESeq2 Vignette](https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html)
 - [CatBoost Documentation](https://catboost.ai/docs/)
 - [SHAP Documentation](https://shap.readthedocs.io/)
+- [3d-force-graph](https://github.com/vasturiano/3d-force-graph) - 3D Network Visualization
+- [Obsidian 3D Graph](https://github.com/AlexW00/obsidian-3d-graph) - UI/UX Reference
+
+---
+
+## Project History
+
+전체 프로젝트 히스토리는 `docs/PROJECT_HISTORY.md` 참조.
+
+### 최근 업데이트 (2026-01-11)
+
+- **RAG 유전자 선택 로직 수정**: Hub gene 우선 선택 (65% → 100%)
+- **Network 시각화 개선**: ENSG ID → 유전자 이름 표시
+- **Galaxy 2D Network**: 어두운 우주 배경, glow 효과
+- **Obsidian 3D Network**: 파티클 애니메이션, 인터랙티브 컨트롤
+- **DESeq2 컬럼 처리**: apeglm shrinkage 5컬럼 동적 대응
