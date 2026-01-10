@@ -548,13 +548,15 @@ async def get_trending(
     category: str,
     limit: int = Query(default=10, ge=1, le=20, description="Number of papers"),
     no_cache: bool = Query(default=False, description="Bypass cache"),
-    major_only: bool = Query(default=True, description="Filter to major journals only (Nature, Cell, Science, NEJM, Lancet, etc.)")
+    major_only: bool = Query(default=True, description="Filter to major journals only (Nature, Cell, Science, NEJM, Lancet, etc.)"),
+    lang: str = Query(default="en", description="Language for paper metadata: 'en' or 'ko'")
 ):
     """
     Get trending papers for a category.
 
     By default, filters to major journals only (Nature, Cell, Science, NEJM, Lancet, JAMA, etc.)
     Set major_only=false to include all journals.
+    Set lang=ko to get Korean translations of titles and abstracts.
 
     Available categories:
     - oncology
@@ -584,9 +586,27 @@ async def get_trending(
         cache_key = f"{category}_{limit}"
         cached = cache_key in crawler_agent._trending_cache and not no_cache
 
+        # Convert to response objects
+        paper_responses = [paper_to_response(p) for p in papers]
+
+        # Translate if Korean requested
+        if lang == "ko":
+            translator = get_translator()
+            for paper_resp in paper_responses:
+                try:
+                    # Translate title
+                    if paper_resp.title and not paper_resp.title_ko:
+                        paper_resp.title_ko = translator.translate_to_korean(paper_resp.title)
+                    # Translate abstract (limit length to avoid timeout)
+                    if paper_resp.abstract and not paper_resp.abstract_ko and len(paper_resp.abstract) < 2000:
+                        paper_resp.abstract_ko = translator.translate_to_korean(paper_resp.abstract)
+                except Exception as e:
+                    print(f"Translation error for paper {paper_resp.id}: {e}")
+                    # Continue without translation on error
+
         return TrendingResponse(
             category=category,
-            papers=[paper_to_response(p) for p in papers],
+            papers=paper_responses,
             cached=cached
         )
 

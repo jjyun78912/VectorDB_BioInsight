@@ -628,13 +628,17 @@ class BioInsightAPI {
 
   /**
    * Get trending papers from PubMed
+   * @param category - Paper category (oncology, immunotherapy, etc.)
+   * @param limit - Number of papers to fetch
+   * @param lang - Language for paper metadata: 'en' or 'ko'
    */
   async getTrendingPapers(
     category: string = 'oncology',
-    limit: number = 10
+    limit: number = 10,
+    lang: string = 'en'
   ): Promise<TrendingResponse> {
     const response = await fetch(
-      `${this.baseUrl}/crawler/trending/${category}?limit=${limit}`
+      `${this.baseUrl}/crawler/trending/${category}?limit=${limit}&lang=${lang}`
     );
     if (!response.ok) {
       throw new Error(`Get trending failed: ${response.statusText}`);

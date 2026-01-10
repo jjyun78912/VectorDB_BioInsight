@@ -20,7 +20,7 @@ const getCategoryConfig = (t: any) => [
 ];
 
 export const TrendingPapers: React.FC = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const CATEGORIES = getCategoryConfig(t);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
   const [data, setData] = useState<TrendingResponse | null>(null);
@@ -29,14 +29,15 @@ export const TrendingPapers: React.FC = () => {
 
   useEffect(() => {
     loadTrendingPapers(selectedCategory);
-  }, [selectedCategory]);
+  }, [selectedCategory, language]);
 
   const loadTrendingPapers = async (category: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await api.getTrendingPapers(category, 10);
+      // Pass language to API for translation
+      const response = await api.getTrendingPapers(category, 10, language);
       setData(response);
     } catch (err) {
       console.error('Failed to load trending papers:', err);
@@ -44,6 +45,16 @@ export const TrendingPapers: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Helper to get translated title or fallback to original
+  const getPaperTitle = (paper: CrawlerPaper) => {
+    return (language === 'ko' && paper.title_ko) ? paper.title_ko : paper.title;
+  };
+
+  // Helper to get translated abstract or fallback to original
+  const getPaperAbstract = (paper: CrawlerPaper) => {
+    return (language === 'ko' && paper.abstract_ko) ? paper.abstract_ko : paper.abstract;
   };
 
   const openPaper = (paper: CrawlerPaper) => {
@@ -180,7 +191,7 @@ export const TrendingPapers: React.FC = () => {
                         className="font-semibold text-gray-900 mb-2 group-hover:text-purple-700 cursor-pointer line-clamp-2"
                         onClick={() => openPaper(paper)}
                       >
-                        {paper.title}
+                        {getPaperTitle(paper)}
                       </h4>
 
                       {/* Meta Info */}
@@ -252,7 +263,7 @@ export const TrendingPapers: React.FC = () => {
 
                       {/* Abstract Preview */}
                       {paper.abstract && (
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-3">{paper.abstract}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-3">{getPaperAbstract(paper)}</p>
                       )}
 
                       {/* Actions */}
