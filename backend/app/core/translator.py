@@ -1,5 +1,5 @@
 """
-Translation Service using Gemini.
+Translation Service using Claude API.
 
 Features:
 - Korean <-> English translation
@@ -8,55 +8,36 @@ Features:
 """
 import re
 from typing import Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
+import anthropic
 
-from .config import GOOGLE_API_KEY, GEMINI_MODEL
+from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
 
 class TranslationService:
-    """Translate text between Korean and English using Gemini."""
+    """Translate text between Korean and English using Claude."""
 
     def __init__(self):
-        if not GOOGLE_API_KEY:
-            raise ValueError("GOOGLE_API_KEY not set")
+        if not ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY not set")
 
-        self.llm = ChatGoogleGenerativeAI(
-            model=GEMINI_MODEL,
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.1,  # Low temperature for consistent translations
-        )
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self.model = CLAUDE_MODEL or "claude-sonnet-4-20250514"
 
-        self._build_prompts()
-
-    def _build_prompts(self):
-        """Build translation prompts."""
-        self.detect_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Detect the language of the given text. Reply with only 'ko' for Korean, 'en' for English, or 'other' for other languages. No explanation."),
-            ("human", "{text}")
-        ])
-
-        self.ko_to_en_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a professional medical/scientific translator.
-Translate the Korean text to English.
-- Keep scientific terms accurate
-- Preserve medical terminology
-- Output ONLY the translation, nothing else"""),
-            ("human", "{text}")
-        ])
-
-        self.en_to_ko_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a professional medical/scientific translator.
-Translate the English text to Korean.
-- Keep scientific terms accurate (can keep English terms in parentheses if commonly used)
-- Preserve medical terminology
-- Output ONLY the translation, nothing else"""),
-            ("human", "{text}")
-        ])
-
-        self.detect_chain = self.detect_prompt | self.llm
-        self.ko_to_en_chain = self.ko_to_en_prompt | self.llm
-        self.en_to_ko_chain = self.en_to_ko_prompt | self.llm
+    def _call_claude(self, system_prompt: str, user_text: str) -> str:
+        """Call Claude API with system and user prompts."""
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_text}
+                ]
+            )
+            return response.content[0].text.strip()
+        except Exception as e:
+            print(f"Claude API error: {e}")
+            raise
 
     def detect_language(self, text: str) -> str:
         """
@@ -80,19 +61,24 @@ Translate the English text to Korean.
 
         # Use LLM for ambiguous cases
         try:
-            result = self.detect_chain.invoke({"text": text})
-            lang = result.content.strip().lower()
+            system = "Detect the language of the given text. Reply with only 'ko' for Korean, 'en' for English, or 'other' for other languages. No explanation."
+            result = self._call_claude(system, text)
+            lang = result.lower()
             if lang in ['ko', 'en', 'other']:
                 return lang
             return 'en'  # Default to English
-        except Exception as e:
+        except Exception:
             return 'en'  # Default to English on any error
 
     def translate_to_english(self, text: str) -> str:
         """Translate Korean text to English."""
         try:
-            result = self.ko_to_en_chain.invoke({"text": text})
-            return result.content.strip()
+            system = """You are a professional medical/scientific translator.
+Translate the Korean text to English.
+- Keep scientific terms accurate
+- Preserve medical terminology
+- Output ONLY the translation, nothing else"""
+            return self._call_claude(system, text)
         except Exception as e:
             print(f"Translation error: {e}")
             return text
@@ -100,8 +86,12 @@ Translate the English text to Korean.
     def translate_to_korean(self, text: str) -> str:
         """Translate English text to Korean."""
         try:
-            result = self.en_to_ko_chain.invoke({"text": text})
-            return result.content.strip()
+            system = """You are a professional medical/scientific translator.
+Translate the English text to Korean.
+- Keep scientific terms accurate (can keep English terms in parentheses if commonly used)
+- Preserve medical terminology
+- Output ONLY the translation, nothing else"""
+            return self._call_claude(system, text)
         except Exception as e:
             print(f"Translation error: {e}")
             return text
