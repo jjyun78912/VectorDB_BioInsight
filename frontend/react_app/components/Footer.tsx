@@ -1,7 +1,22 @@
 import React from 'react';
 import { Linkedin, Twitter, Github, Mail, Sparkles, ArrowUpRight } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const Footer: React.FC = () => {
+  const { language } = useLanguage();
+
+  const platformItems = language === 'ko'
+    ? ['논문 분석', 'RNA-seq 분석', 'ML 예측', 'AI 어시스턴트']
+    : ['Paper Analysis', 'RNA-seq Analysis', 'ML Prediction', 'AI Assistant'];
+
+  const resourceItems = language === 'ko'
+    ? ['문서', 'API 레퍼런스', '튜토리얼', '연구 블로그']
+    : ['Documentation', 'API Reference', 'Tutorials', 'Research Blog'];
+
+  const companyItems = language === 'ko'
+    ? ['회사 소개', '채용', '연락처', '개인정보처리방침']
+    : ['About Us', 'Careers', 'Contact', 'Privacy Policy'];
+
   return (
     <footer className="relative bg-gradient-to-b from-gray-900 via-gray-900 to-black text-white pt-24 pb-12 overflow-hidden">
       {/* Background Glow */}
@@ -20,20 +35,26 @@ export const Footer: React.FC = () => {
                 </div>
              </div>
              <p className="text-gray-400 mb-4 max-w-sm leading-relaxed">
-               The first Bio AI platform that integrates data analysis, literature knowledge, and ML experiments in one unified workspace.
+               {language === 'ko'
+                 ? '데이터 분석, 문헌 지식, ML 실험을 하나의 통합 워크스페이스에서 결합한 최초의 바이오 AI 플랫폼.'
+                 : 'The first Bio AI platform that integrates data analysis, literature knowledge, and ML experiments in one unified workspace.'
+               }
              </p>
              <p className="text-sm text-gray-500">
-               Empowering researchers to think faster and discover deeper.
+               {language === 'ko'
+                 ? '연구자들이 더 빠르게 생각하고 더 깊이 발견할 수 있도록.'
+                 : 'Empowering researchers to think faster and discover deeper.'
+               }
              </p>
           </div>
 
           <div>
             <h4 className="font-semibold mb-6 text-white flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-              Platform
+              {language === 'ko' ? '플랫폼' : 'Platform'}
             </h4>
             <ul className="space-y-4 text-sm text-gray-400">
-              {['Paper Analysis', 'RNA-seq Analysis', 'ML Prediction', 'AI Assistant'].map((item) => (
+              {platformItems.map((item) => (
                 <li key={item}>
                   <a href="#" className="hover:text-purple-400 transition-colors flex items-center gap-1 group">
                     {item}
@@ -47,10 +68,10 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="font-semibold mb-6 text-white flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Resources
+              {language === 'ko' ? '리소스' : 'Resources'}
             </h4>
             <ul className="space-y-4 text-sm text-gray-400">
-              {['Documentation', 'API Reference', 'Tutorials', 'Research Blog'].map((item) => (
+              {resourceItems.map((item) => (
                 <li key={item}>
                   <a href="#" className="hover:text-emerald-400 transition-colors flex items-center gap-1 group">
                     {item}
@@ -64,10 +85,10 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="font-semibold mb-6 text-white flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-              Company
+              {language === 'ko' ? '회사' : 'Company'}
             </h4>
             <ul className="space-y-4 text-sm text-gray-400">
-              {['About Us', 'Careers', 'Contact', 'Privacy Policy'].map((item) => (
+              {companyItems.map((item) => (
                 <li key={item}>
                   <a href="#" className="hover:text-orange-400 transition-colors flex items-center gap-1 group">
                     {item}

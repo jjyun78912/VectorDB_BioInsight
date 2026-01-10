@@ -5,20 +5,23 @@ import {
   FileText, Quote, AlertCircle, Sparkles
 } from 'lucide-react';
 import api, { TrendingResponse, CrawlerPaper } from '../services/client';
+import { useLanguage } from '../contexts/LanguageContext';
 
-// Category configuration with colors
-const CATEGORIES = [
-  { id: 'oncology', name: 'Oncology', color: 'from-violet-500 to-purple-600' },
-  { id: 'immunotherapy', name: 'Immunotherapy', color: 'from-red-500 to-orange-500' },
-  { id: 'gene_therapy', name: 'Gene Therapy', color: 'from-cyan-500 to-blue-500' },
-  { id: 'neurology', name: 'Neurology', color: 'from-pink-500 to-rose-500' },
-  { id: 'cardiology', name: 'Cardiology', color: 'from-red-500 to-pink-500' },
-  { id: 'infectious_disease', name: 'Infectious Disease', color: 'from-green-500 to-emerald-500' },
-  { id: 'metabolic', name: 'Metabolic', color: 'from-amber-500 to-orange-500' },
-  { id: 'rare_disease', name: 'Rare Disease', color: 'from-purple-500 to-indigo-500' },
+// Category configuration with colors (names will be translated)
+const getCategoryConfig = (t: any) => [
+  { id: 'oncology', name: t.catOncology, color: 'from-violet-500 to-purple-600' },
+  { id: 'immunotherapy', name: t.catImmunotherapy, color: 'from-red-500 to-orange-500' },
+  { id: 'gene_therapy', name: t.catGeneTherapy, color: 'from-cyan-500 to-blue-500' },
+  { id: 'neurology', name: t.catNeurology, color: 'from-pink-500 to-rose-500' },
+  { id: 'cardiology', name: t.catCardiology, color: 'from-red-500 to-pink-500' },
+  { id: 'infectious_disease', name: t.catInfectiousDisease, color: 'from-green-500 to-emerald-500' },
+  { id: 'metabolic', name: t.catMetabolic, color: 'from-amber-500 to-orange-500' },
+  { id: 'rare_disease', name: t.catRareDisease, color: 'from-purple-500 to-indigo-500' },
 ];
 
 export const TrendingPapers: React.FC = () => {
+  const { t } = useLanguage();
+  const CATEGORIES = getCategoryConfig(t);
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].id);
   const [data, setData] = useState<TrendingResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,11 +60,11 @@ export const TrendingPapers: React.FC = () => {
     return count.toString();
   };
 
-  const getCategoryConfig = (categoryId: string) => {
+  const getCurrentCategory = (categoryId: string) => {
     return CATEGORIES.find(c => c.id === categoryId) || CATEGORIES[0];
   };
 
-  const currentCategory = getCategoryConfig(selectedCategory);
+  const currentCategory = getCurrentCategory(selectedCategory);
 
   return (
     <section className="relative py-16 pb-24 bg-white isolate">
@@ -74,20 +77,20 @@ export const TrendingPapers: React.FC = () => {
           <div className="space-y-3">
             <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-50 to-orange-50 rounded-full border border-purple-200/50 text-sm font-medium text-purple-600">
               <Sparkles className="w-3.5 h-3.5" />
-              Real-time from PubMed
+              {t.realTimeFromPubmed}
             </span>
             <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
-              Trending Research Papers
+              {t.trendingResearchPapers}
             </h2>
             <p className="text-gray-600">
-              Latest high-impact papers across <span className="font-medium text-purple-600">multiple research areas</span>
+              {t.trendingPapersSubtitle} <span className="font-medium text-purple-600">{t.multipleResearchAreas}</span>
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             {data?.cached && (
               <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                Cached
+                {t.cached}
               </span>
             )}
             <button
@@ -96,7 +99,7 @@ export const TrendingPapers: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 glass-3 border border-purple-200/50 rounded-lg text-sm font-medium text-gray-700 hover:bg-purple-50/50 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
+              {t.refresh}
             </button>
           </div>
         </div>
@@ -138,12 +141,12 @@ export const TrendingPapers: React.FC = () => {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16">
             <Loader2 className="w-10 h-10 text-purple-500 animate-spin mb-4" />
-            <p className="text-gray-600">Fetching trending papers from PubMed...</p>
+            <p className="text-gray-600">{t.fetchingTrending}</p>
           </div>
         ) : !data || data.papers.length === 0 ? (
           <div className="text-center py-16">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No trending papers found for {currentCategory.name}. Try refreshing.</p>
+            <p className="text-gray-600">{t.noTrendingPapers} {currentCategory.name}. {t.tryRefreshing}</p>
           </div>
         ) : (
           /* Papers Grid */
@@ -153,7 +156,7 @@ export const TrendingPapers: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div>
                   <h3 className="font-bold text-lg">{currentCategory.name}</h3>
-                  <p className="text-sm opacity-90">{data.papers.length} trending papers</p>
+                  <p className="text-sm opacity-90">{data.papers.length} {t.papers}</p>
                 </div>
               </div>
             </div>
@@ -200,7 +203,7 @@ export const TrendingPapers: React.FC = () => {
                         {paper.citation_count > 0 && (
                           <span className="flex items-center gap-1 text-amber-600">
                             <Quote className="w-3 h-3" />
-                            {formatCitations(paper.citation_count)} citations
+                            {formatCitations(paper.citation_count)} {t.citations}
                           </span>
                         )}
                       </div>
@@ -211,14 +214,14 @@ export const TrendingPapers: React.FC = () => {
                           <div className="flex items-center gap-1 px-2 py-1 bg-orange-50 rounded-full">
                             <Flame className="w-3 h-3 text-orange-500" />
                             <span className="text-xs font-medium text-orange-600">
-                              Trend: {paper.trend_score.toFixed(1)}
+                              {t.trend}: {paper.trend_score.toFixed(1)}
                             </span>
                           </div>
                           {paper.citation_velocity && paper.citation_velocity > 0 && (
                             <div className="flex items-center gap-1 px-2 py-1 bg-green-50 rounded-full">
                               <TrendingUp className="w-3 h-3 text-green-500" />
                               <span className="text-xs font-medium text-green-600">
-                                Velocity: {paper.citation_velocity.toFixed(2)}x
+                                {t.velocity}: {paper.citation_velocity.toFixed(2)}x
                               </span>
                             </div>
                           )}
@@ -226,7 +229,7 @@ export const TrendingPapers: React.FC = () => {
                             <div className="flex items-center gap-1 px-2 py-1 bg-purple-50 rounded-full">
                               <Flame className="w-3 h-3 text-purple-500" />
                               <span className="text-xs font-medium text-purple-600">
-                                Surge: {paper.publication_surge.toFixed(2)}x
+                                {t.surge}: {paper.publication_surge.toFixed(2)}x
                               </span>
                             </div>
                           )}
@@ -258,7 +261,7 @@ export const TrendingPapers: React.FC = () => {
                           className="text-sm font-medium text-purple-600 hover:text-purple-700 flex items-center gap-1"
                           onClick={() => openPaper(paper)}
                         >
-                          View Paper
+                          {t.viewPaper}
                           <ExternalLink className="w-3 h-3" />
                         </button>
                         {paper.pmid && (
@@ -284,7 +287,7 @@ export const TrendingPapers: React.FC = () => {
         {/* Footer */}
         <div className="text-center mt-8 pb-8">
           <p className="text-sm text-gray-500">
-            Data sourced from PubMed E-utilities • Updated in real-time
+            {t.dataSourcedFrom} • {t.updatedRealTime}
           </p>
         </div>
       </div>

@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { Search, FileText, TrendingUp, MessageSquare, Sparkles, BrainCircuit, Dna, FlaskConical, ArrowRight } from 'lucide-react';
 import { FeatureTab } from '../types';
+import { useLanguage } from '../contexts/LanguageContext';
 
-const TABS: FeatureTab[] = [
+// Define tabs dynamically based on translations
+const getTranslatedTabs = (t: any): FeatureTab[] => [
   {
     id: 'paper',
-    label: 'Paper Analysis',
+    label: t.featureTabPaper,
     icon: FileText,
     color: 'from-violet-500 to-purple-500',
-    title: 'AI-Powered Literature Analysis',
-    description: 'Upload research papers and get instant AI summaries, key findings extraction, and semantic search across your entire library.',
+    title: t.paperAnalysisTitle,
+    description: t.paperAnalysisDesc,
     benefits: [
-      'Automatic PDF parsing & structure recognition',
-      'PubMedBERT-powered semantic embeddings',
-      'Key findings & methodology extraction',
-      'Similar paper recommendations'
+      t.paperBenefit1,
+      t.paperBenefit2,
+      t.paperBenefit3,
+      t.paperBenefit4
     ],
     mockupData: {
       type: 'mail',
@@ -27,16 +29,16 @@ const TABS: FeatureTab[] = [
   },
   {
     id: 'rnaseq',
-    label: 'RNA-seq',
+    label: t.featureTabRnaseq,
     icon: Dna,
     color: 'from-emerald-500 to-teal-500',
-    title: 'Automated RNA-seq Analysis',
-    description: 'Upload count matrices and get publication-ready DESeq2 analysis, visualizations, and pathway enrichment in minutes—no coding required.',
+    title: t.rnaseqTitle,
+    description: t.rnaseqDesc,
     benefits: [
-      'DESeq2 differential expression analysis',
-      'Auto-generated Volcano, PCA & Heatmaps',
-      'KEGG & GO pathway enrichment',
-      'Batch correction (ComBat, Limma)'
+      t.rnaseqBenefit1,
+      t.rnaseqBenefit2,
+      t.rnaseqBenefit3,
+      t.rnaseqBenefit4
     ],
     mockupData: {
       type: 'chart',
@@ -48,16 +50,16 @@ const TABS: FeatureTab[] = [
   },
   {
     id: 'ml',
-    label: 'ML Prediction',
+    label: t.featureTabMl,
     icon: FlaskConical,
     color: 'from-orange-500 to-red-500',
-    title: 'Automated ML Model Training',
-    description: 'Build predictive models from your gene signatures automatically. Train, validate, and interpret with SHAP—all without writing code.',
+    title: t.mlTitle,
+    description: t.mlDesc,
     benefits: [
-      'XGBoost, Random Forest, SVM models',
-      'Automatic cross-validation',
-      'ROC-AUC, Precision, Recall metrics',
-      'SHAP feature importance analysis'
+      t.mlBenefit1,
+      t.mlBenefit2,
+      t.mlBenefit3,
+      t.mlBenefit4
     ],
     mockupData: {
       type: 'model',
@@ -68,16 +70,16 @@ const TABS: FeatureTab[] = [
   },
   {
     id: 'assistant',
-    label: 'AI Assistant',
+    label: t.featureTabAssistant,
     icon: MessageSquare,
     color: 'from-pink-500 to-rose-500',
-    title: 'Integrated Research Assistant',
-    description: 'Ask complex questions that span your papers, DEG results, and pathway data. Get context-aware answers with source citations.',
+    title: t.assistantTitle,
+    description: t.assistantDesc,
     benefits: [
-      'Cross-data Q&A (Papers + DEGs + Pathways)',
-      'Experiment design suggestions',
-      'Source citations for every answer',
-      'Follow-up question support'
+      t.assistantBenefit1,
+      t.assistantBenefit2,
+      t.assistantBenefit3,
+      t.assistantBenefit4
     ],
     mockupData: {
       type: 'chat',
@@ -89,8 +91,10 @@ const TABS: FeatureTab[] = [
 ];
 
 export const FeatureSuite: React.FC = () => {
+  const { t } = useLanguage();
+  const TABS = getTranslatedTabs(t);
   const [activeTabId, setActiveTabId] = useState('paper');
-  const activeTab = TABS.find(t => t.id === activeTabId) || TABS[0];
+  const activeTab = TABS.find(tab => tab.id === activeTabId) || TABS[0];
 
   return (
     <section className="py-24 relative overflow-hidden line-b">
@@ -102,13 +106,13 @@ export const FeatureSuite: React.FC = () => {
         <div className="mb-16 text-center md:text-left">
           <span className="inline-flex items-center gap-2 px-3 py-1.5 glass-2 rounded-full border border-purple-200/50 text-sm font-medium text-purple-600 mb-4">
             <Sparkles className="w-3.5 h-3.5" />
-            All-in-One Platform
+            {t.allInOnePlatform}
           </span>
           <h2 className="text-3xl md:text-5xl font-bold mb-4 text-gray-900">
-            Your BioInsight <span className="text-gradient-brand">AI Suite</span>
+            {t.yourBioInsight} <span className="text-gradient-brand">{t.aiSuite}</span>
           </h2>
           <p className="text-xl text-gray-600 max-w-2xl">
-            Data analysis + Literature knowledge + ML experiments — unified in one platform for the first time.
+            {t.platformSubtitle}
           </p>
 
           {/* Tabs */}
@@ -152,7 +156,7 @@ export const FeatureSuite: React.FC = () => {
             </p>
 
             <a href="#" className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-700 font-semibold mb-10 transition-colors group">
-              Learn more about {activeTab.label}
+              {t.learnMoreAbout} {activeTab.label}
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </a>
 

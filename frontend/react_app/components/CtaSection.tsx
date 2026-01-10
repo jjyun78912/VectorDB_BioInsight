@@ -1,7 +1,56 @@
 import React from 'react';
 import { ArrowRight, Clock, Zap, TrendingUp, Sparkles } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export const CtaSection: React.FC = () => {
+  const { t, language } = useLanguage();
+
+  const stats = language === 'ko' ? [
+    {
+      icon: Clock,
+      color: 'from-violet-500 to-purple-500',
+      stat: '80-90%',
+      label: '논문 분석 시간 단축',
+      detail: '2-4시간에서 10-30분으로'
+    },
+    {
+      icon: Zap,
+      color: 'from-emerald-500 to-teal-500',
+      stat: '90%+',
+      label: 'RNA-seq 분석 속도 향상',
+      detail: '1-2주에서 몇 시간으로'
+    },
+    {
+      icon: TrendingUp,
+      color: 'from-orange-500 to-red-500',
+      stat: 'Zero',
+      label: 'ML에 필요한 코딩',
+      detail: '자동 생성 모델 & SHAP 분석'
+    }
+  ] : [
+    {
+      icon: Clock,
+      color: 'from-violet-500 to-purple-500',
+      stat: '80-90%',
+      label: 'Reduction in paper analysis time',
+      detail: 'From 2-4 hours to 10-30 minutes'
+    },
+    {
+      icon: Zap,
+      color: 'from-emerald-500 to-teal-500',
+      stat: '90%+',
+      label: 'Faster RNA-seq analysis',
+      detail: 'From 1-2 weeks to hours'
+    },
+    {
+      icon: TrendingUp,
+      color: 'from-orange-500 to-red-500',
+      stat: 'Zero',
+      label: 'Coding required for ML',
+      detail: 'Auto-generated models & SHAP analysis'
+    }
+  ];
+
   return (
     <section className="relative py-32 overflow-hidden line-b">
       {/* Background Glow Effects */}
@@ -13,29 +62,7 @@ export const CtaSection: React.FC = () => {
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         {/* Impact Stats */}
         <div className="grid md:grid-cols-3 gap-6 mb-24">
-          {[
-            {
-              icon: Clock,
-              color: 'from-violet-500 to-purple-500',
-              stat: '80-90%',
-              label: 'Reduction in paper analysis time',
-              detail: 'From 2-4 hours to 10-30 minutes'
-            },
-            {
-              icon: Zap,
-              color: 'from-emerald-500 to-teal-500',
-              stat: '90%+',
-              label: 'Faster RNA-seq analysis',
-              detail: 'From 1-2 weeks to hours'
-            },
-            {
-              icon: TrendingUp,
-              color: 'from-orange-500 to-red-500',
-              stat: 'Zero',
-              label: 'Coding required for ML',
-              detail: 'Auto-generated models & SHAP analysis'
-            }
-          ].map((item, idx) => (
+          {stats.map((item, idx) => (
             <div
               key={idx}
               className="text-center p-8 glass-3 rounded-3xl border border-purple-100/50 card-hover animate-appear"
@@ -56,23 +83,29 @@ export const CtaSection: React.FC = () => {
           <div className="animate-appear delay-300">
             <span className="inline-flex items-center gap-2 px-3 py-1.5 glass-2 rounded-full border border-purple-200/50 text-sm font-medium text-purple-600 mb-6">
               <Sparkles className="w-3.5 h-3.5" />
-              Transform Your Research
+              {language === 'ko' ? '연구를 혁신하세요' : 'Transform Your Research'}
             </span>
             <h2 className="text-4xl md:text-5xl font-bold mb-6 text-gray-900 leading-tight">
-              The first Bio AI platform that{' '}
-              <span className="text-gradient-brand">integrates everything.</span>
+              {language === 'ko' ? (
+                <>모든 것을 <span className="text-gradient-brand">통합한</span> 최초의 바이오 AI 플랫폼</>
+              ) : (
+                <>The first Bio AI platform that{' '}<span className="text-gradient-brand">integrates everything.</span></>
+              )}
             </h2>
             <p className="text-lg text-gray-600 mb-10 leading-relaxed">
-              Not just an analysis tool — BioInsight AI combines data analysis, literature knowledge, and ML experiments in one unified platform. Think faster, discover deeper, and focus on what only you can do.
+              {language === 'ko'
+                ? '단순한 분석 도구가 아닙니다 — BioInsight AI는 데이터 분석, 문헌 지식, ML 실험을 하나의 통합 플랫폼에서 결합합니다. 더 빠르게 생각하고, 더 깊이 발견하고, 당신만이 할 수 있는 일에 집중하세요.'
+                : 'Not just an analysis tool — BioInsight AI combines data analysis, literature knowledge, and ML experiments in one unified platform. Think faster, discover deeper, and focus on what only you can do.'
+              }
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button className="group px-8 py-4 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-full font-semibold hover:from-violet-700 hover:to-purple-700 transition-all shadow-xl btn-glow flex items-center justify-center gap-2">
-                Get Started Free
+                {t.getStarted}
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
               <button className="px-8 py-4 glass-3 border border-purple-200/50 text-purple-700 hover:bg-purple-50/50 transition-all rounded-full font-medium flex items-center justify-center gap-2 card-hover">
-                Request Demo
+                {language === 'ko' ? '데모 요청' : 'Request Demo'}
               </button>
             </div>
           </div>

@@ -10,11 +10,12 @@ import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
 import { DailyBriefing } from './components/DailyBriefing';
+import { GeneNetworkGraph } from './components/GeneNetworkGraph';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
-  Library, FileSearch, Zap, Newspaper
+  Library, FileSearch, Zap, Newspaper, Dna
 } from 'lucide-react';
 
 // Paper type for Literature Review
@@ -36,6 +37,7 @@ const AppContent: React.FC = () => {
   const [showChatWithPDF, setShowChatWithPDF] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showBriefing, setShowBriefing] = useState(false);
+  const [showGeneNetwork, setShowGeneNetwork] = useState(false);
 
   // Language context
   const { t } = useLanguage();
@@ -97,99 +99,116 @@ const AppContent: React.FC = () => {
             <div className="text-center mb-12">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 glass-2 rounded-full border border-purple-200/50 text-sm font-medium text-purple-600 mb-4">
                 <Zap className="w-3.5 h-3.5" />
-                Research Tools
+                {t.researchTools}
               </span>
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                Powerful Tools at Your Fingertips
+                {t.powerfulTools}
               </h2>
               <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                Access AI-powered research tools designed to accelerate your scientific discoveries
+                {t.researchToolsSubtitle}
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
               {/* Literature Review */}
               <button
                 onClick={() => setShowLiteratureReview(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
                   <FileSearch className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">Literature Review</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Search and analyze papers with AI-generated summaries and table view
+                <h3 className="font-bold text-gray-900 mb-2">{t.literatureReview}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.literatureReviewDesc}
                 </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-purple-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-purple-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
 
               {/* Chat with PDF */}
               <button
                 onClick={() => setShowChatWithPDF(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
                   <MessageSquare className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">Chat with PDF</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Upload papers and ask questions to get instant answers with citations
+                <h3 className="font-bold text-gray-900 mb-2">{t.chatWithPdf}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.chatWithPdfDesc}
                 </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
 
               {/* Research Library */}
               <button
                 onClick={() => setShowLibrary(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
                   <Library className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">Research Library</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Organize your papers into collections with tags and annotations
+                <h3 className="font-bold text-gray-900 mb-2">{t.researchLibrary}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.researchLibraryDesc}
                 </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-orange-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
 
               {/* Knowledge Graph */}
               <button
                 onClick={() => setShowGraph(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
                   <Network className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">Knowledge Graph</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Visualize connections between genes, diseases, and research in 3D
+                <h3 className="font-bold text-gray-900 mb-2">{t.knowledgeGraph}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.knowledgeGraphDesc}
                 </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
 
               {/* Daily Briefing */}
               <button
                 onClick={() => setShowBriefing(true)}
-                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover"
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
                   <Newspaper className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">Daily Briefing</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  AI-curated daily bio/healthcare research trends and news
+                <h3 className="font-bold text-gray-900 mb-2">{t.dailyBriefing}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.dailyBriefingDesc}
                 </p>
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-purple-600 group-hover:gap-2 transition-all">
-                  Open Tool <ArrowRight className="w-4 h-4" />
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-purple-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
+                </span>
+              </button>
+
+              {/* Gene Network (RNA-seq) */}
+              <button
+                onClick={() => setShowGeneNetwork(true)}
+                className="group glass-3 rounded-2xl border border-purple-100/50 p-6 text-left card-hover h-full flex flex-col"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform flex-shrink-0">
+                  <Dna className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="font-bold text-gray-900 mb-2">{t.geneNetwork}</h3>
+                <p className="text-sm text-gray-600 mb-4 flex-grow">
+                  {t.geneNetworkDesc}
+                </p>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-600 group-hover:gap-2 transition-all mt-auto">
+                  {t.openTool} <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
             </div>
@@ -208,12 +227,11 @@ const AppContent: React.FC = () => {
             </span>
 
             <h2 className="text-3xl md:text-5xl font-bold mb-6 text-gray-900 animate-appear delay-100">
-              Explore the <span className="text-gradient-brand">Knowledge Universe</span>
+              {t.exploreKnowledge} <span className="text-gradient-brand">{t.knowledgeUniverse}</span>
             </h2>
 
             <p className="text-lg text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed animate-appear delay-200">
-              Visualize connections between genes, diseases, pathways, and research papers
-              in an interactive 3D space. Discover hidden relationships in your research.
+              {t.knowledgeGraphSubtitle}
             </p>
 
             <button
@@ -221,16 +239,16 @@ const AppContent: React.FC = () => {
               className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-600 to-purple-600 rounded-full text-white font-semibold hover:from-violet-700 hover:to-purple-700 transition-all shadow-xl btn-glow animate-appear delay-300"
             >
               <Network className="w-5 h-5" />
-              Launch Knowledge Graph
+              {t.launchKnowledgeGraph}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
 
             {/* Feature Cards */}
             <div className="mt-16 grid md:grid-cols-3 gap-6 animate-appear delay-500">
               {[
-                { title: 'Gene Networks', desc: 'Explore gene-gene interactions and pathways' },
-                { title: 'Disease Links', desc: 'Connect diseases to genetic markers' },
-                { title: 'Paper Clusters', desc: 'See research paper relationships' }
+                { title: t.geneNetworks, desc: t.geneNetworksDesc },
+                { title: t.diseaseLinks, desc: t.diseaseLinksDesc },
+                { title: t.paperClusters, desc: t.paperClustersDesc }
               ].map((item, idx) => (
                 <div key={idx} className="glass-3 border border-purple-100/50 rounded-2xl p-6 card-hover">
                   <div className="w-10 h-10 mx-auto mb-4 bg-gradient-to-br from-violet-500/20 to-purple-500/20 rounded-xl flex items-center justify-center">
@@ -260,6 +278,7 @@ const AppContent: React.FC = () => {
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
       <DailyBriefing isOpen={showBriefing} onClose={() => setShowBriefing(false)} />
+      <GeneNetworkGraph isOpen={showGeneNetwork} onClose={() => setShowGeneNetwork(false)} />
 
     </div>
   );
