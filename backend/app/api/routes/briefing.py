@@ -42,16 +42,24 @@ class ArticleItem(BaseModel):
 
 
 class BriefingData(BaseModel):
-    """Daily briefing data structure."""
+    """Daily briefing data structure - supports both v2 and v3 formats."""
     issue_number: int
     date: str
-    total_papers_analyzed: int
-    trends: List[TrendItem]
-    articles: Optional[dict] = {}  # articles grouped by trend keyword
-    articles_by_trend: Optional[dict] = {}  # alias for compatibility
-    editor_comment: str
+    # v3 format fields
+    total_papers_analyzed: Optional[int] = 0
+    trends: Optional[List[TrendItem]] = []
+    articles: Optional[dict] = {}
+    articles_by_trend: Optional[dict] = {}
+    editor_comment: Optional[str] = ""
     quick_news: Optional[List[str]] = []
     emerging_trends: Optional[List[TrendItem]] = []
+    # v2 format fields (newsletter_generator.py format)
+    headline: Optional[dict] = {}
+    regulatory: Optional[list] = []
+    clinical_trials: Optional[dict] = {}
+    research: Optional[dict] = {}
+    hot_topics: Optional[list] = []
+    stats: Optional[dict] = {}
 
 
 class BriefingListItem(BaseModel):

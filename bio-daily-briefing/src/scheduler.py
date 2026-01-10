@@ -20,7 +20,8 @@ from dotenv import load_dotenv
 from .pubmed_fetcher import PubMedFetcher
 from .trend_analyzer import TrendAnalyzer
 from .ai_summarizer import AISummarizer
-from .newsletter_generator import NewsletterGenerator, NewsletterData
+from .newsletter_generator import NewsletterGenerator
+from .aggregator import NewsAggregator
 
 
 class BriefingScheduler:
@@ -70,6 +71,7 @@ class BriefingScheduler:
         self.analyzer = TrendAnalyzer()
         self.summarizer = AISummarizer(language="ko")
         self.generator = NewsletterGenerator()
+        self.aggregator = NewsAggregator()  # Multi-source aggregator
 
         # State
         self._latest_html: Optional[str] = None
@@ -117,7 +119,7 @@ class BriefingScheduler:
 
     async def generate_briefing(self) -> Optional[str]:
         """
-        Generate the daily briefing.
+        Generate the daily briefing using multi-source aggregator.
 
         Returns:
             HTML string of the newsletter
@@ -125,86 +127,219 @@ class BriefingScheduler:
         print(f"\n[{datetime.now()}] Starting briefing generation...")
 
         try:
-            # 1. Fetch papers comprehensively (keyword-specific + general)
-            lookback_hours = int(os.getenv("LOOKBACK_HOURS", "48"))
-            lookback_days = max(2, lookback_hours // 24) if lookback_hours else self.lookback_days
-
-            # Use comprehensive fetch for better hot topic coverage
-            use_comprehensive = os.getenv("USE_COMPREHENSIVE_FETCH", "true").lower() == "true"
-
-            if use_comprehensive:
-                print(f"Using comprehensive fetch (keyword-specific + general)...")
-                papers = await self.fetcher.fetch_comprehensive(
-                    days=lookback_days,
-                    max_total=500,
-                )
+            # Get next issue number
+            output_dir = Path(__file__).parent.parent / "output"
+            issue_number_file = output_dir / "issue_number.txt"
+            if issue_number_file.exists():
+                try:
+                    issue_number = int(issue_number_file.read_text().strip()) + 1
+                except ValueError:
+                    issue_number = 1
             else:
-                print(f"Fetching {self.papers_per_day} papers from last {lookback_hours} hours...")
-                papers = await self.fetcher.fetch_recent_papers(
-                    max_results=self.papers_per_day,
-                    days=lookback_days,
-                )
-            print(f"Fetched {len(papers)} papers total")
+                existing = list(output_dir.glob("briefing_*.json"))
+                issue_number = len(existing) + 1
 
-            if not papers:
-                print("No papers found!")
-                return None
+            # 1. Use multi-source aggregator (FDA, ClinicalTrials, bioRxiv, PubMed)
+            print("Using multi-source aggregator...")
+            briefing_data = await self.aggregator.aggregate_daily(
+                fda_hours=72,        # 3 days of FDA news
+                trials_days=30,      # 30 days of clinical trials
+                preprint_days=3,     # 3 days of preprints
+                pubmed_days=2,       # 2 days of PubMed
+                issue_number=issue_number,
+            )
 
-            # 2. Analyze trends with hybrid system
-            print(f"Analyzing hybrid trends (predefined + emerging)...")
-            trends = self.analyzer.get_hot_topics(papers, top_n=self.top_trends)
+            # Get trends from aggregated data
+            trends = briefing_data.hot_topics
 
-            # Separate for display
-            predefined = [t for t in trends if getattr(t, 'is_predefined', True) and not getattr(t, 'is_emerging', False)]
-            emerging = [t for t in trends if getattr(t, 'is_emerging', False)]
-
-            print(f"\n[업계 주목 키워드] {len(predefined)}개")
-            for t in predefined:
-                print(f"  {t.trend_indicator} {t.keyword}: {t.count}건 ({getattr(t, 'change_label', '')})")
-
-            if emerging:
-                print(f"\n[🆕 급상승 감지] {len(emerging)}개")
-                for t in emerging:
-                    print(f"  🆕 {t.keyword}: {t.count}건")
-
-            # 3. Generate summaries
+            # 2. Generate AI summaries for hot topics
             print("Generating AI summaries...")
+            # Get papers for summarization
+            papers = await self.fetcher.fetch_comprehensive(days=2, max_total=300)
             articles_by_trend = self.summarizer.summarize_papers_by_trend(trends, max_per_trend=2)
 
             article_count = sum(len(a) for a in articles_by_trend.values())
             print(f"Generated {article_count} articles")
 
-            # 4. Generate editor comment
+            # 3. Generate editor comment
             print("Generating editor comment...")
             editor_comment = self.summarizer.generate_editor_comment(trends)
+            briefing_data.editor_comment = editor_comment
 
-            # 5. Generate newsletter
+            # 4. Generate newsletter
             print("Generating newsletter HTML...")
-            issue_number = self.generator.get_issue_number()
 
-            html = self.generator.generate_html(
-                trends=trends,
-                articles_by_trend=articles_by_trend,
-                editor_comment=editor_comment,
-                total_papers_analyzed=len(papers),
-                issue_number=issue_number,
-            )
+            # Convert aggregated data to newsletter format
+            agg_dict = briefing_data.to_dict()
 
-            # Save HTML
-            filepath = self.generator.save_html(html)
+            # Convert regulatory news to list format for newsletter generator
+            regulatory_list = []
+            for item in agg_dict.get("regulatory", [])[:5]:
+                news_type = item.get("type", "")
+                status = "approved" if "approval" in news_type else "warning" if "warning" in news_type or "safety" in news_type else "pending"
+                regulatory_list.append({
+                    "status": status,
+                    "title": item.get("title", "")[:100],
+                    "description": item.get("summary", "")[:200]
+                })
+
+            # Convert clinical_trials dict to list format for newsletter generator
+            clinical_list = []
+            ct_dict = agg_dict.get("clinical_trials", {})
+            # Phase 3 results first
+            for item in ct_dict.get("phase3_results", [])[:3]:
+                clinical_list.append({
+                    "type": "phase3_completed",
+                    "title": item.get("title", "")[:100],
+                    "description": item.get("summary", "")[:200],
+                    "patients": item.get("metadata", {}).get("enrollment"),
+                    "disease": ", ".join(item.get("metadata", {}).get("conditions", [])[:2])
+                })
+            # New trials
+            for item in ct_dict.get("new_trials", [])[:2]:
+                clinical_list.append({
+                    "type": "new_trial",
+                    "title": item.get("title", "")[:100],
+                    "description": item.get("summary", "")[:200],
+                    "patients": item.get("metadata", {}).get("enrollment"),
+                    "disease": ", ".join(item.get("metadata", {}).get("conditions", [])[:2])
+                })
+
+            # Convert research dict to list format for newsletter generator
+            research_list = []
+            res_dict = agg_dict.get("research", {})
+            # Preprints
+            for item in res_dict.get("preprints", [])[:3]:
+                research_list.append({
+                    "source": item.get("source", "bioRxiv").lower(),
+                    "journal": item.get("source", "bioRxiv"),
+                    "title": item.get("title", "")[:100],
+                    "summary": item.get("summary", "")[:200]
+                })
+            # High impact papers
+            for item in res_dict.get("high_impact", [])[:3]:
+                journal_name = item.get("metadata", {}).get("journal", "PubMed")
+                research_list.append({
+                    "source": journal_name.lower().split()[0] if journal_name else "pubmed",
+                    "journal": journal_name,
+                    "title": item.get("title", "")[:100],
+                    "summary": item.get("summary", "")[:200]
+                })
+
+            # ========================================
+            # DATA VALIDATION (재발 방지)
+            # ========================================
+            # 문제: newsletter_generator는 list 형식을 기대하지만,
+            # aggregator는 dict 형식을 반환함 → 데이터 누락 발생
+            # 해결: 명시적으로 list 형식으로 변환 후 검증
+            # ========================================
+
+            # Validate converted data (경고 출력)
+            if not regulatory_list:
+                print("⚠️ WARNING: regulatory_list is empty! Check FDA fetcher.")
+            if not clinical_list:
+                print("⚠️ WARNING: clinical_list is empty! Check ClinicalTrials fetcher.")
+            if not research_list:
+                print("⚠️ WARNING: research_list is empty! Check bioRxiv/PubMed fetcher.")
+
+            print(f"[Data Validation] regulatory: {len(regulatory_list)}, clinical: {len(clinical_list)}, research: {len(research_list)}")
+
+            # Build newsletter_data with all multi-source content (converted to lists)
+            newsletter_data = {
+                "total_papers": briefing_data.total_papers + briefing_data.total_preprints,
+                "headline": agg_dict.get("headline") or {
+                    "title": f"오늘의 바이오 트렌드: {trends[0].keyword if trends else '연구 동향'}",
+                    "summary": editor_comment[:200] if editor_comment else "",
+                    "why_important": ""
+                },
+                "regulatory": regulatory_list,  # FDA news as list (MUST be list, not dict)
+                "clinical_trials": clinical_list,  # Clinical trials as list (MUST be list, not dict)
+                "research": research_list,  # Research as list (MUST be list, not dict)
+                "hot_topics": [
+                    {
+                        "keyword": t.keyword,
+                        "count": t.count,
+                        "trend_indicator": getattr(t, 'trend_indicator', '📊'),
+                        "change_label": getattr(t, 'change_label', ''),
+                        "why_hot": getattr(t, 'why_hot', ''),
+                        "articles": [a.to_dict() if hasattr(a, 'to_dict') else a for a in articles_by_trend.get(t.keyword, [])]
+                    }
+                    for t in trends
+                ],
+                "editor": {
+                    "quote": editor_comment[:150] if editor_comment else "",
+                    "note": editor_comment[150:] if editor_comment and len(editor_comment) > 150 else ""
+                },
+                "stats": agg_dict.get("stats", {})
+            }
+
+            # Generate and save HTML
+            filepath = self.generator.generate_and_save(newsletter_data, issue_number)
             print(f"Newsletter saved to: {filepath}")
 
-            # Save JSON
-            json_data = self.generator.generate_json(
-                trends=trends,
-                articles_by_trend=articles_by_trend,
-                editor_comment=editor_comment,
-                total_papers_analyzed=len(papers),
-                issue_number=issue_number,
-            )
-            json_path = filepath.with_suffix(".json")
+            # Save issue number
+            issue_number_file.write_text(str(issue_number))
+
+            # Convert NewsArticle objects to dicts for JSON serialization
+            articles_dict = {}
+            for keyword, articles in articles_by_trend.items():
+                articles_dict[keyword] = [
+                    a.to_dict() if hasattr(a, 'to_dict') else a
+                    for a in articles
+                ]
+
+            # Save JSON for API (includes all multi-source data)
+            json_data = {
+                "date": datetime.now().strftime("%Y%m%d"),
+                "issue_number": issue_number,
+                "total_papers_analyzed": briefing_data.total_papers + briefing_data.total_preprints,
+                # Multi-source content
+                "headline": agg_dict.get("headline"),
+                "regulatory": agg_dict.get("regulatory", []),
+                "clinical_trials": agg_dict.get("clinical_trials", {}),
+                "research": agg_dict.get("research", {}),
+                "hot_topics": [t.to_dict() for t in trends],
+                "stats": agg_dict.get("stats", {}),
+                # Trend details
+                "trends": [
+                    {
+                        "keyword": t.keyword,
+                        "count": t.count,
+                        "change_label": getattr(t, 'change_label', ''),
+                        "trend_indicator": getattr(t, 'trend_indicator', '📊'),
+                        "category": getattr(t, 'category', ''),
+                        "why_hot": getattr(t, 'why_hot', ''),
+                        "is_predefined": getattr(t, 'is_predefined', True),
+                        "is_emerging": getattr(t, 'is_emerging', False)
+                    }
+                    for t in trends
+                ],
+                "articles": articles_dict,
+                "articles_by_trend": articles_dict,
+                "editor_comment": editor_comment,
+                "quick_news": [],
+                "emerging_trends": [
+                    {
+                        "keyword": t.keyword,
+                        "count": t.count,
+                        "change_label": getattr(t, 'change_label', ''),
+                        "trend_indicator": "🆕",
+                        "category": "",
+                        "why_hot": "",
+                        "is_predefined": False,
+                        "is_emerging": True
+                    }
+                    for t in trends if getattr(t, 'is_emerging', False)
+                ]
+            }
+            json_path = output_dir / f"briefing_{datetime.now().strftime('%Y%m%d')}.json"
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
+            print(f"JSON saved to: {json_path}")
+
+            # Read generated HTML
+            html_path = Path(filepath)
+            html = html_path.read_text(encoding="utf-8") if html_path.exists() else ""
 
             self._latest_html = html
             self._latest_data = json_data

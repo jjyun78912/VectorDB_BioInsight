@@ -290,24 +290,79 @@ GET    /api/graph/node/{id}       # 노드 상세
 
 ### 4. Daily Briefing ✅
 
-**Purpose**: AI 기반 연구 뉴스 다이제스트
+**Purpose**: AI 기반 연구 뉴스 다이제스트 (평일 오전 6시 자동 생성)
 
 **Location**: `bio-daily-briefing/`
 
-**Sources**:
-- bioRxiv preprints
-- ClinicalTrials.gov
-- FDA announcements
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Daily Briefing - Multi-Source Aggregation Pipeline        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [1] FDA Fetcher        → 규제/승인 뉴스 (72시간)          │
+│      • Drug approvals, Safety warnings, Recalls            │
+│                                                             │
+│  [2] ClinicalTrials     → 임상시험 업데이트 (30일)         │
+│      • Phase 3 results, New trials, Terminated             │
+│                                                             │
+│  [3] bioRxiv/medRxiv    → 프리프린트 (3일)                 │
+│      • Hot keywords 필터링, Top preprints                  │
+│                                                             │
+│  [4] PubMed Fetcher     → Peer-reviewed 논문 (2일)         │
+│      • 키워드별 검색 (GLP-1, CAR-T, CRISPR 등)             │
+│      • High-impact journals 필터링                         │
+│                                                             │
+│  [5] NewsAggregator     → 통합 및 우선순위 결정            │
+│      • Headline 선정 (FDA > Trials > Preprints)            │
+│      • 카테고리별 정리                                     │
+│                                                             │
+│  [6] Newsletter Generator → HTML/JSON 생성                 │
+│      • 신문 스타일 레이아웃                                │
+│      • PDF 다운로드 지원                                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-**Features**:
-- Multi-source aggregation
-- LLM 기반 요약
-- 한국어/영어 지원
+**Key Files**:
+| File | Purpose |
+|------|---------|
+| `src/scheduler.py` | 스케줄러 + 데이터 변환 (⚠️ list 형식 필수) |
+| `src/aggregator.py` | 멀티소스 통합 |
+| `src/newsletter_generator.py` | HTML 생성 (list 형식 입력) |
+| `src/sources/fda_fetcher.py` | FDA 뉴스 수집 |
+| `src/sources/clinicaltrials_fetcher.py` | 임상시험 수집 |
+| `src/sources/biorxiv_fetcher.py` | 프리프린트 수집 |
+| `src/pubmed_fetcher.py` | PubMed 논문 수집 |
+
+**⚠️ 주의사항 (데이터 형식)**:
+```python
+# newsletter_generator는 list 형식을 기대함
+# aggregator는 dict 형식을 반환함
+# scheduler.py에서 반드시 변환 필요!
+
+# ❌ Wrong (dict 형식 - newsletter_generator에서 에러)
+clinical_trials = {"phase3_results": [...], "new_trials": [...]}
+
+# ✅ Correct (list 형식)
+clinical_trials = [
+    {"type": "phase3_completed", "title": "...", "description": "..."},
+    {"type": "new_trial", "title": "...", "description": "..."}
+]
+```
+
+**Automation** (launchd):
+- 평일 (월~금) 오전 6시 자동 실행
+- plist: `~/Library/LaunchAgents/com.bioinsight.daily-briefing.plist`
+- 로그: `bio-daily-briefing/output/scheduler.log`
 
 **API Endpoints**:
 ```
-GET    /api/briefing/today        # 오늘의 브리핑
-GET    /api/briefing/history      # 이전 브리핑
+GET    /api/briefing/latest       # 최신 브리핑
+GET    /api/briefing/date/{date}  # 특정 날짜 브리핑
+GET    /api/briefing/html/latest  # HTML 형식
+GET    /api/briefing/archive      # 전체 목록
+GET    /api/briefing/trends/summary  # 트렌드 요약
 ```
 
 ---

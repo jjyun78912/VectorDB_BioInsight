@@ -1,14 +1,23 @@
-# BIO 데일리 브리핑 v2.0
+# BIO 데일리 브리핑 v3.0
 
-AI 기반 자동 트렌드 분석 바이오/의학 뉴스레터 시스템
+AI 기반 멀티소스 바이오/의학 뉴스레터 시스템 (평일 오전 6시 자동 생성)
 
 ## 주요 특징
 
-- **자동 트렌드 추출**: 고정 카테고리 없이 논문에서 핫 키워드 자동 분석
-- **트렌드 비교**: 전일/전주 대비 증감율 자동 계산 (🔥⬆️⬇️➡️)
-- **AI 뉴스 변환**: Claude/Gemini로 논문을 읽기 쉬운 뉴스로 변환
-- **HTML 뉴스레터**: 이메일 클라이언트 호환 반응형 디자인
-- **자동 발송**: 매일 지정 시간에 구독자에게 발송
+- **멀티소스 수집**: FDA, ClinicalTrials.gov, bioRxiv/medRxiv, PubMed 통합
+- **자동 트렌드 추출**: 논문에서 핫 키워드 자동 분석 (🔥⬆️⬇️➡️)
+- **AI 뉴스 변환**: Claude API로 논문을 읽기 쉬운 뉴스로 변환
+- **신문 스타일**: PDF 다운로드 지원, 반응형 HTML
+- **자동 스케줄링**: launchd (macOS) / cron 지원
+
+## 데이터 소스
+
+| 소스 | 내용 | 수집 주기 |
+|------|------|-----------|
+| **FDA** | 신약 승인, 안전성 경고, 리콜 | 72시간 |
+| **ClinicalTrials.gov** | Phase 3 결과, 신규 임상, 중단 | 30일 |
+| **bioRxiv/medRxiv** | 프리프린트 | 3일 |
+| **PubMed** | Peer-reviewed 논문, High-impact journals | 2일 |
 
 ## 프로젝트 구조
 
@@ -16,21 +25,61 @@ AI 기반 자동 트렌드 분석 바이오/의학 뉴스레터 시스템
 bio-daily-briefing/
 ├── src/
 │   ├── __init__.py
+│   ├── scheduler.py           # 스케줄러 (⚠️ 데이터 형식 변환 포함)
+│   ├── aggregator.py          # 멀티소스 통합 (dict 형식 반환)
+│   ├── newsletter_generator.py # HTML 생성 (list 형식 필요!)
 │   ├── pubmed_fetcher.py      # PubMed 논문 수집
-│   ├── trend_analyzer.py      # 트렌드/키워드 분석 (핵심)
-│   ├── ai_summarizer.py       # Claude/Gemini 요약
-│   ├── newsletter_generator.py # HTML 이메일 생성
-│   └── scheduler.py           # 자동화 스케줄러
+│   ├── trend_analyzer.py      # 트렌드/키워드 분석
+│   ├── ai_summarizer.py       # Claude 요약
+│   └── sources/
+│       ├── fda_fetcher.py     # FDA 뉴스 수집
+│       ├── clinicaltrials_fetcher.py  # 임상시험 수집
+│       └── biorxiv_fetcher.py # 프리프린트 수집
+├── templates/
+│   └── newsletter_template.html  # 신문 스타일 템플릿
 ├── config/
 │   ├── .env.example           # 환경변수 템플릿
 │   └── subscribers.json       # 구독자 목록
-├── output/                    # 생성된 뉴스레터
+├── output/
+│   ├── html/                  # 생성된 HTML
+│   ├── *.json                 # API용 JSON
 │   └── history/               # 트렌드 히스토리
-├── deploy/
-│   ├── Dockerfile
-│   └── docker-compose.yml
 ├── requirements.txt
 └── README.md
+```
+
+## ⚠️ 개발자 주의사항
+
+**데이터 형식 불일치 문제 (반드시 숙지!)**
+
+`aggregator.py`는 dict 형식을 반환하지만, `newsletter_generator.py`는 list 형식을 기대합니다.
+**`scheduler.py`에서 반드시 변환해야 합니다!**
+
+```python
+# ❌ Wrong - newsletter_generator에서 KeyError 발생
+newsletter_data = {
+    "clinical_trials": agg_dict.get("clinical_trials", {}),  # dict 형식
+    "research": agg_dict.get("research", {}),  # dict 형식
+}
+
+# ✅ Correct - list 형식으로 변환
+clinical_list = []
+for item in ct_dict.get("phase3_results", [])[:3]:
+    clinical_list.append({
+        "type": "phase3_completed",
+        "title": item.get("title", ""),
+        "description": item.get("summary", "")
+    })
+
+newsletter_data = {
+    "clinical_trials": clinical_list,  # list 형식!
+}
+```
+
+검증 로그가 빈 섹션을 경고합니다:
+```
+⚠️ WARNING: clinical_list is empty! Check ClinicalTrials fetcher.
+[Data Validation] regulatory: 5, clinical: 5, research: 6
 ```
 
 ## 설치
