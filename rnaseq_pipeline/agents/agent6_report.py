@@ -388,6 +388,7 @@ class ReportAgent(BaseAgent):
         network_src = figures.get('network_graph', '')
         heatmap_src = figures.get('heatmap_top50', '')
         volcano_interactive = interactive_figures.get('volcano_interactive', '')
+        network_interactive = interactive_figures.get('network_3d_interactive', '')
 
         # Generate SHAP-like top genes bar
         integrated = data.get('integrated_gene_table', [])
@@ -494,10 +495,22 @@ class ReportAgent(BaseAgent):
                     <p class="panel-note">●●●●● = 매우 유의미 (padj < 0.00001), 숫자 = 해당 경로의 유전자 수</p>
                 </div>
 
-                <div class="dashboard-panel">
-                    <h4>Network Hub Genes</h4>
+                <div class="dashboard-panel network-container">
+                    <div class="network-header">
+                        <h4>Network Hub Genes</h4>
+                        {f'''<div class="view-toggle">
+                            <button class="toggle-btn active" onclick="showNetworkView('interactive')">3D Interactive</button>
+                            <button class="toggle-btn" onclick="showNetworkView('static')">Static</button>
+                        </div>''' if network_interactive else ''}
+                    </div>
                     <p class="panel-desc">유전자 간 공발현(co-expression) 네트워크에서 중심적 역할을 하는 Hub 유전자입니다. Hub는 많은 유전자와 연결되어 있어 핵심 조절자일 가능성이 높습니다.</p>
-                    {f'<img src="{network_src}" alt="Network" />' if network_src else '<p class="no-data">No plot available</p>'}
+                    {f'''<div id="network-interactive" class="network-view active">
+                        <iframe id="network-iframe" srcdoc="{network_interactive.replace('"', '&quot;')}" style="width:100%; height:500px; border:none; border-radius:8px;"></iframe>
+                        <p class="panel-note">💡 마우스 드래그로 회전, 스크롤로 확대/축소, 유전자 클릭으로 포커스</p>
+                    </div>
+                    <div id="network-static" class="network-view" style="display:none;">
+                        <img src="{network_src}" alt="Network" />
+                    </div>''' if network_interactive else f'<img src="{network_src}" alt="Network" />' if network_src else '<p class="no-data">No plot available</p>'}
                 </div>
 
                 <div class="dashboard-panel full-width">
@@ -759,104 +772,293 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_css(self) -> str:
-        """Generate modern CSS styles."""
+        """Generate Cell journal-style CSS."""
         return '''
         <style>
             :root {
-                --primary: #4F46E5;
-                --primary-light: #818CF8;
-                --secondary: #7C3AED;
-                --success: #10B981;
-                --warning: #F59E0B;
-                --danger: #EF4444;
-                --gray-50: #F9FAFB;
-                --gray-100: #F3F4F6;
-                --gray-200: #E5E7EB;
-                --gray-500: #6B7280;
-                --gray-700: #374151;
-                --gray-900: #111827;
+                --primary: #1a365d;
+                --primary-light: #2c5282;
+                --accent: #c53030;
+                --success: #276749;
+                --warning: #c05621;
+                --gray-50: #f7fafc;
+                --gray-100: #edf2f7;
+                --gray-200: #e2e8f0;
+                --gray-500: #718096;
+                --gray-700: #2d3748;
+                --gray-900: #1a202c;
+                --serif: 'Crimson Pro', Georgia, serif;
+                --sans: 'Inter', -apple-system, sans-serif;
             }
 
             * { box-sizing: border-box; margin: 0; padding: 0; }
 
             body {
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                background: linear-gradient(135deg, #F0F4FF 0%, #F9FAFB 100%);
+                font-family: var(--sans);
+                background: #ffffff;
                 color: var(--gray-900);
-                line-height: 1.6;
+                line-height: 1.7;
+            }
+
+            /* ========== COVER PAGE ========== */
+            .cover-page {
                 min-height: 100vh;
-            }
-
-            .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-
-            /* Header */
-            header {
-                background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                background: linear-gradient(180deg, #1a365d 0%, #2c5282 50%, #3182ce 100%);
                 color: white;
-                padding: 40px 20px;
+                text-align: center;
+                padding: 60px 40px;
                 position: relative;
-                overflow: hidden;
             }
 
-            header::before {
+            .cover-page::before {
                 content: '';
                 position: absolute;
-                top: -50%;
-                right: -10%;
-                width: 400px;
-                height: 400px;
-                background: rgba(255,255,255,0.1);
-                border-radius: 50%;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+                opacity: 0.5;
             }
 
-            header h1 {
-                font-size: 2rem;
+            .cover-content {
+                position: relative;
+                z-index: 1;
+                max-width: 800px;
+            }
+
+            .cover-badge {
+                display: inline-block;
+                background: rgba(255,255,255,0.15);
+                border: 1px solid rgba(255,255,255,0.3);
+                padding: 8px 20px;
+                border-radius: 30px;
+                font-size: 0.85rem;
+                font-weight: 500;
+                letter-spacing: 0.5px;
+                margin-bottom: 30px;
+                text-transform: uppercase;
+            }
+
+            .cover-title {
+                font-family: var(--serif);
+                font-size: 3.5rem;
                 font-weight: 700;
-                margin-bottom: 8px;
+                line-height: 1.2;
+                margin-bottom: 16px;
             }
 
-            header .meta {
+            .cover-subtitle {
+                font-size: 1.3rem;
                 opacity: 0.9;
-                font-size: 0.9rem;
+                margin-bottom: 50px;
+                font-weight: 400;
             }
 
-            /* Navigation */
-            .nav-pills {
+            .cover-stats {
                 display: flex;
-                gap: 10px;
-                padding: 15px 20px;
+                justify-content: center;
+                gap: 60px;
+                margin-bottom: 50px;
+            }
+
+            .cover-stat {
+                text-align: center;
+            }
+
+            .cover-stat .stat-number {
+                display: block;
+                font-size: 3rem;
+                font-weight: 700;
+                font-family: var(--serif);
+            }
+
+            .cover-stat .stat-label {
+                display: block;
+                font-size: 0.85rem;
+                opacity: 0.8;
+                margin-top: 8px;
+            }
+
+            .cover-meta {
+                background: rgba(255,255,255,0.1);
+                border-radius: 12px;
+                padding: 24px 40px;
+                text-align: left;
+            }
+
+            .cover-meta p {
+                margin: 6px 0;
+                font-size: 0.95rem;
+            }
+
+            .cover-footer {
+                position: absolute;
+                bottom: 30px;
+                left: 0;
+                right: 0;
+                text-align: center;
+                font-size: 0.85rem;
+                opacity: 0.7;
+            }
+
+            /* ========== NAVIGATION ========== */
+            .nav-bar {
                 background: white;
                 border-bottom: 1px solid var(--gray-200);
                 position: sticky;
                 top: 0;
                 z-index: 100;
-                overflow-x: auto;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
             }
 
-            .nav-pill {
-                padding: 8px 16px;
-                border-radius: 20px;
-                background: var(--gray-100);
+            .nav-container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 40px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                height: 60px;
+            }
+
+            .nav-brand {
+                font-weight: 600;
+                color: var(--primary);
+                font-size: 1rem;
+            }
+
+            .nav-links {
+                display: flex;
+                gap: 32px;
+            }
+
+            .nav-links a {
                 color: var(--gray-700);
                 text-decoration: none;
-                font-size: 0.85rem;
+                font-size: 0.9rem;
                 font-weight: 500;
-                white-space: nowrap;
-                transition: all 0.2s;
+                transition: color 0.2s;
             }
 
-            .nav-pill:hover, .nav-pill.active {
-                background: var(--primary);
+            .nav-links a:hover {
+                color: var(--primary);
+            }
+
+            /* ========== PAPER CONTENT ========== */
+            .paper-content {
+                max-width: 1000px;
+                margin: 0 auto;
+                padding: 60px 40px;
+            }
+
+            .paper-content h2 {
+                font-family: var(--serif);
+                font-size: 1.8rem;
+                font-weight: 600;
+                color: var(--primary);
+                margin-bottom: 24px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid var(--primary);
+            }
+
+            .paper-content section {
+                margin-bottom: 60px;
+            }
+
+            /* ========== ABSTRACT ========== */
+            .abstract-section {
+                margin-top: 0;
+            }
+
+            .abstract-box {
+                background: var(--gray-50);
+                border-left: 4px solid var(--primary);
+                padding: 30px 35px;
+                border-radius: 0 12px 12px 0;
+            }
+
+            .abstract-content p {
+                margin-bottom: 16px;
+                font-size: 1rem;
+                text-align: justify;
+            }
+
+            .abstract-keywords {
+                margin-top: 20px;
+                padding-top: 16px;
+                border-top: 1px solid var(--gray-200);
+                font-size: 0.9rem;
+                color: var(--gray-700);
+            }
+
+            /* ========== FIGURES SECTION ========== */
+            .figures-section .figure-panel {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 12px;
+                padding: 24px;
+                margin-bottom: 30px;
+            }
+
+            .figure-panel h4 {
+                font-family: var(--serif);
+                font-size: 1.1rem;
+                color: var(--gray-900);
+                margin-bottom: 8px;
+            }
+
+            .figure-panel .figure-caption {
+                font-size: 0.9rem;
+                color: var(--gray-600);
+                margin-bottom: 20px;
+                line-height: 1.6;
+            }
+
+            .figure-panel img {
+                width: 100%;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            }
+
+            /* ========== PAPER FOOTER ========== */
+            .paper-footer {
+                background: var(--gray-900);
                 color: white;
+                padding: 40px;
+                text-align: center;
             }
 
-            /* Executive Summary */
+            .footer-content {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+
+            .paper-footer p {
+                font-size: 0.9rem;
+                line-height: 1.7;
+                opacity: 0.9;
+            }
+
+            .footer-credit {
+                margin-top: 20px;
+                font-size: 0.85rem;
+                opacity: 0.6;
+            }
+
+            /* Legacy styles for compatibility */
+            .container { max-width: 1000px; margin: 0 auto; padding: 40px; }
+
             .executive-summary {
                 background: white;
-                border-radius: 16px;
+                border-radius: 12px;
                 padding: 30px;
                 margin-bottom: 24px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                border: 1px solid var(--gray-200);
             }
 
             .summary-header {
@@ -1088,6 +1290,24 @@ class ReportAgent(BaseAgent):
             }
 
             .volcano-view.active {
+                display: block;
+            }
+
+            /* Network Container */
+            .network-container { position: relative; }
+
+            .network-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 12px;
+            }
+
+            .network-view {
+                display: none;
+            }
+
+            .network-view.active {
                 display: block;
             }
 
@@ -1920,16 +2140,42 @@ class ReportAgent(BaseAgent):
             function showVolcanoView(view) {{
                 const interactiveView = document.getElementById('volcano-interactive');
                 const staticView = document.getElementById('volcano-static');
-                const buttons = document.querySelectorAll('.view-toggle .toggle-btn');
+                const buttons = document.querySelectorAll('.volcano-container .view-toggle .toggle-btn');
 
                 if (view === 'interactive') {{
                     interactiveView.classList.add('active');
                     staticView.classList.remove('active');
+                    interactiveView.style.display = 'block';
+                    staticView.style.display = 'none';
                     buttons[0].classList.add('active');
                     buttons[1].classList.remove('active');
                 }} else {{
                     interactiveView.classList.remove('active');
                     staticView.classList.add('active');
+                    interactiveView.style.display = 'none';
+                    staticView.style.display = 'block';
+                    buttons[0].classList.remove('active');
+                    buttons[1].classList.add('active');
+                }}
+            }}
+
+            function showNetworkView(view) {{
+                const interactiveView = document.getElementById('network-interactive');
+                const staticView = document.getElementById('network-static');
+                const buttons = document.querySelectorAll('.network-container .view-toggle .toggle-btn');
+
+                if (view === 'interactive') {{
+                    interactiveView.classList.add('active');
+                    staticView.classList.remove('active');
+                    interactiveView.style.display = 'block';
+                    staticView.style.display = 'none';
+                    buttons[0].classList.add('active');
+                    buttons[1].classList.remove('active');
+                }} else {{
+                    interactiveView.classList.remove('active');
+                    staticView.classList.add('active');
+                    interactiveView.style.display = 'none';
+                    staticView.style.display = 'block';
                     buttons[0].classList.remove('active');
                     buttons[1].classList.add('active');
                 }}
@@ -1937,8 +2183,100 @@ class ReportAgent(BaseAgent):
         </script>
         '''
 
+    def _generate_cover_page_html(self, data: Dict) -> str:
+        """Generate Cell-style cover page."""
+        interpretation = data.get('interpretation_report', {})
+        cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'Unknown'))
+        cancer_type_kr = {
+            'breast_cancer': '유방암',
+            'lung_cancer': '폐암',
+            'pancreatic_cancer': '췌장암',
+            'colorectal_cancer': '대장암'
+        }.get(cancer_type, cancer_type)
+
+        # Get stats
+        deg_count = len(data.get('deg_significant', []))
+        hub_count = len(data.get('hub_genes', []))
+        pathway_count = len(data.get('pathway_summary', []))
+
+        return f'''
+        <section class="cover-page">
+            <div class="cover-content">
+                <div class="cover-badge">RNA-seq Differential Expression Analysis</div>
+                <h1 class="cover-title">{cancer_type_kr} 전사체 분석 보고서</h1>
+                <p class="cover-subtitle">Comprehensive Transcriptomic Profiling and Pathway Analysis</p>
+
+                <div class="cover-stats">
+                    <div class="cover-stat">
+                        <span class="stat-number">{deg_count:,}</span>
+                        <span class="stat-label">Differentially Expressed Genes</span>
+                    </div>
+                    <div class="cover-stat">
+                        <span class="stat-number">{hub_count}</span>
+                        <span class="stat-label">Hub Genes Identified</span>
+                    </div>
+                    <div class="cover-stat">
+                        <span class="stat-number">{pathway_count}</span>
+                        <span class="stat-label">Enriched Pathways</span>
+                    </div>
+                </div>
+
+                <div class="cover-meta">
+                    <p><strong>Analysis Date:</strong> {datetime.now().strftime("%B %d, %Y")}</p>
+                    <p><strong>Pipeline:</strong> BioInsight AI RNA-seq Pipeline v2.0</p>
+                    <p><strong>Methods:</strong> DESeq2, WGCNA Network Analysis, GO/KEGG Enrichment</p>
+                </div>
+            </div>
+            <div class="cover-footer">
+                <p>This report was generated using AI-assisted analysis. All findings require experimental validation.</p>
+            </div>
+        </section>
+        '''
+
+    def _generate_abstract_html(self, data: Dict) -> str:
+        """Generate paper-style abstract/summary section."""
+        interpretation = data.get('interpretation_report', {})
+        rag_data = interpretation.get('rag_interpretation', {})
+        summary = rag_data.get('summary', '')
+
+        # Get key findings
+        deg_count = len(data.get('deg_significant', []))
+        hub_genes = data.get('hub_genes', [])
+        hub_names = [g.get('gene_symbol', g.get('gene_id', '')) for g in hub_genes[:5]]
+
+        # Get top pathways
+        pathways = data.get('pathway_summary', [])[:3]
+        pathway_names = [p.get('term_name', '')[:50] for p in pathways]
+
+        # Build abstract if no RAG summary
+        if not summary:
+            summary = f'''
+본 분석에서는 {deg_count:,}개의 차등발현 유전자(DEGs)를 식별하였습니다.
+네트워크 분석을 통해 {len(hub_genes)}개의 Hub 유전자({", ".join(hub_names[:3])} 등)가
+핵심 조절자로 확인되었습니다. Pathway enrichment 분석 결과,
+{", ".join(pathway_names[:2])} 등의 경로가 유의하게 농축되었습니다.
+이러한 결과는 질환의 분자적 메커니즘에 대한 중요한 통찰을 제공합니다.
+            '''
+
+        return f'''
+        <section class="abstract-section" id="abstract">
+            <h2>Abstract</h2>
+            <div class="abstract-box">
+                <div class="abstract-content">
+                    <p><strong>Background:</strong> RNA-seq 기반 전사체 분석을 통해 질환 관련 유전자 발현 변화를 체계적으로 분석하였습니다.</p>
+                    <p><strong>Methods:</strong> DESeq2를 이용한 차등발현 분석, WGCNA 기반 네트워크 분석, GO/KEGG pathway enrichment 분석을 수행하였습니다.</p>
+                    <p><strong>Results:</strong> {summary.strip()}</p>
+                    <p><strong>Conclusions:</strong> 본 분석에서 확인된 Hub 유전자와 enriched pathway는 후속 기능 연구 및 바이오마커 개발의 유망한 후보입니다.</p>
+                </div>
+                <div class="abstract-keywords">
+                    <strong>Keywords:</strong> RNA-seq, Differential Expression, Network Analysis, {", ".join(hub_names[:3])}
+                </div>
+            </div>
+        </section>
+        '''
+
     def _generate_html(self, data: Dict) -> str:
-        """Generate complete HTML report."""
+        """Generate complete HTML report in Cell journal style."""
         interpretation = data.get('interpretation_report', {})
         cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'Unknown'))
 
@@ -1949,42 +2287,62 @@ class ReportAgent(BaseAgent):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{self.config["report_title"]}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     {self._generate_css()}
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>🧬 {self.config["report_title"]}</h1>
-            <p class="meta">
-                Generated by {self.config["author"]} |
-                {datetime.now().strftime("%Y-%m-%d %H:%M")} |
-                Cancer Type: {cancer_type}
-            </p>
-        </div>
-    </header>
+    <!-- Cover Page -->
+    {self._generate_cover_page_html(data)}
 
-    <nav class="nav-pills">
-        <a href="#executive-summary" class="nav-pill active">Executive Summary</a>
-        <a href="#visual-dashboard" class="nav-pill">Visual Dashboard</a>
-        <a href="#rag-summary" class="nav-pill">📚 RAG Interpretation</a>
-        <a href="#gene-cards" class="nav-pill">Gene Cards</a>
-        <a href="#detailed-table" class="nav-pill">Detailed Analysis</a>
-        <a href="#methods" class="nav-pill">Methods</a>
+    <!-- Navigation -->
+    <nav class="nav-bar">
+        <div class="nav-container">
+            <span class="nav-brand">BioInsight Report</span>
+            <div class="nav-links">
+                <a href="#abstract">Abstract</a>
+                <a href="#figures">Figures</a>
+                <a href="#rag-summary">Literature Analysis</a>
+                <a href="#gene-cards">Key Genes</a>
+                <a href="#methods">Methods</a>
+            </div>
+        </div>
     </nav>
 
-    <div class="container">
-        {self._generate_executive_summary_html(data)}
-        {self._generate_visual_dashboard_html(data)}
-        {self._generate_rag_summary_html(data)}
-        {self._generate_gene_status_cards_html(data)}
-        {self._generate_detailed_table_html(data)}
-        {self._generate_methods_html() if self.config["include_methods"] else ""}
-    </div>
+    <main class="paper-content">
+        <!-- Abstract -->
+        {self._generate_abstract_html(data)}
 
-    <footer>
-        <p>Generated by BioInsight AI RNA-seq Pipeline v2.0</p>
-        <p>This report is for research purposes only. All findings require experimental validation.</p>
+        <!-- Figures Section -->
+        <section class="figures-section" id="figures">
+            <h2>Figures</h2>
+            {self._generate_visual_dashboard_html(data)}
+        </section>
+
+        <!-- RAG Literature Analysis -->
+        {self._generate_rag_summary_html(data)}
+
+        <!-- Key Genes -->
+        <section class="genes-section" id="gene-cards">
+            <h2>Key Gene Analysis</h2>
+            {self._generate_gene_status_cards_html(data)}
+        </section>
+
+        <!-- Detailed Data Table -->
+        <section class="data-section" id="detailed-table">
+            <h2>Supplementary Data</h2>
+            {self._generate_detailed_table_html(data)}
+        </section>
+
+        <!-- Methods -->
+        {self._generate_methods_html() if self.config["include_methods"] else ""}
+    </main>
+
+    <footer class="paper-footer">
+        <div class="footer-content">
+            <p><strong>Disclaimer:</strong> This report is generated by AI-assisted analysis pipeline.
+            All findings are preliminary and require experimental validation before clinical application.</p>
+            <p class="footer-credit">Generated by BioInsight AI RNA-seq Pipeline v2.0 | {datetime.now().strftime("%Y-%m-%d")}</p>
+        </div>
     </footer>
 
     {self._generate_javascript(data)}

@@ -880,29 +880,29 @@ class VisualizationAgent(BaseAgent):
         return self._save_figure(fig, "interpretation_summary")
 
     def _plot_network_3d_interactive(self) -> Optional[str]:
-        """Generate interactive 3D network visualization with Three.js + 3d-force-graph.
+        """Generate clean, simple interactive network visualization.
 
-        Inspired by Obsidian 3D Graph plugin style with:
-        - Bloom/glow effects
-        - Particle animations on links
-        - Smooth force-directed physics
-        - Dark space theme
+        Simple design with:
+        - Clean white background
+        - Large, readable gene labels
+        - Clear hub gene highlighting
+        - Minimal, professional styling
         """
         if self.network_edges is None or len(self.network_edges) == 0:
-            self.logger.warning("Skipping 3D network - no edges")
+            self.logger.warning("Skipping network - no edges")
             return None
 
         if self.hub_genes is None or len(self.hub_genes) == 0:
-            self.logger.warning("Skipping 3D network - no hub genes")
+            self.logger.warning("Skipping network - no hub genes")
             return None
 
-        self.logger.info("Generating interactive 3D network (Obsidian-style)...")
+        self.logger.info("Generating clean interactive network...")
 
         try:
             import networkx as nx
             import json
         except ImportError:
-            self.logger.warning("networkx not installed - skipping 3D network")
+            self.logger.warning("networkx not installed - skipping network")
             return None
 
         # Build gene_id to gene_symbol mapping
@@ -931,37 +931,40 @@ class VisualizationAgent(BaseAgent):
                 return f"...{parts[0][-4:]}"
             return gene_id
 
-        # Build graph
+        # Build graph - Only hub genes and their direct neighbors
         G = nx.Graph()
+        hub_set_ids = set(self.hub_genes['gene_id'].tolist())
+
         for _, row in self.network_edges.iterrows():
             gene1, gene2 = row['gene1'], row['gene2']
-            label1 = get_gene_label(gene1)
-            label2 = get_gene_label(gene2)
-            G.add_edge(label1, label2, weight=row['abs_correlation'])
-            G.nodes[label1]['gene_id'] = gene1
-            G.nodes[label2]['gene_id'] = gene2
+            # Only include edges connected to hub genes
+            if gene1 in hub_set_ids or gene2 in hub_set_ids:
+                label1 = get_gene_label(gene1)
+                label2 = get_gene_label(gene2)
+                G.add_edge(label1, label2, weight=row['abs_correlation'])
+                G.nodes[label1]['gene_id'] = gene1
+                G.nodes[label2]['gene_id'] = gene2
 
         if G.number_of_nodes() == 0:
             return None
 
-        # Get hub info
-        hub_set_ids = set(self.hub_genes['gene_id'].tolist())
+        # Get hub labels
         hub_set_labels = {get_gene_label(h) for h in hub_set_ids}
         hub_scores = {}
         for _, row in self.hub_genes.iterrows():
             label = get_gene_label(row['gene_id'])
             hub_scores[label] = row.get('hub_score', 0.5)
 
-        # Limit graph size
-        if G.number_of_nodes() > 150:
+        # Limit to top hub genes and their neighbors for clarity
+        if G.number_of_nodes() > 60:
             nodes_to_keep = set()
-            for hub_label in hub_set_labels:
+            for hub_label in list(hub_set_labels)[:10]:  # Top 10 hubs only
                 if hub_label in G:
                     nodes_to_keep.add(hub_label)
-                    nodes_to_keep.update(list(G.neighbors(hub_label))[:8])
+                    nodes_to_keep.update(list(G.neighbors(hub_label))[:5])  # 5 neighbors each
             G = G.subgraph(nodes_to_keep).copy()
 
-        # Prepare data for 3d-force-graph
+        # Prepare data for D3.js force simulation
         nodes_data = []
         for node in G.nodes():
             is_hub = node in hub_set_labels
@@ -971,32 +974,20 @@ class VisualizationAgent(BaseAgent):
             direction = info.get('direction', 'none')
             degree = G.degree(node)
 
-            # Color based on direction and hub status - White background palette
+            # Simple color scheme
             if is_hub:
-                if direction == 'up':
-                    color = '#dc2626'  # Red (upregulated hub)
-                elif direction == 'down':
-                    color = '#2563eb'  # Blue (downregulated hub)
-                else:
-                    color = '#7c3aed'  # Purple (unknown hub)
+                color = '#dc2626' if direction == 'up' else '#2563eb'  # Red or Blue
             else:
-                if direction == 'up':
-                    color = '#f87171'  # Light red (upregulated)
-                elif direction == 'down':
-                    color = '#60a5fa'  # Light blue (downregulated)
-                else:
-                    color = '#9ca3af'  # Gray
+                color = '#94a3b8'  # Gray for non-hub
 
             nodes_data.append({
                 'id': node,
-                'name': node,
                 'isHub': is_hub,
-                'hubScore': hub_scores.get(node, 0),
                 'log2FC': round(log2fc, 2),
                 'direction': direction,
                 'degree': degree,
                 'color': color,
-                'size': 8 + hub_scores.get(node, 0) * 15 if is_hub else 4 + degree * 0.5
+                'radius': 24 if is_hub else 8
             })
 
         links_data = []
@@ -1008,403 +999,213 @@ class VisualizationAgent(BaseAgent):
             })
 
         graph_data = json.dumps({'nodes': nodes_data, 'links': links_data})
-
         hub_count = len([n for n in nodes_data if n['isHub']])
-        stats_text = f"{len(nodes_data)} genes · {len(links_data)} connections · {hub_count} hub genes"
 
-        # HTML template with 3d-force-graph - Premium Scientific Style
+        # Clean, simple HTML template with D3.js
         html_template = f'''<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Gene Co-expression Network</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three-spritetext@1"></script>
-    <script src="https://unpkg.com/3d-force-graph@1"></script>
+    <title>Hub Gene Network</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
             background: #ffffff;
-            overflow: hidden;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }}
-        #container {{ width: 100vw; height: 100vh; }}
+        svg {{ display: block; }}
 
-        /* Subtle gradient accent */
-        .ambient-glow {{
-            position: fixed;
-            width: 600px;
-            height: 600px;
-            border-radius: 50%;
-            filter: blur(180px);
-            opacity: 0.08;
-            pointer-events: none;
-            z-index: 0;
-        }}
-        .glow-1 {{ background: #3b82f6; top: -200px; left: -200px; }}
-        .glow-2 {{ background: #8b5cf6; bottom: -200px; right: -200px; }}
-
-        /* Header */
-        .header {{
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 24px 32px;
-            background: linear-gradient(to bottom, rgba(255,255,255,0.95) 0%, transparent 100%);
-            z-index: 100;
-            pointer-events: none;
-        }}
-        .header h1 {{
-            color: #1f2937;
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: -0.02em;
-        }}
-        .header .subtitle {{
-            color: #6b7280;
-            font-size: 12px;
-            margin-top: 6px;
-            font-weight: 400;
-            letter-spacing: 0.02em;
+        .link {{
+            stroke: #cbd5e1;
+            stroke-opacity: 0.6;
         }}
 
-        /* Info panel */
-        .info-panel {{
-            position: fixed;
-            top: 100px;
-            right: 24px;
-            width: 200px;
-            z-index: 100;
+        .node-hub {{
+            stroke: #1e293b;
+            stroke-width: 3px;
         }}
-        .panel-section {{
-            background: rgba(255,255,255,0.9);
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 12px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+
+        .node-regular {{
+            stroke: #94a3b8;
+            stroke-width: 1.5px;
         }}
-        .panel-title {{
+
+        .label-hub {{
+            font-size: 14px;
+            font-weight: 700;
+            fill: #0f172a;
+        }}
+
+        .label-regular {{
             font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: #6b7280;
-            margin-bottom: 12px;
+            font-weight: 500;
+            fill: #475569;
+        }}
+
+        /* Legend */
+        .legend {{
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }}
+        .legend-title {{
             font-weight: 600;
+            margin-bottom: 12px;
+            color: #1e293b;
         }}
         .legend-item {{
             display: flex;
             align-items: center;
-            padding: 6px 0;
+            margin: 8px 0;
         }}
         .legend-dot {{
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            margin-right: 10px;
-            box-shadow: 0 2px 6px currentColor;
+            margin-right: 8px;
         }}
-        .legend-label {{
-            font-size: 12px;
-            color: #374151;
-            font-weight: 400;
+        .legend-text {{
+            color: #475569;
         }}
-        .legend-dot.hub-up {{ background: #dc2626; color: rgba(220,38,38,0.4); }}
-        .legend-dot.hub-down {{ background: #2563eb; color: rgba(37,99,235,0.4); }}
-        .legend-dot.gene-up {{ background: #f87171; color: rgba(248,113,113,0.4); }}
-        .legend-dot.gene-down {{ background: #60a5fa; color: rgba(96,165,250,0.4); }}
 
         /* Stats */
-        .stat-row {{
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #f3f4f6;
-        }}
-        .stat-row:last-child {{ border: none; }}
-        .stat-label {{ font-size: 11px; color: #6b7280; }}
-        .stat-value {{ font-size: 12px; color: #1f2937; font-weight: 600; }}
-
-        /* Controls */
-        .controls {{
-            display: flex;
-            gap: 8px;
-            margin-top: 4px;
-        }}
-        .control-btn {{
-            flex: 1;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 10px 0;
-            color: #374151;
-            cursor: pointer;
-            font-size: 11px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            font-family: inherit;
-        }}
-        .control-btn:hover {{
-            background: #f3f4f6;
-            color: #111827;
-            border-color: #d1d5db;
-        }}
-        .control-btn.active {{
-            background: #eff6ff;
-            border-color: #3b82f6;
-            color: #2563eb;
-        }}
-
-        /* Tooltip */
-        .node-tooltip {{
+        .stats {{
             position: fixed;
-            background: rgba(255,255,255,0.98);
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            color: #1f2937;
-            font-size: 12px;
-            pointer-events: none;
-            opacity: 0;
-            transform: translateY(4px);
-            transition: all 0.15s ease;
-            min-width: 180px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-            z-index: 200;
-        }}
-        .node-tooltip.visible {{
-            opacity: 1;
-            transform: translateY(0);
-        }}
-        .tooltip-header {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #e5e7eb;
-        }}
-        .tooltip-gene {{
-            font-size: 15px;
-            font-weight: 600;
-            color: #111827;
-        }}
-        .tooltip-badge {{
-            background: linear-gradient(135deg, #3b82f6, #6366f1);
-            color: #fff;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 9px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }}
-        .tooltip-row {{
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-        }}
-        .tooltip-label {{ color: #6b7280; font-size: 11px; }}
-        .tooltip-value {{ color: #1f2937; font-weight: 500; }}
-        .tooltip-up {{ color: #dc2626; }}
-        .tooltip-down {{ color: #2563eb; }}
-
-        /* Bottom bar */
-        .bottom-bar {{
-            position: fixed;
-            bottom: 24px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            background: rgba(255,255,255,0.95);
-            border: 1px solid #e5e7eb;
-            border-radius: 100px;
-            padding: 12px 24px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            z-index: 100;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 10px 24px;
+            font-size: 13px;
+            color: #64748b;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }}
-        .bottom-stat {{
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }}
-        .bottom-stat-icon {{
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #3b82f6;
-        }}
-        .bottom-stat-text {{
-            font-size: 12px;
-            color: #6b7280;
-        }}
-        .bottom-stat-text span {{
-            color: #1f2937;
+        .stats span {{
+            color: #1e293b;
             font-weight: 600;
         }}
     </style>
 </head>
 <body>
-    <div class="ambient-glow glow-1"></div>
-    <div class="ambient-glow glow-2"></div>
+    <svg id="network"></svg>
 
-    <div id="container"></div>
-
-    <div class="header">
-        <h1>Gene Co-expression Network</h1>
-        <div class="subtitle">Interactive 3D visualization · Rotate · Zoom · Click to focus</div>
-    </div>
-
-    <div class="info-panel">
-        <div class="panel-section">
-            <div class="panel-title">Legend</div>
-            <div class="legend-item"><div class="legend-dot hub-up"></div><span class="legend-label">Hub gene (up)</span></div>
-            <div class="legend-item"><div class="legend-dot hub-down"></div><span class="legend-label">Hub gene (down)</span></div>
-            <div class="legend-item"><div class="legend-dot gene-up"></div><span class="legend-label">Gene (up)</span></div>
-            <div class="legend-item"><div class="legend-dot gene-down"></div><span class="legend-label">Gene (down)</span></div>
+    <div class="legend">
+        <div class="legend-title">Hub Gene Network</div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #dc2626;"></div>
+            <span class="legend-text">Hub (Up)</span>
         </div>
-
-        <div class="panel-section">
-            <div class="panel-title">Controls</div>
-            <div class="controls">
-                <button class="control-btn active" id="labelBtn" onclick="toggleLabels()">Labels</button>
-                <button class="control-btn" onclick="resetCamera()">Reset</button>
-            </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #2563eb;"></div>
+            <span class="legend-text">Hub (Down)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #94a3b8; width: 8px; height: 8px;"></div>
+            <span class="legend-text">Connected Gene</span>
         </div>
     </div>
 
-    <div class="bottom-bar">
-        <div class="bottom-stat">
-            <div class="bottom-stat-icon"></div>
-            <div class="bottom-stat-text"><span>{len(nodes_data)}</span> genes</div>
-        </div>
-        <div class="bottom-stat">
-            <div class="bottom-stat-icon" style="background: #6366f1;"></div>
-            <div class="bottom-stat-text"><span>{len(links_data)}</span> connections</div>
-        </div>
-        <div class="bottom-stat">
-            <div class="bottom-stat-icon" style="background: #dc2626;"></div>
-            <div class="bottom-stat-text"><span>{hub_count}</span> hub genes</div>
-        </div>
+    <div class="stats">
+        <span>{len(nodes_data)}</span> genes · <span>{len(links_data)}</span> connections · <span>{hub_count}</span> hubs
     </div>
-
-    <div class="node-tooltip" id="tooltip"></div>
 
     <script>
-        const graphData = {graph_data};
+        const data = {graph_data};
 
-        let showLabels = true;
+        const width = window.innerWidth;
+        const height = window.innerHeight;
 
-        const Graph = ForceGraph3D()
-            (document.getElementById('container'))
-            .graphData(graphData)
-            .backgroundColor('#ffffff')
-            .showNavInfo(false)
+        const svg = d3.select("#network")
+            .attr("width", width)
+            .attr("height", height)
+            .call(d3.zoom().scaleExtent([0.3, 4]).on("zoom", (event) => {{
+                container.attr("transform", event.transform);
+            }}))
+            .append("g");
 
-            // Large, visible node styling
-            .nodeVal(node => node.isHub ? 25 : 10)
-            .nodeColor(node => node.color)
-            .nodeOpacity(1.0)
-            .nodeResolution(32)
+        const container = svg.append("g");
 
-            // Large, readable labels on white background
-            .nodeLabel('')
-            .nodeThreeObject(node => {{
-                if (!showLabels && !node.isHub) return null;
+        // Create force simulation
+        const simulation = d3.forceSimulation(data.nodes)
+            .force("link", d3.forceLink(data.links).id(d => d.id).distance(120))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(d => d.radius + 20));
 
-                const sprite = new SpriteText(node.name);
-                sprite.color = node.isHub ? '#000000' : '#374151';
-                sprite.textHeight = node.isHub ? 8 : 5;
-                sprite.fontWeight = node.isHub ? 'bold' : '500';
-                sprite.fontFace = 'Arial, sans-serif';
-                sprite.backgroundColor = node.isHub ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)';
-                sprite.padding = 2;
-                sprite.borderRadius = 3;
-                return sprite;
-            }})
-            .nodeThreeObjectExtend(true)
+        // Draw links
+        const link = container.append("g")
+            .selectAll("line")
+            .data(data.links)
+            .join("line")
+            .attr("class", "link")
+            .attr("stroke-width", d => 1 + d.weight * 2);
 
-            // Bold link styling - clearly visible on white
-            .linkWidth(link => 1 + link.weight * 2)
-            .linkOpacity(0.6)
-            .linkColor(() => '#6b7280')
+        // Draw nodes
+        const node = container.append("g")
+            .selectAll("circle")
+            .data(data.nodes)
+            .join("circle")
+            .attr("r", d => d.radius)
+            .attr("fill", d => d.color)
+            .attr("class", d => d.isHub ? "node-hub" : "node-regular")
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
 
-            .linkDirectionalParticles(0)
+        // Draw labels
+        const label = container.append("g")
+            .selectAll("text")
+            .data(data.nodes)
+            .join("text")
+            .attr("class", d => d.isHub ? "label-hub" : "label-regular")
+            .attr("text-anchor", "middle")
+            .attr("dy", d => d.isHub ? -30 : -12)
+            .text(d => d.id);
 
-            // Optimized physics
-            .d3AlphaDecay(0.008)
-            .d3VelocityDecay(0.15)
-            .d3Force('charge', d3.forceManyBody().strength(-400).distanceMax(500))
-            .d3Force('link', d3.forceLink().distance(100).strength(0.2))
-            .d3Force('center', d3.forceCenter())
-            .warmupTicks(400)
-            .cooldownTicks(500)
+        // Update positions on tick
+        simulation.on("tick", () => {{
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
 
-            // Smooth interactions
-            .onNodeHover(node => {{
-                document.body.style.cursor = node ? 'pointer' : 'default';
-                const tooltip = document.getElementById('tooltip');
-                if (node) {{
-                    const dir = node.direction === 'up' ?
-                        '<span class="tooltip-up">↑ Upregulated</span>' :
-                        node.direction === 'down' ?
-                        '<span class="tooltip-down">↓ Downregulated</span>' : '—';
+            node
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
 
-                    tooltip.innerHTML = `
-                        <div class="tooltip-header">
-                            <span class="tooltip-gene">${{node.name}}</span>
-                            ${{node.isHub ? '<span class="tooltip-badge">Hub</span>' : ''}}
-                        </div>
-                        <div class="tooltip-row"><span class="tooltip-label">Expression</span><span class="tooltip-value">${{dir}}</span></div>
-                        <div class="tooltip-row"><span class="tooltip-label">log₂FC</span><span class="tooltip-value">${{node.log2FC.toFixed(2)}}</span></div>
-                        <div class="tooltip-row"><span class="tooltip-label">Connections</span><span class="tooltip-value">${{node.degree}}</span></div>
-                        ${{node.isHub ? `<div class="tooltip-row"><span class="tooltip-label">Hub score</span><span class="tooltip-value">${{node.hubScore.toFixed(3)}}</span></div>` : ''}}
-                    `;
-                    tooltip.classList.add('visible');
-                }} else {{
-                    tooltip.classList.remove('visible');
-                }}
-            }})
-            .onNodeClick(node => {{
-                const distance = 100;
-                const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
-                Graph.cameraPosition(
-                    {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
-                    node,
-                    1200
-                );
-            }});
-
-        // Tooltip tracking
-        document.addEventListener('mousemove', e => {{
-            const tooltip = document.getElementById('tooltip');
-            tooltip.style.left = (e.clientX + 16) + 'px';
-            tooltip.style.top = (e.clientY + 16) + 'px';
+            label
+                .attr("x", d => d.x)
+                .attr("y", d => d.y);
         }});
 
-        // Controls
-        function toggleLabels() {{
-            showLabels = !showLabels;
-            document.getElementById('labelBtn').classList.toggle('active', showLabels);
-            Graph.nodeThreeObject(Graph.nodeThreeObject());
+        // Drag functions
+        function dragstarted(event) {{
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
         }}
 
-        function resetCamera() {{
-            Graph.cameraPosition({{ x: 0, y: 0, z: 350 }}, {{ x: 0, y: 0, z: 0 }}, 1200);
+        function dragged(event) {{
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
         }}
 
-        // Smooth initial camera
-        setTimeout(() => {{
-            Graph.cameraPosition({{ x: 180, y: 120, z: 220 }});
-        }}, 100);
+        function dragended(event) {{
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        }}
     </script>
 </body>
 </html>'''

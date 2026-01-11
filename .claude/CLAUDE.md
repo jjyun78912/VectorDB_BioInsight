@@ -814,21 +814,41 @@ pytest tests/test_rnaseq_pipeline.py -v
 
 ### 최근 업데이트 (2026-01-11)
 
-**시각화 가독성 대폭 개선**:
-- **3D Network 배경**: 검정 → 흰색 변경
-- **3D Network 노드/레이블**: 크기 2배 증가, 흰색 배경 추가
-- **Volcano Plot 라벨**: |log2FC| 기준 정렬 (Top DEGs와 일치)
-- **Report Dashboard 설명 추가**: 각 시각화별 해석 가이드 (파란색 박스)
-  - Volcano: X/Y축 의미, 빨강/파랑 점 해석
-  - Top DEGs: 발현 변화량 설명
-  - Pathway: 점 유의성, 유전자 수 의미
-  - Network Hub: Hub 유전자 중요성
-  - Heatmap: 발현 수준 색상 가이드
-- **RAG Summary 섹션**: PMID 인용이 포함된 문헌 기반 해석
+**리포트 생성 구조 개선**:
+- **Agent6 Report 데이터 로딩**: CSV 파일 기반 로딩 필수
+  - `_load_all_data()`: CSV 파일들을 직접 읽어서 데이터 로드
+  - 필수 CSV 파일: `deg_significant.csv`, `hub_genes.csv`, `pathway_summary.csv`, `integrated_gene_table.csv`
+  - `report_data.json`만으로는 리포트 생성 불가 (CSV 파일 필요)
+- **Interactive Network Key 수정**: `network_3d` → `network_3d_interactive`
+
+**Network 시각화 단순화 (D3.js)**:
+- 3D → 2D SVG 기반으로 변경 (D3.js force simulation)
+- 깔끔한 흰색 배경
+- Hub 유전자: 큰 원(28px), 굵은 라벨(13px)
+- 빨강(상향)/파랑(하향) 단순 색상
+- 확대/축소, 드래그 지원
+
+**리포트 생성 시 주의사항**:
+```python
+# ⚠️ 리포트 생성 시 CSV 파일 필요
+# report_data.json만 있으면 "No data" 표시됨
+
+# ✅ 올바른 폴더 구조
+output_dir/
+├── deg_significant.csv      # 필수
+├── hub_genes.csv            # 필수
+├── pathway_summary.csv      # 필수
+├── integrated_gene_table.csv # 필수
+├── interpretation_report.json
+└── figures/
+    ├── volcano_plot.png
+    ├── network_3d_interactive.html
+    └── ...
+```
 
 **이전 업데이트**:
-- RAG 유전자 선택 로직 수정: Hub gene 우선 선택 (65% → 100%)
-- Network 시각화 개선: ENSG ID → 유전자 이름 표시
-- Galaxy 2D Network: 어두운 우주 배경, glow 효과
-- Obsidian 3D Network: 파티클 애니메이션, 인터랙티브 컨트롤
+- 3D Network 배경: 검정 → 흰색 변경
+- Volcano Plot 라벨: |log2FC| 기준 정렬 (Top DEGs와 일치)
+- RAG 유전자 선택 로직: Hub gene 우선 선택 (65% → 100%)
+- Network 시각화: ENSG ID → 유전자 이름 표시
 - DESeq2 컬럼 처리: apeglm shrinkage 5컬럼 동적 대응
