@@ -181,11 +181,16 @@ class VisualizationAgent(BaseAgent):
         ax.axvline(x=log2fc_cutoff, color='gray', linestyle='--', alpha=0.5, linewidth=1)
         ax.axvline(x=-log2fc_cutoff, color='gray', linestyle='--', alpha=0.5, linewidth=1)
 
-        # Label top genes with gene symbols
+        # Label top genes with gene symbols - SORT BY |log2FC| to match Top DEGs bar chart
         if self.deg_sig is not None and len(self.deg_sig) > 0:
-            # Get top upregulated and downregulated separately
-            top_up = self.deg_sig[self.deg_sig['direction'] == 'up'].head(self.config["label_top_genes"] // 2)
-            top_down = self.deg_sig[self.deg_sig['direction'] == 'down'].head(self.config["label_top_genes"] // 2)
+            # Sort by absolute log2FC to match the Top DEGs bar chart
+            deg_sorted = self.deg_sig.copy()
+            deg_sorted['abs_log2FC'] = deg_sorted['log2FC'].abs()
+            deg_sorted = deg_sorted.sort_values('abs_log2FC', ascending=False)
+
+            # Get top upregulated and downregulated separately (by |log2FC|)
+            top_up = deg_sorted[deg_sorted['direction'] == 'up'].head(self.config["label_top_genes"] // 2)
+            top_down = deg_sorted[deg_sorted['direction'] == 'down'].head(self.config["label_top_genes"] // 2)
             top_genes = pd.concat([top_up, top_down])
 
             from adjustText import adjust_text
@@ -312,10 +317,15 @@ class VisualizationAgent(BaseAgent):
         fig.add_vline(x=log2fc_cutoff, line_dash="dash", line_color="gray")
         fig.add_vline(x=-log2fc_cutoff, line_dash="dash", line_color="gray")
 
-        # Add annotations for top genes
+        # Add annotations for top genes - SORT BY |log2FC| to match Top DEGs bar chart
         if self.deg_sig is not None and len(self.deg_sig) > 0:
-            top_up = self.deg_sig[self.deg_sig['direction'] == 'up'].head(10)
-            top_down = self.deg_sig[self.deg_sig['direction'] == 'down'].head(10)
+            # Sort by absolute log2FC to match the Top DEGs bar chart
+            deg_sorted = self.deg_sig.copy()
+            deg_sorted['abs_log2FC'] = deg_sorted['log2FC'].abs()
+            deg_sorted = deg_sorted.sort_values('abs_log2FC', ascending=False)
+
+            top_up = deg_sorted[deg_sorted['direction'] == 'up'].head(10)
+            top_down = deg_sorted[deg_sorted['direction'] == 'down'].head(10)
             top_genes = pd.concat([top_up, top_down])
 
             for _, row in top_genes.iterrows():
@@ -961,21 +971,21 @@ class VisualizationAgent(BaseAgent):
             direction = info.get('direction', 'none')
             degree = G.degree(node)
 
-            # Color based on direction and hub status
+            # Color based on direction and hub status - White background palette
             if is_hub:
                 if direction == 'up':
-                    color = '#ff6b6b'  # Coral red
+                    color = '#dc2626'  # Red (upregulated hub)
                 elif direction == 'down':
-                    color = '#4ecdc4'  # Teal
+                    color = '#2563eb'  # Blue (downregulated hub)
                 else:
-                    color = '#ffd93d'  # Gold
+                    color = '#7c3aed'  # Purple (unknown hub)
             else:
                 if direction == 'up':
-                    color = '#ff9999'
+                    color = '#f87171'  # Light red (upregulated)
                 elif direction == 'down':
-                    color = '#99dddd'
+                    color = '#60a5fa'  # Light blue (downregulated)
                 else:
-                    color = '#888888'
+                    color = '#9ca3af'  # Gray
 
             nodes_data.append({
                 'id': node,
@@ -1002,20 +1012,39 @@ class VisualizationAgent(BaseAgent):
         hub_count = len([n for n in nodes_data if n['isHub']])
         stats_text = f"{len(nodes_data)} genes · {len(links_data)} connections · {hub_count} hub genes"
 
-        # HTML template with 3d-force-graph + Three.js bloom effect
+        # HTML template with 3d-force-graph - Premium Scientific Style
         html_template = f'''<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Gene Co-expression Network - 3D Galaxy View</title>
+    <title>Gene Co-expression Network</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three-spritetext@1"></script>
+    <script src="https://unpkg.com/3d-force-graph@1"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
-            background: #000011;
+            background: #ffffff;
             overflow: hidden;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }}
         #container {{ width: 100vw; height: 100vh; }}
+
+        /* Subtle gradient accent */
+        .ambient-glow {{
+            position: fixed;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(180px);
+            opacity: 0.08;
+            pointer-events: none;
+            z-index: 0;
+        }}
+        .glow-1 {{ background: #3b82f6; top: -200px; left: -200px; }}
+        .glow-2 {{ background: #8b5cf6; bottom: -200px; right: -200px; }}
 
         /* Header */
         .header {{
@@ -1023,237 +1052,321 @@ class VisualizationAgent(BaseAgent):
             top: 0;
             left: 0;
             right: 0;
-            padding: 20px 30px;
-            background: linear-gradient(to bottom, rgba(0,0,17,0.9) 0%, transparent 100%);
+            padding: 24px 32px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.95) 0%, transparent 100%);
             z-index: 100;
             pointer-events: none;
         }}
         .header h1 {{
-            color: #fff;
-            font-size: 24px;
+            color: #1f2937;
+            font-size: 18px;
             font-weight: 600;
-            text-shadow: 0 0 20px rgba(100,150,255,0.5);
+            letter-spacing: -0.02em;
         }}
         .header .subtitle {{
-            color: #8b949e;
-            font-size: 14px;
-            margin-top: 5px;
+            color: #6b7280;
+            font-size: 12px;
+            margin-top: 6px;
+            font-weight: 400;
+            letter-spacing: 0.02em;
         }}
 
-        /* Stats bar */
-        .stats {{
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(22,27,34,0.85);
-            border: 1px solid rgba(100,150,255,0.3);
-            border-radius: 25px;
-            padding: 12px 25px;
-            color: #c9d1d9;
-            font-size: 13px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 0 30px rgba(100,150,255,0.2);
-            z-index: 100;
-        }}
-
-        /* Legend */
-        .legend {{
+        /* Info panel */
+        .info-panel {{
             position: fixed;
             top: 100px;
-            right: 20px;
-            background: rgba(22,27,34,0.85);
-            border: 1px solid rgba(100,150,255,0.3);
-            border-radius: 12px;
-            padding: 15px 20px;
-            color: #c9d1d9;
-            font-size: 12px;
-            backdrop-filter: blur(10px);
+            right: 24px;
+            width: 200px;
             z-index: 100;
+        }}
+        .panel-section {{
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }}
+        .panel-title {{
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #6b7280;
+            margin-bottom: 12px;
+            font-weight: 600;
         }}
         .legend-item {{
             display: flex;
             align-items: center;
-            margin: 8px 0;
+            padding: 6px 0;
         }}
         .legend-dot {{
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             margin-right: 10px;
-            box-shadow: 0 0 10px currentColor;
+            box-shadow: 0 2px 6px currentColor;
         }}
-        .legend-dot.hub-up {{ background: #ff6b6b; color: #ff6b6b; }}
-        .legend-dot.hub-down {{ background: #4ecdc4; color: #4ecdc4; }}
-        .legend-dot.other {{ background: #888; color: #888; }}
+        .legend-label {{
+            font-size: 12px;
+            color: #374151;
+            font-weight: 400;
+        }}
+        .legend-dot.hub-up {{ background: #dc2626; color: rgba(220,38,38,0.4); }}
+        .legend-dot.hub-down {{ background: #2563eb; color: rgba(37,99,235,0.4); }}
+        .legend-dot.gene-up {{ background: #f87171; color: rgba(248,113,113,0.4); }}
+        .legend-dot.gene-down {{ background: #60a5fa; color: rgba(96,165,250,0.4); }}
+
+        /* Stats */
+        .stat-row {{
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }}
+        .stat-row:last-child {{ border: none; }}
+        .stat-label {{ font-size: 11px; color: #6b7280; }}
+        .stat-value {{ font-size: 12px; color: #1f2937; font-weight: 600; }}
 
         /* Controls */
         .controls {{
-            position: fixed;
-            bottom: 80px;
-            right: 20px;
             display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 100;
+            gap: 8px;
+            margin-top: 4px;
         }}
         .control-btn {{
-            background: rgba(22,27,34,0.85);
-            border: 1px solid rgba(100,150,255,0.3);
+            flex: 1;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
-            padding: 10px 15px;
-            color: #c9d1d9;
+            padding: 10px 0;
+            color: #374151;
             cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
-            backdrop-filter: blur(10px);
+            font-size: 11px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            font-family: inherit;
         }}
         .control-btn:hover {{
-            background: rgba(100,150,255,0.2);
-            border-color: rgba(100,150,255,0.6);
+            background: #f3f4f6;
+            color: #111827;
+            border-color: #d1d5db;
+        }}
+        .control-btn.active {{
+            background: #eff6ff;
+            border-color: #3b82f6;
+            color: #2563eb;
         }}
 
         /* Tooltip */
         .node-tooltip {{
             position: fixed;
-            background: rgba(13,17,23,0.95);
-            border: 1px solid rgba(100,150,255,0.5);
-            border-radius: 10px;
-            padding: 15px;
-            color: #fff;
-            font-size: 13px;
+            background: rgba(255,255,255,0.98);
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            color: #1f2937;
+            font-size: 12px;
             pointer-events: none;
             opacity: 0;
-            transition: opacity 0.2s;
-            max-width: 280px;
-            box-shadow: 0 0 30px rgba(100,150,255,0.3);
-            backdrop-filter: blur(10px);
+            transform: translateY(4px);
+            transition: all 0.15s ease;
+            min-width: 180px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
             z-index: 200;
         }}
-        .node-tooltip.visible {{ opacity: 1; }}
-        .node-tooltip h3 {{
-            font-size: 16px;
-            margin-bottom: 10px;
-            color: #58a6ff;
+        .node-tooltip.visible {{
+            opacity: 1;
+            transform: translateY(0);
         }}
-        .node-tooltip .hub-badge {{
-            display: inline-block;
-            background: linear-gradient(135deg, #ff6b6b, #ffd93d);
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 10px;
-            font-weight: bold;
-            margin-left: 8px;
+        .tooltip-header {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
         }}
-        .node-tooltip .stat {{
+        .tooltip-gene {{
+            font-size: 15px;
+            font-weight: 600;
+            color: #111827;
+        }}
+        .tooltip-badge {{
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            color: #fff;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }}
+        .tooltip-row {{
             display: flex;
             justify-content: space-between;
-            margin: 5px 0;
-            padding: 5px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding: 6px 0;
         }}
-        .node-tooltip .stat:last-child {{ border: none; }}
-        .node-tooltip .stat-label {{ color: #8b949e; }}
-        .node-tooltip .stat-value {{ color: #fff; font-weight: 500; }}
-        .node-tooltip .up {{ color: #ff6b6b; }}
-        .node-tooltip .down {{ color: #4ecdc4; }}
+        .tooltip-label {{ color: #6b7280; font-size: 11px; }}
+        .tooltip-value {{ color: #1f2937; font-weight: 500; }}
+        .tooltip-up {{ color: #dc2626; }}
+        .tooltip-down {{ color: #2563eb; }}
+
+        /* Bottom bar */
+        .bottom-bar {{
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            background: rgba(255,255,255,0.95);
+            border: 1px solid #e5e7eb;
+            border-radius: 100px;
+            padding: 12px 24px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 100;
+        }}
+        .bottom-stat {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .bottom-stat-icon {{
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #3b82f6;
+        }}
+        .bottom-stat-text {{
+            font-size: 12px;
+            color: #6b7280;
+        }}
+        .bottom-stat-text span {{
+            color: #1f2937;
+            font-weight: 600;
+        }}
     </style>
 </head>
 <body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
     <div id="container"></div>
 
     <div class="header">
-        <h1>✧ Gene Co-expression Network</h1>
-        <div class="subtitle">3D Interactive Galaxy View · Drag to rotate · Scroll to zoom · Click node for details</div>
+        <h1>Gene Co-expression Network</h1>
+        <div class="subtitle">Interactive 3D visualization · Rotate · Zoom · Click to focus</div>
     </div>
 
-    <div class="legend">
-        <div class="legend-item"><div class="legend-dot hub-up"></div>Upregulated Hub</div>
-        <div class="legend-item"><div class="legend-dot hub-down"></div>Downregulated Hub</div>
-        <div class="legend-item"><div class="legend-dot other"></div>Connected Gene</div>
+    <div class="info-panel">
+        <div class="panel-section">
+            <div class="panel-title">Legend</div>
+            <div class="legend-item"><div class="legend-dot hub-up"></div><span class="legend-label">Hub gene (up)</span></div>
+            <div class="legend-item"><div class="legend-dot hub-down"></div><span class="legend-label">Hub gene (down)</span></div>
+            <div class="legend-item"><div class="legend-dot gene-up"></div><span class="legend-label">Gene (up)</span></div>
+            <div class="legend-item"><div class="legend-dot gene-down"></div><span class="legend-label">Gene (down)</span></div>
+        </div>
+
+        <div class="panel-section">
+            <div class="panel-title">Controls</div>
+            <div class="controls">
+                <button class="control-btn active" id="labelBtn" onclick="toggleLabels()">Labels</button>
+                <button class="control-btn" onclick="resetCamera()">Reset</button>
+            </div>
+        </div>
     </div>
 
-    <div class="controls">
-        <button class="control-btn" onclick="toggleLabels()">Toggle Labels</button>
-        <button class="control-btn" onclick="toggleParticles()">Toggle Particles</button>
-        <button class="control-btn" onclick="resetCamera()">Reset View</button>
+    <div class="bottom-bar">
+        <div class="bottom-stat">
+            <div class="bottom-stat-icon"></div>
+            <div class="bottom-stat-text"><span>{len(nodes_data)}</span> genes</div>
+        </div>
+        <div class="bottom-stat">
+            <div class="bottom-stat-icon" style="background: #6366f1;"></div>
+            <div class="bottom-stat-text"><span>{len(links_data)}</span> connections</div>
+        </div>
+        <div class="bottom-stat">
+            <div class="bottom-stat-icon" style="background: #dc2626;"></div>
+            <div class="bottom-stat-text"><span>{hub_count}</span> hub genes</div>
+        </div>
     </div>
-
-    <div class="stats">{stats_text}</div>
 
     <div class="node-tooltip" id="tooltip"></div>
 
-    <script src="https://unpkg.com/3d-force-graph@1"></script>
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script>
         const graphData = {graph_data};
 
         let showLabels = true;
-        let showParticles = true;
 
-        // Create the 3D force graph
         const Graph = ForceGraph3D()
             (document.getElementById('container'))
             .graphData(graphData)
-            .backgroundColor('#000011')
+            .backgroundColor('#ffffff')
             .showNavInfo(false)
 
-            // Node styling
-            .nodeVal(node => node.size)
+            // Large, visible node styling
+            .nodeVal(node => node.isHub ? 25 : 10)
             .nodeColor(node => node.color)
-            .nodeOpacity(0.9)
-            .nodeResolution(16)
+            .nodeOpacity(1.0)
+            .nodeResolution(32)
 
-            // Node labels
-            .nodeLabel('')  // Disable default label
+            // Large, readable labels on white background
+            .nodeLabel('')
             .nodeThreeObject(node => {{
                 if (!showLabels && !node.isHub) return null;
 
                 const sprite = new SpriteText(node.name);
-                sprite.color = node.isHub ? '#ffffff' : '#aaaaaa';
-                sprite.textHeight = node.isHub ? 3 : 2;
-                sprite.fontWeight = node.isHub ? 'bold' : 'normal';
-                sprite.backgroundColor = 'rgba(0,0,0,0.5)';
-                sprite.padding = 1;
-                sprite.borderRadius = 2;
+                sprite.color = node.isHub ? '#000000' : '#374151';
+                sprite.textHeight = node.isHub ? 8 : 5;
+                sprite.fontWeight = node.isHub ? 'bold' : '500';
+                sprite.fontFace = 'Arial, sans-serif';
+                sprite.backgroundColor = node.isHub ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.7)';
+                sprite.padding = 2;
+                sprite.borderRadius = 3;
                 return sprite;
             }})
             .nodeThreeObjectExtend(true)
 
-            // Link styling
-            .linkWidth(link => 0.3 + link.weight * 0.5)
-            .linkOpacity(0.4)
-            .linkColor(() => '#4466aa')
+            // Bold link styling - clearly visible on white
+            .linkWidth(link => 1 + link.weight * 2)
+            .linkOpacity(0.6)
+            .linkColor(() => '#6b7280')
 
-            // Particles on links
-            .linkDirectionalParticles(link => showParticles ? 2 : 0)
-            .linkDirectionalParticleWidth(1.5)
-            .linkDirectionalParticleSpeed(0.005)
-            .linkDirectionalParticleColor(() => '#88aaff')
+            .linkDirectionalParticles(0)
 
-            // Force simulation
-            .d3AlphaDecay(0.02)
-            .d3VelocityDecay(0.3)
-            .warmupTicks(100)
-            .cooldownTicks(200)
+            // Optimized physics
+            .d3AlphaDecay(0.008)
+            .d3VelocityDecay(0.15)
+            .d3Force('charge', d3.forceManyBody().strength(-400).distanceMax(500))
+            .d3Force('link', d3.forceLink().distance(100).strength(0.2))
+            .d3Force('center', d3.forceCenter())
+            .warmupTicks(400)
+            .cooldownTicks(500)
 
-            // Interactions
+            // Smooth interactions
             .onNodeHover(node => {{
                 document.body.style.cursor = node ? 'pointer' : 'default';
                 const tooltip = document.getElementById('tooltip');
                 if (node) {{
-                    const direction = node.direction === 'up' ?
-                        '<span class="up">↑ Upregulated</span>' :
+                    const dir = node.direction === 'up' ?
+                        '<span class="tooltip-up">↑ Upregulated</span>' :
                         node.direction === 'down' ?
-                        '<span class="down">↓ Downregulated</span>' : 'N/A';
+                        '<span class="tooltip-down">↓ Downregulated</span>' : '—';
 
                     tooltip.innerHTML = `
-                        <h3>${{node.name}}${{node.isHub ? '<span class="hub-badge">HUB</span>' : ''}}</h3>
-                        <div class="stat"><span class="stat-label">Expression</span><span class="stat-value">${{direction}}</span></div>
-                        <div class="stat"><span class="stat-label">log2FC</span><span class="stat-value">${{node.log2FC.toFixed(2)}}</span></div>
-                        <div class="stat"><span class="stat-label">Connections</span><span class="stat-value">${{node.degree}}</span></div>
-                        ${{node.isHub ? `<div class="stat"><span class="stat-label">Hub Score</span><span class="stat-value">${{node.hubScore.toFixed(3)}}</span></div>` : ''}}
+                        <div class="tooltip-header">
+                            <span class="tooltip-gene">${{node.name}}</span>
+                            ${{node.isHub ? '<span class="tooltip-badge">Hub</span>' : ''}}
+                        </div>
+                        <div class="tooltip-row"><span class="tooltip-label">Expression</span><span class="tooltip-value">${{dir}}</span></div>
+                        <div class="tooltip-row"><span class="tooltip-label">log₂FC</span><span class="tooltip-value">${{node.log2FC.toFixed(2)}}</span></div>
+                        <div class="tooltip-row"><span class="tooltip-label">Connections</span><span class="tooltip-value">${{node.degree}}</span></div>
+                        ${{node.isHub ? `<div class="tooltip-row"><span class="tooltip-label">Hub score</span><span class="tooltip-value">${{node.hubScore.toFixed(3)}}</span></div>` : ''}}
                     `;
                     tooltip.classList.add('visible');
                 }} else {{
@@ -1261,54 +1374,38 @@ class VisualizationAgent(BaseAgent):
                 }}
             }})
             .onNodeClick(node => {{
-                // Focus on clicked node
-                const distance = 150;
+                const distance = 100;
                 const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
                 Graph.cameraPosition(
                     {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
                     node,
-                    2000
+                    1200
                 );
             }});
 
-        // Add bloom post-processing
-        const bloomPass = new THREE.UnrealBloomPass(
-            new THREE.Vector2(window.innerWidth, window.innerHeight),
-            1.5,   // strength
-            0.4,   // radius
-            0.85   // threshold
-        );
-
-        // Track mouse for tooltip positioning
-        document.addEventListener('mousemove', (e) => {{
+        // Tooltip tracking
+        document.addEventListener('mousemove', e => {{
             const tooltip = document.getElementById('tooltip');
-            tooltip.style.left = (e.clientX + 15) + 'px';
-            tooltip.style.top = (e.clientY + 15) + 'px';
+            tooltip.style.left = (e.clientX + 16) + 'px';
+            tooltip.style.top = (e.clientY + 16) + 'px';
         }});
 
-        // Control functions
+        // Controls
         function toggleLabels() {{
             showLabels = !showLabels;
-            Graph.nodeThreeObject(Graph.nodeThreeObject());  // Refresh
-        }}
-
-        function toggleParticles() {{
-            showParticles = !showParticles;
-            Graph.linkDirectionalParticles(link => showParticles ? 2 : 0);
+            document.getElementById('labelBtn').classList.toggle('active', showLabels);
+            Graph.nodeThreeObject(Graph.nodeThreeObject());
         }}
 
         function resetCamera() {{
-            Graph.cameraPosition({{ x: 0, y: 0, z: 500 }}, {{ x: 0, y: 0, z: 0 }}, 1000);
+            Graph.cameraPosition({{ x: 0, y: 0, z: 350 }}, {{ x: 0, y: 0, z: 0 }}, 1200);
         }}
 
-        // Initial camera position
+        // Smooth initial camera
         setTimeout(() => {{
-            Graph.cameraPosition({{ x: 300, y: 200, z: 300 }});
+            Graph.cameraPosition({{ x: 180, y: 120, z: 220 }});
         }}, 100);
     </script>
-
-    <!-- SpriteText for labels -->
-    <script src="https://unpkg.com/three-spritetext@1"></script>
 </body>
 </html>'''
 

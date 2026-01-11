@@ -216,6 +216,110 @@ class ReportAgent(BaseAgent):
             }
         return {"symbol": "N/A", "log2fc": 0, "direction": ""}
 
+    def _generate_rag_summary_html(self, data: Dict) -> str:
+        """Generate RAG-based Literature Summary section."""
+        integrated_df = data.get('integrated_gene_table_df')
+
+        if integrated_df is None or 'rag_interpretation' not in integrated_df.columns:
+            return ""
+
+        # Get genes with RAG interpretations
+        rag_genes = integrated_df[integrated_df['rag_interpretation'].notna() &
+                                   (integrated_df['rag_interpretation'] != '')]
+
+        if len(rag_genes) == 0:
+            return ""
+
+        # Sort by interpretation score
+        rag_genes = rag_genes.sort_values('interpretation_score', ascending=False)
+
+        # Build gene interpretation cards
+        gene_cards_html = ""
+        for _, gene in rag_genes.head(10).iterrows():
+            symbol = gene.get('gene_symbol', gene.get('gene_id', 'Unknown'))
+            log2fc = gene.get('log2FC', 0)
+            direction = "↑" if log2fc > 0 else "↓"
+            dir_class = "up" if log2fc > 0 else "down"
+            interpretation = gene.get('rag_interpretation', '')
+            pmids = str(gene.get('rag_pmids', ''))
+            confidence = gene.get('confidence', 'low')
+            is_hub = gene.get('is_hub', False)
+
+            # Parse PMIDs
+            pmid_list = [p.strip() for p in pmids.split(',') if p.strip() and p.strip() != 'nan']
+            pmid_links = ' '.join([
+                f'<a href="https://pubmed.ncbi.nlm.nih.gov/{pmid}" target="_blank" class="pmid-chip">PMID:{pmid}</a>'
+                for pmid in pmid_list[:3]
+            ])
+
+            # Truncate interpretation
+            interp_preview = interpretation[:300] + "..." if len(str(interpretation)) > 300 else interpretation
+
+            gene_cards_html += f'''
+            <div class="rag-gene-card">
+                <div class="rag-gene-header">
+                    <div class="rag-gene-title">
+                        <span class="rag-gene-symbol">{symbol}</span>
+                        <span class="rag-gene-fc {dir_class}">{direction} {abs(log2fc):.2f}</span>
+                        {'<span class="hub-indicator">HUB</span>' if is_hub else ''}
+                    </div>
+                    <span class="rag-confidence {confidence}">{confidence.upper()}</span>
+                </div>
+                <div class="rag-gene-body">
+                    <p class="rag-interpretation-text">{interp_preview}</p>
+                    <div class="rag-pmids">{pmid_links if pmid_links else '<span class="no-pmid">문헌 검색 결과 없음</span>'}</div>
+                </div>
+            </div>
+            '''
+
+        # Summary stats
+        total_with_rag = len(rag_genes)
+        high_conf = len(rag_genes[rag_genes['confidence'] == 'high'])
+        with_pmids = len(rag_genes[rag_genes['rag_pmids'].notna() & (rag_genes['rag_pmids'] != '')])
+
+        return f'''
+        <section class="rag-summary" id="rag-summary">
+            <div class="rag-summary-header">
+                <div class="rag-title-section">
+                    <h2>📚 Literature-Based Gene Interpretation (RAG + LLM)</h2>
+                    <p class="rag-subtitle">Vector DB 검색 + Claude API 기반 문헌 해석</p>
+                </div>
+                <div class="rag-stats">
+                    <div class="rag-stat">
+                        <span class="rag-stat-value">{total_with_rag}</span>
+                        <span class="rag-stat-label">Genes Analyzed</span>
+                    </div>
+                    <div class="rag-stat">
+                        <span class="rag-stat-value">{with_pmids}</span>
+                        <span class="rag-stat-label">With Citations</span>
+                    </div>
+                    <div class="rag-stat">
+                        <span class="rag-stat-value">{high_conf}</span>
+                        <span class="rag-stat-label">High Confidence</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rag-method-note">
+                <span class="method-icon">🔬</span>
+                <div class="method-text">
+                    <strong>분석 방법:</strong> PubMedBERT 임베딩 기반 Vector Search로 관련 논문을 검색하고,
+                    Claude API를 통해 유전자별 문헌 기반 해석을 생성했습니다.
+                    각 해석에는 근거 논문의 PMID가 첨부됩니다.
+                </div>
+            </div>
+
+            <div class="rag-genes-grid">
+                {gene_cards_html}
+            </div>
+
+            <div class="rag-disclaimer">
+                <span class="disclaimer-icon">⚠️</span>
+                AI 생성 해석입니다. 모든 내용은 원문 논문을 통해 검증이 필요합니다.
+            </div>
+        </section>
+        '''
+
     def _generate_executive_summary_html(self, data: Dict) -> str:
         """Generate Level 1: Executive Summary (10초 파악)."""
         deg_count = len(data.get('deg_significant', []))
@@ -332,19 +436,23 @@ class ReportAgent(BaseAgent):
             '''
 
         # Volcano plot section with toggle for static/interactive
+        volcano_desc = '''<p class="panel-desc"><strong>X축:</strong> log2 Fold Change (발현 변화량) | <strong>Y축:</strong> -log10(padj) (통계적 유의성)<br>
+        <span style="color:#dc2626;">●빨간점</span> = 상향조절 (암에서 증가) | <span style="color:#2563eb;">●파란점</span> = 하향조절 (암에서 감소) | 점선 = 유의성 기준선</p>'''
+
         if volcano_interactive:
             volcano_section = f'''
                 <div class="dashboard-panel main-plot volcano-container">
                     <div class="volcano-header">
-                        <h4>Volcano Plot</h4>
+                        <h4>Volcano Plot - 차등발현 유전자 분포</h4>
                         <div class="view-toggle">
-                            <button class="toggle-btn active" onclick="showVolcanoView('interactive')">🔍 Interactive</button>
-                            <button class="toggle-btn" onclick="showVolcanoView('static')">📊 Static</button>
+                            <button class="toggle-btn active" onclick="showVolcanoView('interactive')">Interactive</button>
+                            <button class="toggle-btn" onclick="showVolcanoView('static')">Static</button>
                         </div>
                     </div>
+                    {volcano_desc}
                     <div id="volcano-interactive" class="volcano-view active">
-                        <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:600px; border:none; border-radius:8px;"></iframe>
-                        <p class="panel-note">💡 마우스로 확대/이동, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
+                        <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:550px; border:none; border-radius:8px;"></iframe>
+                        <p class="panel-note">💡 마우스 드래그로 확대, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
                     </div>
                     <div id="volcano-static" class="volcano-view" style="display:none;">
                         {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
@@ -354,7 +462,8 @@ class ReportAgent(BaseAgent):
         else:
             volcano_section = f'''
                 <div class="dashboard-panel main-plot">
-                    <h4>Volcano Plot</h4>
+                    <h4>Volcano Plot - 차등발현 유전자 분포</h4>
+                    {volcano_desc}
                     {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
                 </div>
             '''
@@ -362,33 +471,38 @@ class ReportAgent(BaseAgent):
         return f'''
         <section class="visual-dashboard" id="visual-dashboard">
             <h2>Visual Dashboard</h2>
+            <p class="section-intro">RNA-seq 분석 결과의 핵심 시각화입니다. 각 그래프가 의미하는 바를 확인하세요.</p>
 
             <div class="dashboard-grid">
                 {volcano_section}
 
                 <div class="dashboard-panel">
                     <h4>Top 10 DEGs (|log2FC|)</h4>
+                    <p class="panel-desc">발현 변화량이 가장 큰 상위 10개 유전자입니다. 빨간색은 상향조절(암에서 증가), 파란색은 하향조절(암에서 감소)을 의미합니다.</p>
                     <div class="gene-bars">
                         {top_genes_html if top_genes_html else '<p class="no-data">No data</p>'}
                     </div>
-                    <p class="panel-note">⚠️ 발현 변화량 (≠ 생물학적 중요도)</p>
+                    <p class="panel-note">⚠️ 발현 변화량 기준 정렬 (생물학적 중요도와 다를 수 있음)</p>
                 </div>
 
                 <div class="dashboard-panel">
                     <h4>Pathway Enrichment</h4>
+                    <p class="panel-desc">DEG들이 어떤 생물학적 경로에 집중되어 있는지 보여줍니다. 점이 많을수록 통계적으로 유의미합니다.</p>
                     <div class="pathway-list">
                         {pathway_dots_html if pathway_dots_html else '<p class="no-data">No pathways</p>'}
                     </div>
-                    <p class="panel-note">● = -log10(padj), 숫자 = 유전자 수</p>
+                    <p class="panel-note">●●●●● = 매우 유의미 (padj < 0.00001), 숫자 = 해당 경로의 유전자 수</p>
                 </div>
 
                 <div class="dashboard-panel">
-                    <h4>Network Hub</h4>
+                    <h4>Network Hub Genes</h4>
+                    <p class="panel-desc">유전자 간 공발현(co-expression) 네트워크에서 중심적 역할을 하는 Hub 유전자입니다. Hub는 많은 유전자와 연결되어 있어 핵심 조절자일 가능성이 높습니다.</p>
                     {f'<img src="{network_src}" alt="Network" />' if network_src else '<p class="no-data">No plot available</p>'}
                 </div>
 
                 <div class="dashboard-panel full-width">
                     <h4>Expression Heatmap (Top 50 DEGs)</h4>
+                    <p class="panel-desc">상위 50개 DEG의 샘플별 발현 패턴입니다. 빨간색은 높은 발현, 파란색은 낮은 발현을 의미합니다. 샘플들이 조건(Tumor vs Normal)에 따라 구분되는지 확인하세요.</p>
                     {f'<img src="{heatmap_src}" alt="Heatmap" />' if heatmap_src else '<p class="no-data">No heatmap available</p>'}
                 </div>
             </div>
@@ -868,13 +982,15 @@ class ReportAgent(BaseAgent):
             .dashboard-grid {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
-                gap: 20px;
+                gap: 24px;
             }
 
             .dashboard-panel {
-                background: var(--gray-50);
-                border-radius: 12px;
-                padding: 20px;
+                background: #ffffff;
+                border-radius: 16px;
+                padding: 24px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+                border: 1px solid #e5e7eb;
             }
 
             .dashboard-panel.main-plot {
@@ -886,20 +1002,46 @@ class ReportAgent(BaseAgent):
             }
 
             .dashboard-panel h4 {
-                font-size: 0.9rem;
-                color: var(--gray-500);
-                margin-bottom: 12px;
+                font-size: 1rem;
+                font-weight: 600;
+                color: #1f2937;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #f3f4f6;
             }
 
             .dashboard-panel img {
                 width: 100%;
-                border-radius: 8px;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             }
 
             .panel-note {
-                font-size: 0.75rem;
-                color: var(--gray-500);
-                margin-top: 8px;
+                font-size: 0.8rem;
+                color: #6b7280;
+                margin-top: 12px;
+                padding: 8px 12px;
+                background: #fef3c7;
+                border-radius: 8px;
+                border-left: 3px solid #f59e0b;
+            }
+
+            .panel-desc {
+                font-size: 0.85rem;
+                color: #4b5563;
+                line-height: 1.6;
+                margin-bottom: 16px;
+                padding: 12px 16px;
+                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+                border-radius: 10px;
+                border-left: 4px solid #3b82f6;
+            }
+
+            .section-intro {
+                font-size: 1rem;
+                color: #6b7280;
+                margin-bottom: 24px;
+                text-align: center;
             }
 
             /* Volcano Toggle */
@@ -949,73 +1091,91 @@ class ReportAgent(BaseAgent):
                 display: block;
             }
 
-            /* Gene Bars */
-            .gene-bars { display: flex; flex-direction: column; gap: 8px; }
+            /* Gene Bars - Enhanced for readability */
+            .gene-bars { display: flex; flex-direction: column; gap: 10px; }
 
             .gene-bar-item {
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 12px;
+                padding: 4px 0;
             }
 
             .gene-name {
-                width: 70px;
-                font-size: 0.8rem;
-                font-weight: 500;
-                color: var(--gray-700);
+                width: 80px;
+                font-size: 0.9rem;
+                font-weight: 600;
+                color: #1f2937;
+                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
             }
 
             .gene-bar-container {
                 flex: 1;
-                height: 16px;
-                background: var(--gray-200);
-                border-radius: 8px;
+                height: 20px;
+                background: #f3f4f6;
+                border-radius: 10px;
                 overflow: hidden;
+                box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
             }
 
             .gene-bar {
                 height: 100%;
-                border-radius: 8px;
+                border-radius: 10px;
                 transition: width 0.5s ease;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.15);
             }
 
-            .gene-bar.up { background: linear-gradient(90deg, #FCA5A5, #EF4444); }
-            .gene-bar.down { background: linear-gradient(90deg, #93C5FD, #3B82F6); }
+            .gene-bar.up { background: linear-gradient(90deg, #f87171, #dc2626); }
+            .gene-bar.down { background: linear-gradient(90deg, #60a5fa, #2563eb); }
 
             .gene-value {
-                width: 50px;
-                font-size: 0.75rem;
-                color: var(--gray-500);
+                width: 60px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                color: #374151;
                 text-align: right;
+                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
             }
 
-            /* Pathway List */
-            .pathway-list { display: flex; flex-direction: column; gap: 6px; }
+            /* Pathway List - Enhanced */
+            .pathway-list { display: flex; flex-direction: column; gap: 8px; }
 
             .pathway-item {
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                padding: 6px 0;
+                gap: 12px;
+                padding: 8px 0;
+                border-bottom: 1px solid #f3f4f6;
+            }
+
+            .pathway-item:last-child {
+                border-bottom: none;
             }
 
             .pathway-name {
                 flex: 1;
-                font-size: 0.8rem;
-                color: var(--gray-700);
+                font-size: 0.85rem;
+                font-weight: 500;
+                color: #374151;
+                line-height: 1.3;
             }
 
             .pathway-dots {
-                font-size: 0.7rem;
-                color: var(--success);
+                font-size: 0.85rem;
+                color: #10b981;
                 letter-spacing: 2px;
+                font-weight: 600;
             }
 
             .pathway-genes {
-                width: 30px;
-                font-size: 0.75rem;
-                color: var(--gray-500);
+                width: 35px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                color: #6366f1;
                 text-align: right;
+                background: #eef2ff;
+                padding: 2px 6px;
+                border-radius: 4px;
             }
 
             /* Gene Status Cards */
@@ -1189,6 +1349,224 @@ class ReportAgent(BaseAgent):
             .tag.rag-tag {
                 background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
                 color: white;
+            }
+
+            /* RAG Summary Section */
+            .rag-summary {
+                background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+                border-radius: 16px;
+                padding: 30px;
+                margin-bottom: 24px;
+                color: white;
+            }
+
+            .rag-summary-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 24px;
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+
+            .rag-title-section h2 {
+                font-size: 1.5rem;
+                margin-bottom: 6px;
+                color: white;
+            }
+
+            .rag-subtitle {
+                font-size: 0.9rem;
+                color: rgba(255,255,255,0.7);
+            }
+
+            .rag-stats {
+                display: flex;
+                gap: 24px;
+            }
+
+            .rag-stat {
+                text-align: center;
+            }
+
+            .rag-stat-value {
+                display: block;
+                font-size: 1.8rem;
+                font-weight: 700;
+                color: #a5b4fc;
+            }
+
+            .rag-stat-label {
+                font-size: 0.75rem;
+                color: rgba(255,255,255,0.6);
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+            .rag-method-note {
+                display: flex;
+                align-items: flex-start;
+                gap: 12px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 10px;
+                padding: 16px;
+                margin-bottom: 24px;
+            }
+
+            .method-icon {
+                font-size: 1.5rem;
+            }
+
+            .method-text {
+                font-size: 0.85rem;
+                color: rgba(255,255,255,0.85);
+                line-height: 1.6;
+            }
+
+            .method-text strong {
+                color: #c7d2fe;
+            }
+
+            .rag-genes-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+                gap: 16px;
+                margin-bottom: 20px;
+            }
+
+            .rag-gene-card {
+                background: rgba(255,255,255,0.08);
+                border-radius: 12px;
+                overflow: hidden;
+                border: 1px solid rgba(255,255,255,0.1);
+                transition: all 0.2s;
+            }
+
+            .rag-gene-card:hover {
+                background: rgba(255,255,255,0.12);
+                transform: translateY(-2px);
+            }
+
+            .rag-gene-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 14px 16px;
+                background: rgba(0,0,0,0.2);
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+
+            .rag-gene-title {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .rag-gene-symbol {
+                font-size: 1.1rem;
+                font-weight: 700;
+                color: #c7d2fe;
+            }
+
+            .rag-gene-fc {
+                font-size: 0.85rem;
+                padding: 2px 8px;
+                border-radius: 4px;
+            }
+
+            .rag-gene-fc.up {
+                background: rgba(239,68,68,0.3);
+                color: #fca5a5;
+            }
+
+            .rag-gene-fc.down {
+                background: rgba(59,130,246,0.3);
+                color: #93c5fd;
+            }
+
+            .hub-indicator {
+                background: linear-gradient(135deg, #f472b6, #fb7185);
+                color: white;
+                font-size: 0.65rem;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+
+            .rag-confidence {
+                font-size: 0.7rem;
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-weight: 600;
+            }
+
+            .rag-confidence.high {
+                background: rgba(16,185,129,0.3);
+                color: #6ee7b7;
+            }
+
+            .rag-confidence.medium {
+                background: rgba(245,158,11,0.3);
+                color: #fcd34d;
+            }
+
+            .rag-confidence.low {
+                background: rgba(107,114,128,0.3);
+                color: #d1d5db;
+            }
+
+            .rag-gene-body {
+                padding: 16px;
+            }
+
+            .rag-interpretation-text {
+                font-size: 0.85rem;
+                color: rgba(255,255,255,0.85);
+                line-height: 1.6;
+                margin: 0 0 12px 0;
+            }
+
+            .rag-pmids {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+
+            .pmid-chip {
+                font-size: 0.7rem;
+                padding: 4px 10px;
+                background: rgba(99,102,241,0.4);
+                color: #c7d2fe;
+                border-radius: 12px;
+                text-decoration: none;
+                transition: all 0.2s;
+            }
+
+            .pmid-chip:hover {
+                background: rgba(99,102,241,0.7);
+                color: white;
+            }
+
+            .no-pmid {
+                font-size: 0.75rem;
+                color: rgba(255,255,255,0.4);
+                font-style: italic;
+            }
+
+            .rag-disclaimer {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: rgba(245,158,11,0.15);
+                border: 1px solid rgba(245,158,11,0.3);
+                border-radius: 8px;
+                padding: 12px 16px;
+                font-size: 0.8rem;
+                color: #fcd34d;
+            }
+
+            .disclaimer-icon {
+                font-size: 1rem;
             }
 
             .card-footer {
@@ -1589,6 +1967,7 @@ class ReportAgent(BaseAgent):
     <nav class="nav-pills">
         <a href="#executive-summary" class="nav-pill active">Executive Summary</a>
         <a href="#visual-dashboard" class="nav-pill">Visual Dashboard</a>
+        <a href="#rag-summary" class="nav-pill">📚 RAG Interpretation</a>
         <a href="#gene-cards" class="nav-pill">Gene Cards</a>
         <a href="#detailed-table" class="nav-pill">Detailed Analysis</a>
         <a href="#methods" class="nav-pill">Methods</a>
@@ -1597,6 +1976,7 @@ class ReportAgent(BaseAgent):
     <div class="container">
         {self._generate_executive_summary_html(data)}
         {self._generate_visual_dashboard_html(data)}
+        {self._generate_rag_summary_html(data)}
         {self._generate_gene_status_cards_html(data)}
         {self._generate_detailed_table_html(data)}
         {self._generate_methods_html() if self.config["include_methods"] else ""}
