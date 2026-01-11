@@ -814,8 +814,21 @@ pytest tests/test_rnaseq_pipeline.py -v
 
 ### 최근 업데이트 (2026-01-11)
 
-- **RAG 유전자 선택 로직 수정**: Hub gene 우선 선택 (65% → 100%)
-- **Network 시각화 개선**: ENSG ID → 유전자 이름 표시
-- **Galaxy 2D Network**: 어두운 우주 배경, glow 효과
-- **Obsidian 3D Network**: 파티클 애니메이션, 인터랙티브 컨트롤
-- **DESeq2 컬럼 처리**: apeglm shrinkage 5컬럼 동적 대응
+**시각화 가독성 대폭 개선**:
+- **3D Network 배경**: 검정 → 흰색 변경
+- **3D Network 노드/레이블**: 크기 2배 증가, 흰색 배경 추가
+- **Volcano Plot 라벨**: |log2FC| 기준 정렬 (Top DEGs와 일치)
+- **Report Dashboard 설명 추가**: 각 시각화별 해석 가이드 (파란색 박스)
+  - Volcano: X/Y축 의미, 빨강/파랑 점 해석
+  - Top DEGs: 발현 변화량 설명
+  - Pathway: 점 유의성, 유전자 수 의미
+  - Network Hub: Hub 유전자 중요성
+  - Heatmap: 발현 수준 색상 가이드
+- **RAG Summary 섹션**: PMID 인용이 포함된 문헌 기반 해석
+
+**이전 업데이트**:
+- RAG 유전자 선택 로직 수정: Hub gene 우선 선택 (65% → 100%)
+- Network 시각화 개선: ENSG ID → 유전자 이름 표시
+- Galaxy 2D Network: 어두운 우주 배경, glow 효과
+- Obsidian 3D Network: 파티클 애니메이션, 인터랙티브 컨트롤
+- DESeq2 컬럼 처리: apeglm shrinkage 5컬럼 동적 대응
