@@ -702,6 +702,206 @@ class PanCancerClassifier:
             'n_genes': len(self.preprocessor.selected_genes),
         }
 
+    def explain_with_shap(self,
+                         counts: pd.DataFrame,
+                         sample_ids: Optional[List[str]] = None,
+                         cancer_type: Optional[str] = None,
+                         top_k_genes: int = 20,
+                         save_plots: bool = False,
+                         output_dir: Optional[str] = None) -> Dict[str, Any]:
+        """
+        SHAP 기반 예측 설명
+
+        Args:
+            counts: Gene x Sample count matrix
+            sample_ids: 샘플 ID 목록
+            cancer_type: 특정 암종에 대한 설명 (None이면 전체)
+            top_k_genes: 상위 유전자 수
+            save_plots: 플롯 저장 여부
+            output_dir: 플롯 저장 경로
+
+        Returns:
+            SHAP 분석 결과
+        """
+        try:
+            import shap
+        except ImportError:
+            logger.error("SHAP not installed. Run: pip install shap")
+            return {'error': 'SHAP not installed'}
+
+        if not self.is_loaded:
+            self.load()
+
+        if sample_ids is None:
+            sample_ids = counts.columns.tolist()
+
+        # 전처리
+        X = self.preprocessor.transform(counts)
+        gene_names = self.preprocessor.selected_genes
+
+        # CatBoost 모델 사용 (앙상블 중 기본)
+        model = self.ensemble.models.get('catboost')
+        if model is None:
+            return {'error': 'CatBoost model not found'}
+
+        logger.info("Computing SHAP values (this may take a while)...")
+
+        # SHAP Explainer
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X)
+
+        # Multi-class인 경우 shap_values는 (n_classes, n_samples, n_features)
+        # 또는 list of arrays
+        if isinstance(shap_values, list):
+            # 각 클래스별 SHAP values
+            shap_values_array = np.array(shap_values)  # (n_classes, n_samples, n_features)
+        else:
+            shap_values_array = shap_values
+
+        results = {
+            'sample_ids': sample_ids,
+            'gene_names': gene_names,
+            'class_names': self.ensemble.class_names,
+        }
+
+        # 전체 중요도 (모든 클래스 평균)
+        if len(shap_values_array.shape) == 3:
+            # Multi-class: 절대값 평균
+            global_importance = np.abs(shap_values_array).mean(axis=(0, 1))
+        else:
+            global_importance = np.abs(shap_values_array).mean(axis=0)
+
+        top_indices = np.argsort(global_importance)[::-1][:top_k_genes]
+        results['global_top_genes'] = [
+            {
+                'gene': gene_names[i],
+                'importance': float(global_importance[i]),
+                'rank': rank + 1
+            }
+            for rank, i in enumerate(top_indices)
+        ]
+
+        logger.info(f"Top 5 global genes: {[g['gene'] for g in results['global_top_genes'][:5]]}")
+
+        # 특정 암종별 중요 유전자
+        if cancer_type and cancer_type in self.ensemble.class_names:
+            class_idx = self.ensemble.class_names.index(cancer_type)
+
+            if len(shap_values_array.shape) == 3:
+                class_shap = shap_values_array[class_idx]  # (n_samples, n_features)
+            else:
+                class_shap = shap_values_array
+
+            class_importance = np.abs(class_shap).mean(axis=0)
+            class_top_indices = np.argsort(class_importance)[::-1][:top_k_genes]
+
+            results[f'{cancer_type}_top_genes'] = [
+                {
+                    'gene': gene_names[i],
+                    'importance': float(class_importance[i]),
+                    'mean_shap': float(class_shap[:, i].mean()),
+                    'direction': 'up' if class_shap[:, i].mean() > 0 else 'down',
+                    'rank': rank + 1
+                }
+                for rank, i in enumerate(class_top_indices)
+            ]
+
+            logger.info(f"Top 5 genes for {cancer_type}: {[g['gene'] for g in results[f'{cancer_type}_top_genes'][:5]]}")
+
+        # 플롯 저장
+        if save_plots and output_dir:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            output_path = Path(output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            results['plots'] = {}
+
+            try:
+                # Global summary plot - bar chart 형식 (shape 문제 없음)
+                plt.figure(figsize=(12, 10))
+                shap.summary_plot(
+                    shap_values_array,
+                    X,
+                    feature_names=gene_names,
+                    max_display=top_k_genes,
+                    plot_type="bar",
+                    show=False
+                )
+                plt.tight_layout()
+                plt.savefig(output_path / "shap_global_summary.png", dpi=150, bbox_inches='tight')
+                plt.close()
+                results['plots']['global_summary'] = str(output_path / "shap_global_summary.png")
+                logger.info(f"Global summary plot saved")
+            except Exception as e:
+                logger.warning(f"Failed to save global summary plot: {e}")
+
+            # Cancer-specific plot
+            if cancer_type and cancer_type in self.ensemble.class_names:
+                try:
+                    class_idx = self.ensemble.class_names.index(cancer_type)
+                    plt.figure(figsize=(12, 10))
+                    if len(shap_values_array.shape) == 3:
+                        class_shap = shap_values_array[class_idx]
+                        shap.summary_plot(
+                            class_shap,
+                            X,
+                            feature_names=gene_names,
+                            max_display=top_k_genes,
+                            plot_type="bar",
+                            show=False
+                        )
+                    plt.title(f"SHAP Summary - {cancer_type}")
+                    plt.tight_layout()
+                    plt.savefig(output_path / f"shap_{cancer_type}_summary.png", dpi=150, bbox_inches='tight')
+                    plt.close()
+                    results['plots'][f'{cancer_type}_summary'] = str(output_path / f"shap_{cancer_type}_summary.png")
+                    logger.info(f"{cancer_type} summary plot saved")
+                except Exception as e:
+                    logger.warning(f"Failed to save {cancer_type} plot: {e}")
+
+            logger.info(f"SHAP plots saved to {output_path}")
+
+        return results
+
+    def get_cancer_specific_genes(self,
+                                  counts: pd.DataFrame,
+                                  cancer_types: Optional[List[str]] = None,
+                                  top_k: int = 10) -> Dict[str, List[Dict]]:
+        """
+        각 암종별 특이적 유전자 추출
+
+        Args:
+            counts: Gene x Sample count matrix
+            cancer_types: 분석할 암종 목록 (None이면 전체)
+            top_k: 암종당 상위 유전자 수
+
+        Returns:
+            암종별 특이적 유전자 딕셔너리
+        """
+        if not self.is_loaded:
+            self.load()
+
+        if cancer_types is None:
+            cancer_types = self.ensemble.class_names
+
+        results = {}
+        for cancer_type in cancer_types:
+            if cancer_type in self.ensemble.class_names:
+                shap_result = self.explain_with_shap(
+                    counts,
+                    cancer_type=cancer_type,
+                    top_k_genes=top_k,
+                    save_plots=False
+                )
+                key = f'{cancer_type}_top_genes'
+                if key in shap_result:
+                    results[cancer_type] = shap_result[key]
+
+        return results
+
 
 def train_pancancer_classifier(
     counts: pd.DataFrame,
