@@ -2519,6 +2519,7 @@ class ReportAgent(BaseAgent):
         - Key findings list
         - Validation priorities (qPCR, Western blot, Functional study, Biomarker candidates)
         - ML prediction interpretation
+        - RAG-based literature interpretation
         """
         if not ANTHROPIC_AVAILABLE:
             self.logger.warning("anthropic package not available, skipping extended abstract generation")
@@ -2536,18 +2537,20 @@ class ReportAgent(BaseAgent):
         integrated_df = data.get('integrated_gene_table_df')
         interpretation = data.get('interpretation_report', {})
 
-        # Basic stats
+        # Basic stats - handle both 'log2FC' and 'log2FoldChange' column names
         n_deg = len(deg_df) if deg_df is not None else 0
-        n_up = len(deg_df[deg_df['log2FoldChange'] > 0]) if deg_df is not None and 'log2FoldChange' in deg_df.columns else 0
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
         n_down = n_deg - n_up
 
-        # Hub genes info
+        # Hub genes info - handle both 'gene_id' and 'gene_symbol' column names
         hub_genes_info = []
         if hub_df is not None and len(hub_df) > 0:
+            hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
             for _, row in hub_df.head(10).iterrows():
-                gene_name = row.get('gene_name', row.get('gene_symbol', 'Unknown'))
+                gene_name = row.get('gene_id', row.get('gene_symbol', row.get('gene_name', 'Unknown')))
                 degree = row.get('degree', 0)
-                log2fc = row.get('log2FoldChange', 0)
+                log2fc = row.get(hub_log2fc_col, 0)
                 hub_genes_info.append(f"- {gene_name} (degree={degree}, log2FC={log2fc:.2f})")
 
         # Pathway info
@@ -2572,10 +2575,60 @@ ML 예측 결과:
 - 예측 분포: {ml_data.get('prediction_distribution', {})}
 - 평균 신뢰도: {ml_data.get('average_confidence', 0):.2f}
 - 예상 암종: {ml_data.get('expected_cancer', 'Unknown')}
-- 일치율: {ml_data.get('brca_hit_rate', 0) * 100:.1f}%
+- 직접 예측율: {ml_data.get('brca_hit_rate', 0) * 100:.1f}%
+- Top-3 예측율: {ml_data.get('brca_in_top3_rate', 0) * 100:.1f}%
+- 유전자 매칭율: {ml_data.get('gene_matching_rate', 0) * 100:.1f}%
 """
             except Exception as e:
                 self.logger.warning(f"Error loading ML prediction: {e}")
+
+        # RAG interpretation info (load from rag_interpretations.json)
+        rag_info = ""
+        rag_summary = {"genes_analyzed": 0, "key_findings": [], "pmids": []}
+        rag_path = self.input_dir / "rag_interpretations.json"
+        if rag_path.exists():
+            try:
+                with open(rag_path, 'r', encoding='utf-8') as f:
+                    rag_data = json.load(f)
+                rag_summary["genes_analyzed"] = rag_data.get('genes_interpreted', 0)
+
+                # Extract key interpretations and PMIDs
+                interpretations = rag_data.get('interpretations', {})
+                literature_supported = []
+                novel_candidates = []
+                all_pmids = set()
+
+                for gene, gene_data in interpretations.items():
+                    interp = gene_data.get('interpretation', '')
+                    pmids = gene_data.get('pmids', [])
+                    log2fc = gene_data.get('log2fc', 0)
+                    direction = gene_data.get('direction', '')
+
+                    all_pmids.update(pmids)
+
+                    # Check if literature supports this gene
+                    if 'cannot' not in interp.lower() and 'not directly' not in interp.lower():
+                        literature_supported.append({
+                            'gene': gene, 'log2fc': log2fc,
+                            'interpretation': interp[:200], 'pmids': pmids
+                        })
+                    else:
+                        novel_candidates.append(gene)
+
+                rag_summary["pmids"] = list(all_pmids)
+                rag_summary["literature_supported"] = literature_supported[:5]
+                rag_summary["novel_candidates"] = novel_candidates[:10]
+
+                rag_info = f"""
+RAG 기반 문헌 해석 결과:
+- 분석된 유전자 수: {rag_summary['genes_analyzed']}개
+- 참조된 PMID 수: {len(all_pmids)}개
+- 문헌 지원 유전자: {', '.join([g['gene'] for g in literature_supported[:5]]) if literature_supported else '없음'}
+- 신규 바이오마커 후보 (기존 문헌 미기재): {', '.join(novel_candidates[:5]) if novel_candidates else '없음'}
+"""
+                self.logger.info(f"Loaded RAG interpretations: {rag_summary['genes_analyzed']} genes")
+            except Exception as e:
+                self.logger.warning(f"Error loading RAG interpretations: {e}")
 
         # Study info from config
         study_name = self.config.get('study_name', 'RNA-seq Analysis')
@@ -2597,6 +2650,8 @@ ML 예측 결과:
 
 {ml_info}
 
+{rag_info}
+
 ## 요청 사항
 다음 JSON 형식으로 응답해주세요:
 
@@ -2604,7 +2659,7 @@ ML 예측 결과:
 {{
   "title": "한국어 제목",
   "title_en": "English Title",
-  "abstract_extended": "**배경(Background)**: ...\\n\\n**방법(Methods)**: ...\\n\\n**결과(Results)**: ...\\n\\n**ML 예측 분석(Predictive Analysis)**: ...\\n\\n**실험적 검증 제안(Suggested Validations)**: ...\\n\\n**결론 및 의의(Conclusions)**: ...",
+  "abstract_extended": "**배경(Background)**: ...\\n\\n**방법(Methods)**: ...\\n\\n**결과(Results)**: ...\\n\\n**ML 예측 분석(Predictive Analysis)**: ...\\n\\n**RAG 문헌 해석(Literature-based Interpretation)**: ...\\n\\n**실험적 검증 제안(Suggested Validations)**: ...\\n\\n**결론 및 의의(Conclusions)**: ...",
   "key_findings": [
     "주요 발견 1",
     "주요 발견 2",
@@ -2616,15 +2671,22 @@ ML 예측 결과:
     "functional_study": ["gene1", "gene2", ...],
     "biomarker_candidates": ["gene1", "gene2", ...]
   }},
-  "ml_interpretation": "ML 예측 결과에 대한 해석 (플랫폼 차이, 배치 효과 등 설명)"
+  "ml_interpretation": "ML 예측 결과에 대한 해석 (Top-3 예측율, 유전자 매칭율 등 포함)",
+  "rag_interpretation": "RAG 문헌 해석 결과 요약 (문헌 지원 유전자 vs 신규 바이오마커 후보 구분)",
+  "literature_sources": {{
+    "pmid_count": {len(rag_summary.get('pmids', []))},
+    "key_pmids": {rag_summary.get('pmids', [])[:5]}
+  }}
 }}
 ```
 
 중요:
 1. 한국어로 작성 (영문 제목만 영어)
 2. 발견된 Hub 유전자를 validation_priorities에 실제 유전자명으로 포함
-3. ML 예측이 기대와 다른 경우, 그 원인을 과학적으로 해석
-4. 실험적 검증 방법을 구체적으로 제안
+3. ML 예측의 Top-3 예측율과 유전자 매칭율을 해석에 포함
+4. RAG 문헌 해석 섹션 필수 포함 - 문헌 지원 유전자와 신규 바이오마커 후보를 구분하여 설명
+5. PMID 인용 형식 사용 (예: [PMID: 35409110])
+6. 실험적 검증 방법을 구체적으로 제안
 """
 
         try:
