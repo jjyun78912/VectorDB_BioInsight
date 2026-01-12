@@ -100,6 +100,63 @@ class PanCancerPreprocessor:
         self.cancer_info: Dict = {}
         self.is_fitted = False
 
+        # Gene ID 변환 매핑
+        self.symbol_to_ensembl: Optional[Dict[str, str]] = None
+        self.ensembl_to_symbol: Optional[Dict[str, str]] = None
+
+    def _load_gene_mapping(self, model_dir: Path):
+        """Gene Symbol <-> ENSEMBL ID 매핑 로드"""
+        mapping_file = model_dir / 'symbol_to_model_ensembl.json'
+        if mapping_file.exists():
+            with open(mapping_file, 'r') as f:
+                self.symbol_to_ensembl = json.load(f)
+            self.ensembl_to_symbol = {v: k for k, v in self.symbol_to_ensembl.items()}
+            logger.info(f"Loaded gene mapping: {len(self.symbol_to_ensembl)} symbols")
+        else:
+            logger.warning(f"Gene mapping file not found: {mapping_file}")
+
+    def _convert_gene_ids(self, counts: pd.DataFrame) -> pd.DataFrame:
+        """Gene Symbol을 ENSEMBL ID로 변환 (필요한 경우)"""
+        if self.symbol_to_ensembl is None:
+            return counts
+
+        # 입력 데이터의 유전자 ID 형식 감지
+        sample_genes = counts.index[:10].tolist()
+        is_ensembl = any(str(g).startswith('ENSG') for g in sample_genes)
+
+        if is_ensembl:
+            logger.info("Input already in ENSEMBL format, skipping conversion")
+            return counts
+
+        # Gene Symbol -> ENSEMBL 변환
+        converted_index = []
+        converted_data = []
+        conversion_stats = {'matched': 0, 'unmatched': 0}
+
+        for gene in counts.index:
+            gene_str = str(gene)
+            if gene_str in self.symbol_to_ensembl:
+                ensembl_id = self.symbol_to_ensembl[gene_str]
+                converted_index.append(ensembl_id)
+                converted_data.append(counts.loc[gene].values)
+                conversion_stats['matched'] += 1
+            else:
+                conversion_stats['unmatched'] += 1
+
+        logger.info(f"Gene ID conversion: {conversion_stats['matched']} matched, "
+                   f"{conversion_stats['unmatched']} unmatched")
+
+        if converted_data:
+            converted_df = pd.DataFrame(
+                converted_data,
+                index=converted_index,
+                columns=counts.columns
+            )
+            return converted_df
+        else:
+            logger.warning("No genes matched during conversion!")
+            return counts
+
     def _normalize_cpm(self, counts: pd.DataFrame) -> pd.DataFrame:
         """CPM 정규화"""
         lib_sizes = counts.sum(axis=0)
@@ -179,6 +236,9 @@ class PanCancerPreprocessor:
         if not self.is_fitted:
             raise ValueError("Preprocessor not fitted")
 
+        # Gene ID 변환 (Symbol -> ENSEMBL)
+        counts = self._convert_gene_ids(counts)
+
         # 정규화
         if self.normalize == "cpm":
             normalized = self._normalize_cpm(counts)
@@ -193,9 +253,14 @@ class PanCancerPreprocessor:
 
         # 선택된 유전자 추출 (없는 건 0으로)
         X = pd.DataFrame(0.0, index=counts.columns, columns=self.selected_genes)
+        matched_genes = 0
         for gene in self.selected_genes:
             if gene in transformed.index:
                 X[gene] = transformed.loc[gene].values
+                matched_genes += 1
+
+        logger.info(f"Feature matching: {matched_genes}/{len(self.selected_genes)} genes "
+                   f"({matched_genes/len(self.selected_genes)*100:.1f}%)")
 
         # 표준화
         X = self.scaler.transform(X.values)
@@ -233,6 +298,11 @@ class PanCancerPreprocessor:
         preprocessor.label_encoder = save_dict['label_encoder']
         preprocessor.cancer_info = save_dict['cancer_info']
         preprocessor.is_fitted = save_dict['is_fitted']
+
+        # Gene mapping 로드 (모델 디렉토리에서)
+        model_dir = Path(path).parent
+        preprocessor._load_gene_mapping(model_dir)
+
         return preprocessor
 
 
