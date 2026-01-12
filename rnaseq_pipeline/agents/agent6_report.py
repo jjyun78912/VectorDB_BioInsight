@@ -425,10 +425,43 @@ class ReportAgent(BaseAgent):
         else:
             return '<p class="no-data">No plot available</p>'
 
+    def _build_network_ai_interpretation(self, interp: Dict) -> str:
+        """Build AI interpretation section for network visualization."""
+        if not interp:
+            return ''
+
+        return f'''
+        <div class="ai-interpretation">
+            <div class="ai-header">🤖 AI 해석</div>
+            <p class="ai-summary">{interp.get('summary', '')}</p>
+            <p><strong>Hub 유전자 분석:</strong> {interp.get('hub_gene_analysis', '')}</p>
+            <p><strong>네트워크 구조:</strong> {interp.get('network_topology', '')}</p>
+            <p><strong>생물학적 의미:</strong> {interp.get('biological_implications', '')}</p>
+        </div>
+        '''
+
+    def _build_heatmap_ai_interpretation(self, interp: Dict) -> str:
+        """Build AI interpretation section for heatmap visualization."""
+        if not interp:
+            return ''
+
+        observations = interp.get('key_observations', [])
+        observations_html = "".join([f"<li>{obs}</li>" for obs in observations[:3]])
+
+        return f'''
+        <div class="ai-interpretation">
+            <div class="ai-header">🤖 AI 해석</div>
+            <p class="ai-summary">{interp.get('summary', '')}</p>
+            <ul class="ai-observations">{observations_html}</ul>
+            <p><strong>발현 패턴:</strong> {interp.get('pattern_analysis', '')}</p>
+        </div>
+        '''
+
     def _generate_visual_dashboard_html(self, data: Dict) -> str:
         """Generate Level 2: Visual Dashboard (30초 파악)."""
         figures = data.get('figures', {})
         interactive_figures = data.get('interactive_figures', {})
+        viz_interpretations = data.get('visualization_interpretations', {})
 
         # Get key figures
         volcano_src = figures.get('volcano_plot', '')
@@ -485,8 +518,22 @@ class ReportAgent(BaseAgent):
             '''
 
         # Volcano plot section with toggle for static/interactive
-        volcano_desc = '''<p class="panel-desc"><strong>X축:</strong> log2 Fold Change (발현 변화량) | <strong>Y축:</strong> -log10(padj) (통계적 유의성)<br>
-        <span style="color:#dc2626;">●빨간점</span> = 상향조절 (암에서 증가) | <span style="color:#2563eb;">●파란점</span> = 하향조절 (암에서 감소) | 점선 = 유의성 기준선</p>'''
+        volcano_interp = viz_interpretations.get('volcano_plot', {})
+        volcano_llm_section = ""
+        if volcano_interp:
+            observations = volcano_interp.get('key_observations', [])
+            observations_html = "".join([f"<li>{obs}</li>" for obs in observations[:3]])
+            volcano_llm_section = f'''
+            <div class="ai-interpretation">
+                <div class="ai-header">🤖 AI 해석</div>
+                <p class="ai-summary">{volcano_interp.get('summary', '')}</p>
+                <ul class="ai-observations">{observations_html}</ul>
+                <p class="ai-significance"><strong>생물학적 의미:</strong> {volcano_interp.get('biological_significance', '')}</p>
+            </div>
+            '''
+        volcano_desc = f'''<p class="panel-desc"><strong>X축:</strong> log2 Fold Change (발현 변화량) | <strong>Y축:</strong> -log10(padj) (통계적 유의성)<br>
+        <span style="color:#dc2626;">●빨간점</span> = 상향조절 (암에서 증가) | <span style="color:#2563eb;">●파란점</span> = 하향조절 (암에서 감소) | 점선 = 유의성 기준선</p>
+        {volcano_llm_section}'''
 
         if volcano_interactive:
             volcano_section = f'''
@@ -550,12 +597,14 @@ class ReportAgent(BaseAgent):
                     </div>
                     <p class="panel-desc">유전자 간 공발현(co-expression) 네트워크에서 중심적 역할을 하는 Hub 유전자입니다. Hub는 많은 유전자와 연결되어 있어 핵심 조절자일 가능성이 높습니다.</p>
                     {self._build_network_content(network_interactive, network_src)}
+                    {self._build_network_ai_interpretation(viz_interpretations.get('network_graph', {}))}
                 </div>
 
                 <div class="dashboard-panel full-width">
                     <h4>Expression Heatmap (Top 50 DEGs)</h4>
                     <p class="panel-desc">상위 50개 DEG의 샘플별 발현 패턴입니다. 빨간색은 높은 발현, 파란색은 낮은 발현을 의미합니다. 샘플들이 조건(Tumor vs Normal)에 따라 구분되는지 확인하세요.</p>
                     {f'<img src="{heatmap_src}" alt="Heatmap" />' if heatmap_src else '<p class="no-data">No heatmap available</p>'}
+                    {self._build_heatmap_ai_interpretation(viz_interpretations.get('heatmap', {}))}
                 </div>
             </div>
         </section>
@@ -1227,6 +1276,47 @@ class ReportAgent(BaseAgent):
                 padding: 8px 10px;
                 background: #fff8e1;
                 border-left: 3px solid var(--npj-orange);
+            }
+
+            /* ========== AI INTERPRETATION STYLES ========== */
+            .ai-interpretation {
+                margin-top: 16px;
+                padding: 14px 16px;
+                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+                border-radius: 8px;
+                border-left: 4px solid #0ea5e9;
+            }
+
+            .ai-header {
+                font-weight: 700;
+                color: #0369a1;
+                margin-bottom: 8px;
+                font-size: 13px;
+            }
+
+            .ai-summary {
+                font-size: 13px;
+                color: var(--gray-700);
+                margin-bottom: 10px;
+                line-height: 1.6;
+            }
+
+            .ai-observations {
+                margin: 10px 0;
+                padding-left: 20px;
+                font-size: 12px;
+                color: var(--gray-700);
+            }
+
+            .ai-observations li {
+                margin-bottom: 4px;
+                line-height: 1.5;
+            }
+
+            .ai-significance {
+                font-size: 12px;
+                color: var(--gray-700);
+                margin-top: 8px;
             }
 
             .dashboard-panel img {
@@ -2495,6 +2585,22 @@ class ReportAgent(BaseAgent):
             if extended_abstract:
                 data['abstract_extended'] = extended_abstract
 
+        # Generate visualization interpretations
+        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+        viz_interp_path = run_dir / "visualization_interpretations.json"
+        if viz_interp_path.exists():
+            try:
+                with open(viz_interp_path, 'r', encoding='utf-8') as f:
+                    data['visualization_interpretations'] = json.load(f)
+                self.logger.info("Loaded existing visualization interpretations")
+            except Exception as e:
+                self.logger.warning(f"Error loading visualization interpretations: {e}")
+        else:
+            self.logger.info("Generating visualization interpretations with Claude API...")
+            viz_interpretations = self._generate_visualization_interpretations(data)
+            if viz_interpretations:
+                data['visualization_interpretations'] = viz_interpretations
+
         self.save_json(data, "report_data.json")
 
         html_content = self._generate_html(data)
@@ -2722,6 +2828,192 @@ RAG 기반 문헌 해석 결과:
 
         except Exception as e:
             self.logger.error(f"Error generating extended abstract: {e}")
+            return None
+
+    def _generate_visualization_interpretations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Generate LLM-based interpretations for each visualization.
+
+        Creates structured interpretations for:
+        - Volcano Plot: DEG 분포 해석
+        - Heatmap: 발현 패턴 해석
+        - Network Graph: Hub 유전자 및 상호작용 해석
+        - PCA Plot: 샘플 분리도 해석
+        - Pathway Bar Plot: 경로 분석 해석
+        """
+        if not ANTHROPIC_AVAILABLE:
+            self.logger.warning("anthropic package not available, skipping visualization interpretations")
+            return None
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            self.logger.warning("ANTHROPIC_API_KEY not set, skipping visualization interpretations")
+            return None
+
+        # Prepare data summaries for each visualization
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        network_nodes_df = data.get('network_nodes_df')
+
+        # DEG stats for volcano
+        n_deg = len(deg_df) if deg_df is not None else 0
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
+        n_down = n_deg - n_up
+
+        # Top DEGs by |log2FC|
+        top_up_genes = []
+        top_down_genes = []
+        if deg_df is not None and log2fc_col in deg_df.columns:
+            deg_sorted = deg_df.sort_values(log2fc_col, ascending=False)
+            gene_col = 'gene_id' if 'gene_id' in deg_df.columns else 'gene_symbol'
+            top_up_genes = deg_sorted.head(5)[gene_col].tolist()
+            top_down_genes = deg_sorted.tail(5)[gene_col].tolist()
+
+        # Hub genes for network
+        hub_genes_list = []
+        if hub_df is not None:
+            hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
+            for _, row in hub_df.head(10).iterrows():
+                gene_name = row.get('gene_id', row.get('gene_symbol', 'Unknown'))
+                degree = row.get('degree', 0)
+                log2fc = row.get(hub_log2fc_col, 0)
+                hub_genes_list.append(f"{gene_name}(degree={degree}, log2FC={log2fc:.2f})")
+
+        # Network stats
+        total_edges = len(data.get('network_edges', []))
+
+        # Pathway info
+        pathway_list = []
+        if pathway_df is not None:
+            for _, row in pathway_df.head(10).iterrows():
+                term = row.get('Term', row.get('term', 'Unknown'))
+                pval = row.get('P-value', row.get('pvalue', 0))
+                genes = row.get('Genes', row.get('genes', ''))
+                pathway_list.append(f"- {term}: p={pval:.2e}, genes=[{genes[:50]}...]")
+
+        # Study info
+        study_name = self.config.get('study_name', 'RNA-seq Analysis')
+        cancer_type = self.config.get('cancer_type', 'cancer')
+
+        prompt = f"""당신은 바이오인포매틱스 시각화 전문가입니다. 아래 RNA-seq 분석 결과의 각 시각화에 대한 해석을 제공해주세요.
+
+## 분석 정보
+- 연구명: {study_name}
+- 암종: {cancer_type}
+- 총 DEG 수: {n_deg}개 (상향조절: {n_up}개, 하향조절: {n_down}개)
+- 상위 상향조절 유전자: {', '.join(top_up_genes)}
+- 상위 하향조절 유전자: {', '.join(top_down_genes)}
+- Hub 유전자: {', '.join(hub_genes_list[:5])}
+- 총 네트워크 edge 수: {total_edges}
+
+## Pathway 정보
+{chr(10).join(pathway_list) if pathway_list else '정보 없음'}
+
+다음 JSON 형식으로 각 시각화에 대한 해석을 제공해주세요:
+
+```json
+{{
+  "volcano_plot": {{
+    "title": "Volcano Plot 해석",
+    "summary": "1-2문장 요약",
+    "key_observations": [
+      "관찰 1",
+      "관찰 2",
+      "관찰 3"
+    ],
+    "biological_significance": "생물학적 의미 설명",
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }},
+  "heatmap": {{
+    "title": "발현 히트맵 해석",
+    "summary": "1-2문장 요약",
+    "key_observations": [
+      "관찰 1",
+      "관찰 2"
+    ],
+    "pattern_analysis": "발현 패턴 분석",
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }},
+  "network_graph": {{
+    "title": "유전자 상호작용 네트워크 해석",
+    "summary": "1-2문장 요약",
+    "hub_gene_analysis": "Hub 유전자 분석",
+    "network_topology": "네트워크 구조 특성",
+    "biological_implications": "생물학적 의미",
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }},
+  "pca_plot": {{
+    "title": "PCA 분석 해석",
+    "summary": "1-2문장 요약",
+    "separation_analysis": "샘플 분리도 분석",
+    "variance_explanation": "분산 설명",
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }},
+  "pathway_barplot": {{
+    "title": "Pathway 분석 해석",
+    "summary": "1-2문장 요약",
+    "top_pathways": [
+      "주요 pathway 1 설명",
+      "주요 pathway 2 설명"
+    ],
+    "functional_theme": "전체적인 기능적 테마",
+    "therapeutic_implications": "치료적 함의",
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }},
+  "expression_boxplot": {{
+    "title": "유전자 발현 분포 해석",
+    "summary": "1-2문장 요약",
+    "key_observations": [
+      "관찰 1",
+      "관찰 2"
+    ],
+    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+  }}
+}}
+```
+
+중요:
+1. 한국어로 작성
+2. 각 시각화의 특성에 맞는 구체적인 해석 제공
+3. 생물학적/의학적 의미를 포함
+4. 연구자가 플롯을 이해할 수 있도록 해석 가이드 포함
+"""
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4000,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            response_text = message.content[0].text
+
+            # Extract JSON from response
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                viz_interpretations = json.loads(json_str)
+
+                # Save to file
+                run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+                output_path = run_dir / "visualization_interpretations.json"
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(viz_interpretations, f, ensure_ascii=False, indent=2)
+
+                self.logger.info(f"Visualization interpretations generated: {output_path}")
+                return viz_interpretations
+            else:
+                self.logger.warning("Could not extract JSON from Claude response")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Error generating visualization interpretations: {e}")
             return None
 
     def validate_outputs(self) -> bool:
