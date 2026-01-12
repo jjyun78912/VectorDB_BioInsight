@@ -17,12 +17,20 @@ Design Principles:
 import json
 import base64
 import math
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ..utils.base_agent import BaseAgent
+
+# Claude API for Extended Abstract generation
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
 
 
 class ReportAgent(BaseAgent):
@@ -137,6 +145,17 @@ class ReportAgent(BaseAgent):
                     self.logger.info(f"Loaded interactive figure: {html_path.name}")
                 except Exception as e:
                     self.logger.warning(f"Error loading {html_path.name}: {e}")
+
+        # Load extended abstract if exists (from run_dir parent)
+        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+        extended_abstract_path = run_dir / "abstract_extended.json"
+        if extended_abstract_path.exists():
+            try:
+                with open(extended_abstract_path, 'r', encoding='utf-8') as f:
+                    data['abstract_extended'] = json.load(f)
+                self.logger.info("Loaded extended abstract")
+            except Exception as e:
+                self.logger.warning(f"Error loading extended abstract: {e}")
 
         return data
 
@@ -481,7 +500,7 @@ class ReportAgent(BaseAgent):
                     </div>
                     {volcano_desc}
                     <div id="volcano-interactive" class="volcano-view active">
-                        <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:550px; border:none; border-radius:8px;"></iframe>
+                        <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:450px; border:none; border-radius:8px;"></iframe>
                         <p class="panel-note">💡 마우스 드래그로 확대, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
                     </div>
                     <div id="volcano-static" class="volcano-view" style="display:none;">
@@ -792,45 +811,69 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_css(self) -> str:
-        """Generate Cell journal-style CSS."""
+        """Generate npj Systems Biology and Applications journal-style CSS."""
         return '''
         <style>
+            /* ========== npj SYSTEMS BIOLOGY STYLE ========== */
+            /* Based on Nature/Springer journal design guidelines */
+
             :root {
-                --primary: #1a365d;
-                --primary-light: #2c5282;
-                --accent: #c53030;
-                --success: #276749;
-                --warning: #c05621;
-                --gray-50: #f7fafc;
-                --gray-100: #edf2f7;
-                --gray-200: #e2e8f0;
-                --gray-500: #718096;
-                --gray-700: #2d3748;
-                --gray-900: #1a202c;
-                --serif: 'Crimson Pro', Georgia, serif;
-                --sans: 'Inter', -apple-system, sans-serif;
+                /* npj Brand Colors */
+                --npj-blue: #0056b9;
+                --npj-blue-dark: #003d82;
+                --npj-blue-light: #e8f4fc;
+                --npj-orange: #e87722;
+
+                /* Neutral Palette */
+                --gray-50: #fafafa;
+                --gray-100: #f5f5f5;
+                --gray-200: #eeeeee;
+                --gray-300: #e0e0e0;
+                --gray-400: #bdbdbd;
+                --gray-500: #9e9e9e;
+                --gray-600: #757575;
+                --gray-700: #616161;
+                --gray-800: #424242;
+                --gray-900: #212121;
+
+                /* Semantic Colors */
+                --success: #2e7d32;
+                --warning: #f57c00;
+                --danger: #c62828;
+                --info: #1565c0;
+
+                /* Typography */
+                --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                --font-serif: Georgia, 'Times New Roman', Times, serif;
+                --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+
+                /* Spacing */
+                --spacing-xs: 4px;
+                --spacing-sm: 8px;
+                --spacing-md: 16px;
+                --spacing-lg: 24px;
+                --spacing-xl: 32px;
+                --spacing-2xl: 48px;
             }
 
             * { box-sizing: border-box; margin: 0; padding: 0; }
 
             body {
-                font-family: var(--sans);
-                background: #ffffff;
+                font-family: var(--font-sans);
+                font-size: 15px;
+                line-height: 1.6;
                 color: var(--gray-900);
-                line-height: 1.7;
+                background: #ffffff;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
             }
 
-            /* ========== COVER PAGE ========== */
+            /* ========== HEADER / COVER PAGE ========== */
             .cover-page {
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                background: linear-gradient(180deg, #1a365d 0%, #2c5282 50%, #3182ce 100%);
+                background: linear-gradient(135deg, var(--npj-blue) 0%, var(--npj-blue-dark) 100%);
                 color: white;
+                padding: 80px 40px;
                 text-align: center;
-                padding: 60px 40px;
                 position: relative;
             }
 
@@ -840,50 +883,49 @@ class ReportAgent(BaseAgent):
                 top: 0;
                 left: 0;
                 right: 0;
-                bottom: 0;
-                background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-                opacity: 0.5;
+                height: 4px;
+                background: var(--npj-orange);
             }
 
             .cover-content {
-                position: relative;
-                z-index: 1;
-                max-width: 800px;
+                max-width: 900px;
+                margin: 0 auto;
             }
 
             .cover-badge {
                 display: inline-block;
                 background: rgba(255,255,255,0.15);
                 border: 1px solid rgba(255,255,255,0.3);
-                padding: 8px 20px;
-                border-radius: 30px;
-                font-size: 0.85rem;
-                font-weight: 500;
-                letter-spacing: 0.5px;
-                margin-bottom: 30px;
+                padding: 6px 16px;
+                border-radius: 3px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 1.5px;
                 text-transform: uppercase;
+                margin-bottom: 24px;
             }
 
             .cover-title {
-                font-family: var(--serif);
-                font-size: 3.5rem;
+                font-family: var(--font-sans);
+                font-size: 32px;
                 font-weight: 700;
-                line-height: 1.2;
+                line-height: 1.3;
                 margin-bottom: 16px;
+                letter-spacing: -0.5px;
             }
 
             .cover-subtitle {
-                font-size: 1.3rem;
-                opacity: 0.9;
-                margin-bottom: 50px;
+                font-size: 16px;
                 font-weight: 400;
+                opacity: 0.9;
+                margin-bottom: 40px;
             }
 
             .cover-stats {
                 display: flex;
                 justify-content: center;
-                gap: 60px;
-                margin-bottom: 50px;
+                gap: 48px;
+                margin-bottom: 40px;
             }
 
             .cover-stat {
@@ -892,313 +934,243 @@ class ReportAgent(BaseAgent):
 
             .cover-stat .stat-number {
                 display: block;
-                font-size: 3rem;
+                font-size: 36px;
                 font-weight: 700;
-                font-family: var(--serif);
+                letter-spacing: -1px;
             }
 
             .cover-stat .stat-label {
                 display: block;
-                font-size: 0.85rem;
+                font-size: 12px;
+                font-weight: 500;
                 opacity: 0.8;
-                margin-top: 8px;
+                margin-top: 4px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
             }
 
             .cover-meta {
-                background: rgba(255,255,255,0.1);
-                border-radius: 12px;
-                padding: 24px 40px;
+                background: rgba(0,0,0,0.2);
+                border-radius: 4px;
+                padding: 20px 32px;
                 text-align: left;
+                display: inline-block;
             }
 
             .cover-meta p {
-                margin: 6px 0;
-                font-size: 0.95rem;
+                margin: 4px 0;
+                font-size: 13px;
             }
 
             .cover-footer {
                 position: absolute;
-                bottom: 30px;
+                bottom: 20px;
                 left: 0;
                 right: 0;
-                text-align: center;
-                font-size: 0.85rem;
+                font-size: 11px;
                 opacity: 0.7;
             }
 
-            /* ========== NAVIGATION ========== */
+            /* ========== NAVIGATION BAR ========== */
             .nav-bar {
                 background: white;
                 border-bottom: 1px solid var(--gray-200);
                 position: sticky;
                 top: 0;
                 z-index: 100;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
             }
 
             .nav-container {
-                max-width: 1200px;
+                max-width: 1100px;
                 margin: 0 auto;
-                padding: 0 40px;
+                padding: 0 24px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                height: 60px;
+                height: 56px;
             }
 
             .nav-brand {
-                font-weight: 600;
-                color: var(--primary);
-                font-size: 1rem;
+                font-weight: 700;
+                font-size: 14px;
+                color: var(--npj-blue);
+                letter-spacing: -0.3px;
             }
 
             .nav-links {
                 display: flex;
-                gap: 32px;
+                gap: 24px;
             }
 
             .nav-links a {
                 color: var(--gray-700);
                 text-decoration: none;
-                font-size: 0.9rem;
+                font-size: 13px;
                 font-weight: 500;
-                transition: color 0.2s;
-            }
-
-            .nav-links a:hover {
-                color: var(--primary);
-            }
-
-            /* ========== PAPER CONTENT ========== */
-            .paper-content {
-                max-width: 1000px;
-                margin: 0 auto;
-                padding: 60px 40px;
-            }
-
-            .paper-content h2 {
-                font-family: var(--serif);
-                font-size: 1.8rem;
-                font-weight: 600;
-                color: var(--primary);
-                margin-bottom: 24px;
-                padding-bottom: 12px;
-                border-bottom: 2px solid var(--primary);
-            }
-
-            .paper-content section {
-                margin-bottom: 60px;
-            }
-
-            /* ========== ABSTRACT ========== */
-            .abstract-section {
-                margin-top: 0;
-            }
-
-            .abstract-box {
-                background: var(--gray-50);
-                border-left: 4px solid var(--primary);
-                padding: 30px 35px;
-                border-radius: 0 12px 12px 0;
-            }
-
-            .abstract-content p {
-                margin-bottom: 16px;
-                font-size: 1rem;
-                text-align: justify;
-            }
-
-            .abstract-keywords {
-                margin-top: 20px;
-                padding-top: 16px;
-                border-top: 1px solid var(--gray-200);
-                font-size: 0.9rem;
-                color: var(--gray-700);
-            }
-
-            /* ========== FIGURES SECTION ========== */
-            .figures-section .figure-panel {
-                background: white;
-                border: 1px solid var(--gray-200);
-                border-radius: 12px;
-                padding: 24px;
-                margin-bottom: 30px;
-            }
-
-            .figure-panel h4 {
-                font-family: var(--serif);
-                font-size: 1.1rem;
-                color: var(--gray-900);
-                margin-bottom: 8px;
-            }
-
-            .figure-panel .figure-caption {
-                font-size: 0.9rem;
-                color: var(--gray-600);
-                margin-bottom: 20px;
-                line-height: 1.6;
-            }
-
-            .figure-panel img {
-                width: 100%;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            }
-
-            /* ========== PAPER FOOTER ========== */
-            .paper-footer {
-                background: var(--gray-900);
-                color: white;
-                padding: 40px;
-                text-align: center;
-            }
-
-            .footer-content {
-                max-width: 800px;
-                margin: 0 auto;
-            }
-
-            .paper-footer p {
-                font-size: 0.9rem;
-                line-height: 1.7;
-                opacity: 0.9;
-            }
-
-            .footer-credit {
-                margin-top: 20px;
-                font-size: 0.85rem;
-                opacity: 0.6;
-            }
-
-            /* Legacy styles for compatibility */
-            .container { max-width: 1000px; margin: 0 auto; padding: 40px; }
-
-            .executive-summary {
-                background: white;
-                border-radius: 12px;
-                padding: 30px;
-                margin-bottom: 24px;
-                border: 1px solid var(--gray-200);
-            }
-
-            .summary-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 24px;
-            }
-
-            .summary-title {
-                display: flex;
-                align-items: center;
-                gap: 15px;
-            }
-
-            .summary-title h2 {
-                font-size: 1.5rem;
-                color: var(--gray-900);
-            }
-
-            .confidence-badge {
-                padding: 6px 14px;
-                border-radius: 20px;
-                font-size: 0.85rem;
-                font-weight: 600;
-            }
-
-            .confidence-badge.high { background: #D1FAE5; color: #065F46; }
-            .confidence-badge.medium { background: #FEF3C7; color: #92400E; }
-            .confidence-badge.low { background: #FEE2E2; color: #991B1B; }
-
-            .key-metrics {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 20px;
-                margin-bottom: 24px;
-            }
-
-            .metric-card {
-                background: var(--gray-50);
-                border-radius: 12px;
-                padding: 24px;
-                text-align: center;
-                border: 2px solid transparent;
+                padding: 4px 0;
+                border-bottom: 2px solid transparent;
                 transition: all 0.2s;
             }
 
-            .metric-card:hover {
-                border-color: var(--primary-light);
-                transform: translateY(-2px);
+            .nav-links a:hover {
+                color: var(--npj-blue);
+                border-bottom-color: var(--npj-blue);
             }
 
-            .metric-card.primary { background: linear-gradient(135deg, #EEF2FF, #E0E7FF); }
-            .metric-card.highlight { background: linear-gradient(135deg, #FEF3C7, #FDE68A); }
+            /* ========== MAIN CONTENT ========== */
+            .paper-content {
+                max-width: 900px;
+                margin: 0 auto;
+                padding: 48px 24px;
+            }
 
-            .metric-value {
-                font-size: 2.5rem;
+            .paper-content section {
+                margin-bottom: 48px;
+            }
+
+            .paper-content h2 {
+                font-family: var(--font-sans);
+                font-size: 20px;
                 font-weight: 700;
-                color: var(--primary);
+                color: var(--gray-900);
+                margin-bottom: 20px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid var(--npj-blue);
+                letter-spacing: -0.3px;
             }
 
-            .metric-card.highlight .metric-value { color: #B45309; }
+            /* ========== ABSTRACT SECTION ========== */
+            .abstract-section { margin-top: 0; }
 
-            .metric-label {
-                color: var(--gray-500);
-                font-size: 0.9rem;
-                margin-top: 4px;
-            }
-
-            .metric-detail {
-                font-size: 0.8rem;
-                color: var(--gray-500);
-                margin-top: 8px;
-            }
-
-            .one-line-summary {
+            .abstract-box {
                 background: var(--gray-50);
-                border-radius: 8px;
-                padding: 16px 20px;
-                margin-bottom: 16px;
+                border-left: 4px solid var(--npj-blue);
+                padding: 24px 28px;
             }
 
-            .one-line-summary h4 {
-                font-size: 0.85rem;
-                color: var(--gray-500);
-                margin-bottom: 8px;
+            .abstract-content p {
+                margin-bottom: 12px;
+                font-size: 14px;
+                line-height: 1.7;
+                text-align: justify;
+                color: var(--gray-800);
             }
 
-            .one-line-summary p {
-                font-size: 1rem;
+            .abstract-content p strong {
+                color: var(--gray-900);
+                font-weight: 600;
+            }
+
+            .abstract-keywords {
+                margin-top: 16px;
+                padding-top: 12px;
+                border-top: 1px solid var(--gray-200);
+                font-size: 13px;
                 color: var(--gray-700);
             }
 
-            .warning-box {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                background: #FEF3C7;
-                border: 1px solid #FCD34D;
-                border-radius: 8px;
-                padding: 12px 16px;
-                font-size: 0.85rem;
-                color: #92400E;
+            /* Extended Abstract Styles */
+            .abstract-box.extended {
+                background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+                border-left: 4px solid var(--npj-blue);
+                padding: 28px 32px;
             }
 
-            .warning-icon { font-size: 1.2rem; }
+            .key-findings {
+                margin-top: 24px;
+                padding: 20px;
+                background: white;
+                border-radius: 8px;
+                border: 1px solid var(--gray-200);
+            }
 
-            /* Visual Dashboard */
+            .key-findings h4 {
+                color: var(--npj-blue);
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+
+            .key-findings ul {
+                margin: 0;
+                padding-left: 24px;
+            }
+
+            .key-findings li {
+                font-size: 13px;
+                color: var(--gray-700);
+                margin-bottom: 8px;
+                line-height: 1.5;
+            }
+
+            .validation-priorities {
+                margin-top: 20px;
+                padding: 20px;
+                background: #f0fdf4;
+                border-radius: 8px;
+                border: 1px solid #86efac;
+            }
+
+            .validation-priorities h4 {
+                color: #166534;
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+
+            .validation-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+            }
+
+            .validation-item {
+                font-size: 13px;
+                color: var(--gray-700);
+                background: white;
+                padding: 10px 14px;
+                border-radius: 6px;
+            }
+
+            .validation-item strong {
+                color: #166534;
+            }
+
+            .ml-interpretation {
+                margin-top: 20px;
+                padding: 20px;
+                background: #fef3c7;
+                border-radius: 8px;
+                border: 1px solid #fcd34d;
+            }
+
+            .ml-interpretation h4 {
+                color: #92400e;
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+
+            .ml-interpretation p {
+                font-size: 13px;
+                color: var(--gray-700);
+                line-height: 1.6;
+                margin: 0;
+            }
+
+            /* ========== FIGURE PANELS (npj Style) ========== */
             .visual-dashboard {
                 background: white;
-                border-radius: 16px;
-                padding: 30px;
-                margin-bottom: 24px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                margin-bottom: 32px;
             }
 
             .visual-dashboard h2 {
-                font-size: 1.5rem;
+                font-size: 20px;
                 margin-bottom: 24px;
-                color: var(--gray-900);
+            }
+
+            .section-intro {
+                font-size: 14px;
+                color: var(--gray-600);
+                margin-bottom: 24px;
+                text-align: left;
             }
 
             .dashboard-grid {
@@ -1208,11 +1180,9 @@ class ReportAgent(BaseAgent):
             }
 
             .dashboard-panel {
-                background: #ffffff;
-                border-radius: 16px;
-                padding: 24px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-                border: 1px solid #e5e7eb;
+                background: white;
+                border: 1px solid var(--gray-200);
+                padding: 20px;
             }
 
             .dashboard-panel.main-plot {
@@ -1224,379 +1194,503 @@ class ReportAgent(BaseAgent):
             }
 
             .dashboard-panel h4 {
-                font-size: 1rem;
-                font-weight: 600;
-                color: #1f2937;
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--gray-900);
+                margin-bottom: 8px;
+                text-transform: none;
+                letter-spacing: 0;
+            }
+
+            .dashboard-panel h4::before {
+                content: attr(data-label);
+                display: inline-block;
+                font-weight: 700;
+                margin-right: 8px;
+                color: var(--gray-900);
+            }
+
+            .panel-desc {
+                font-size: 12px;
+                color: var(--gray-600);
+                line-height: 1.5;
                 margin-bottom: 16px;
-                padding-bottom: 12px;
-                border-bottom: 2px solid #f3f4f6;
+                padding: 10px 12px;
+                background: var(--npj-blue-light);
+                border-left: 3px solid var(--npj-blue);
+            }
+
+            .panel-note {
+                font-size: 11px;
+                color: var(--gray-600);
+                margin-top: 12px;
+                padding: 8px 10px;
+                background: #fff8e1;
+                border-left: 3px solid var(--npj-orange);
             }
 
             .dashboard-panel img {
                 width: 100%;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                display: block;
             }
 
-            .panel-note {
-                font-size: 0.8rem;
-                color: #6b7280;
-                margin-top: 12px;
-                padding: 8px 12px;
-                background: #fef3c7;
-                border-radius: 8px;
-                border-left: 3px solid #f59e0b;
-            }
+            /* ========== FIGURE TOGGLE BUTTONS ========== */
+            .volcano-container, .network-container { position: relative; }
 
-            .panel-desc {
-                font-size: 0.85rem;
-                color: #4b5563;
-                line-height: 1.6;
-                margin-bottom: 16px;
-                padding: 12px 16px;
-                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-                border-radius: 10px;
-                border-left: 4px solid #3b82f6;
-            }
-
-            .section-intro {
-                font-size: 1rem;
-                color: #6b7280;
-                margin-bottom: 24px;
-                text-align: center;
-            }
-
-            /* Volcano Toggle */
-            .volcano-container { position: relative; }
-
-            .volcano-header {
+            .volcano-header, .network-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 12px;
+                margin-bottom: 8px;
             }
 
             .view-toggle {
                 display: flex;
-                gap: 4px;
-                background: var(--gray-200);
-                padding: 3px;
-                border-radius: 6px;
+                gap: 2px;
+                background: var(--gray-100);
+                padding: 2px;
+                border-radius: 3px;
             }
 
             .toggle-btn {
-                padding: 6px 12px;
+                padding: 4px 10px;
                 border: none;
-                border-radius: 4px;
+                border-radius: 2px;
                 background: transparent;
                 color: var(--gray-600);
-                font-size: 0.8rem;
+                font-size: 11px;
+                font-weight: 500;
                 cursor: pointer;
-                transition: all 0.2s;
+                transition: all 0.15s;
             }
 
             .toggle-btn.active {
                 background: white;
-                color: var(--primary);
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                color: var(--npj-blue);
+                box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             }
 
-            .toggle-btn:hover:not(.active) {
-                color: var(--gray-900);
-            }
+            .volcano-view, .network-view { display: none; }
+            .volcano-view.active, .network-view.active { display: block; }
 
-            .volcano-view {
-                display: none;
-            }
-
-            .volcano-view.active {
-                display: block;
-            }
-
-            /* Network Container */
-            .network-container { position: relative; }
-
-            .network-header {
+            /* ========== GENE BARS (Bar Chart Style) ========== */
+            .gene-bars {
                 display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 12px;
+                flex-direction: column;
+                gap: 6px;
             }
-
-            .network-view {
-                display: none;
-            }
-
-            .network-view.active {
-                display: block;
-            }
-
-            /* Gene Bars - Enhanced for readability */
-            .gene-bars { display: flex; flex-direction: column; gap: 10px; }
 
             .gene-bar-item {
                 display: flex;
                 align-items: center;
-                gap: 12px;
-                padding: 4px 0;
+                gap: 8px;
             }
 
             .gene-name {
-                width: 80px;
-                font-size: 0.9rem;
+                width: 70px;
+                font-size: 11px;
                 font-weight: 600;
-                color: #1f2937;
-                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+                color: var(--gray-800);
+                font-family: var(--font-mono);
             }
 
             .gene-bar-container {
                 flex: 1;
-                height: 20px;
-                background: #f3f4f6;
-                border-radius: 10px;
+                height: 16px;
+                background: var(--gray-100);
+                border-radius: 2px;
                 overflow: hidden;
-                box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
             }
 
             .gene-bar {
                 height: 100%;
-                border-radius: 10px;
-                transition: width 0.5s ease;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+                border-radius: 2px;
+                transition: width 0.4s ease;
             }
 
-            .gene-bar.up { background: linear-gradient(90deg, #f87171, #dc2626); }
-            .gene-bar.down { background: linear-gradient(90deg, #60a5fa, #2563eb); }
+            .gene-bar.up { background: #c62828; }
+            .gene-bar.down { background: var(--npj-blue); }
 
             .gene-value {
-                width: 60px;
-                font-size: 0.85rem;
+                width: 50px;
+                font-size: 11px;
                 font-weight: 600;
-                color: #374151;
+                color: var(--gray-700);
                 text-align: right;
-                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+                font-family: var(--font-mono);
             }
 
-            /* Pathway List - Enhanced */
-            .pathway-list { display: flex; flex-direction: column; gap: 8px; }
+            /* ========== PATHWAY LIST ========== */
+            .pathway-list {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
 
             .pathway-item {
                 display: flex;
                 align-items: center;
-                gap: 12px;
-                padding: 8px 0;
-                border-bottom: 1px solid #f3f4f6;
+                gap: 8px;
+                padding: 6px 0;
+                border-bottom: 1px solid var(--gray-100);
             }
 
-            .pathway-item:last-child {
-                border-bottom: none;
-            }
+            .pathway-item:last-child { border-bottom: none; }
 
             .pathway-name {
                 flex: 1;
-                font-size: 0.85rem;
+                font-size: 11px;
                 font-weight: 500;
-                color: #374151;
+                color: var(--gray-800);
                 line-height: 1.3;
             }
 
             .pathway-dots {
-                font-size: 0.85rem;
-                color: #10b981;
-                letter-spacing: 2px;
-                font-weight: 600;
+                font-size: 10px;
+                color: var(--success);
+                letter-spacing: 1px;
             }
 
             .pathway-genes {
-                width: 35px;
-                font-size: 0.8rem;
+                min-width: 28px;
+                font-size: 10px;
                 font-weight: 600;
-                color: #6366f1;
-                text-align: right;
-                background: #eef2ff;
+                color: var(--npj-blue);
+                text-align: center;
+                background: var(--npj-blue-light);
                 padding: 2px 6px;
-                border-radius: 4px;
+                border-radius: 2px;
             }
 
-            /* Gene Status Cards */
+            /* ========== TABLES (npj Journal Style) ========== */
+            .detailed-findings {
+                background: white;
+                margin-bottom: 32px;
+            }
+
+            .detailed-findings h2 {
+                font-size: 20px;
+                margin-bottom: 20px;
+            }
+
+            .table-controls {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+                gap: 16px;
+            }
+
+            .search-input {
+                flex: 1;
+                max-width: 280px;
+                padding: 8px 12px;
+                border: 1px solid var(--gray-300);
+                border-radius: 3px;
+                font-size: 13px;
+                transition: border-color 0.2s;
+            }
+
+            .search-input:focus {
+                outline: none;
+                border-color: var(--npj-blue);
+            }
+
+            .filter-buttons { display: flex; gap: 4px; }
+
+            .filter-btn {
+                padding: 6px 12px;
+                border: 1px solid var(--gray-300);
+                border-radius: 3px;
+                background: white;
+                color: var(--gray-700);
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+
+            .filter-btn:hover {
+                background: var(--gray-50);
+                border-color: var(--gray-400);
+            }
+
+            .filter-btn.active {
+                background: var(--npj-blue);
+                border-color: var(--npj-blue);
+                color: white;
+            }
+
+            .table-container {
+                max-height: 450px;
+                overflow-y: auto;
+                border: 1px solid var(--gray-200);
+            }
+
+            #gene-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+
+            #gene-table th {
+                background: var(--gray-50);
+                padding: 10px 12px;
+                text-align: left;
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--gray-700);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                border-bottom: 2px solid var(--gray-300);
+                position: sticky;
+                top: 0;
+                cursor: pointer;
+            }
+
+            #gene-table th:hover { background: var(--gray-100); }
+
+            #gene-table td {
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--gray-100);
+                font-size: 12px;
+            }
+
+            #gene-table tbody tr:hover { background: var(--npj-blue-light); }
+
+            #gene-table td.up { color: #c62828; font-weight: 600; }
+            #gene-table td.down { color: var(--npj-blue); font-weight: 600; }
+
+            .badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 2px;
+                font-size: 10px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+            }
+
+            .badge.high { background: #c8e6c9; color: #1b5e20; }
+            .badge.medium { background: #fff3e0; color: #e65100; }
+            .badge.low { background: #ffebee; color: #b71c1c; }
+            .badge.novel_candidate { background: #e8eaf6; color: #283593; }
+            .badge.requires_validation { background: var(--gray-100); color: var(--gray-600); }
+
+            .table-footer {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 12px;
+                padding-top: 12px;
+                border-top: 1px solid var(--gray-200);
+            }
+
+            .table-footer span {
+                font-size: 12px;
+                color: var(--gray-600);
+            }
+
+            .download-btn {
+                padding: 6px 14px;
+                background: var(--npj-blue);
+                color: white;
+                border: none;
+                border-radius: 3px;
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .download-btn:hover { background: var(--npj-blue-dark); }
+
+            /* ========== GENE STATUS CARDS ========== */
             .gene-status-cards {
                 background: white;
-                border-radius: 16px;
-                padding: 30px;
-                margin-bottom: 24px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                margin-bottom: 32px;
             }
 
             .gene-status-cards h2 {
-                font-size: 1.5rem;
-                margin-bottom: 24px;
+                font-size: 20px;
+                margin-bottom: 20px;
             }
 
             .cards-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-                gap: 20px;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap: 16px;
             }
 
             .gene-status-card {
                 background: var(--gray-50);
-                border-radius: 12px;
-                overflow: hidden;
                 border: 1px solid var(--gray-200);
-                transition: all 0.2s;
+                overflow: hidden;
+                transition: box-shadow 0.2s;
             }
 
             .gene-status-card:hover {
-                box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             }
 
             .card-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 16px 20px;
+                padding: 12px 16px;
                 background: white;
                 border-bottom: 1px solid var(--gray-200);
             }
 
-            .gene-info { display: flex; align-items: center; gap: 10px; }
+            .gene-info { display: flex; align-items: center; gap: 8px; }
 
             .gene-symbol {
-                font-size: 1.1rem;
+                font-size: 14px;
                 font-weight: 700;
-                color: var(--primary);
+                color: var(--npj-blue);
+                font-family: var(--font-mono);
             }
 
             .gene-rank {
-                font-size: 0.75rem;
+                font-size: 10px;
                 color: var(--gray-500);
+                font-weight: 500;
             }
 
-            .card-body { padding: 20px; }
+            .card-body { padding: 16px; }
 
             .stat-row {
                 display: flex;
                 align-items: center;
-                margin-bottom: 12px;
+                margin-bottom: 10px;
             }
 
             .stat-label {
-                width: 80px;
-                font-size: 0.8rem;
-                color: var(--gray-500);
+                width: 72px;
+                font-size: 11px;
+                color: var(--gray-600);
+                font-weight: 500;
             }
 
             .stat-bar-container {
                 flex: 1;
-                height: 8px;
+                height: 6px;
                 background: var(--gray-200);
-                border-radius: 4px;
+                border-radius: 3px;
                 margin: 0 10px;
                 overflow: hidden;
             }
 
             .stat-bar {
                 height: 100%;
-                border-radius: 4px;
+                border-radius: 3px;
             }
 
-            .stat-bar.up { background: var(--danger); }
-            .stat-bar.down { background: var(--primary); }
+            .stat-bar.up { background: #c62828; }
+            .stat-bar.down { background: var(--npj-blue); }
 
             .stat-value {
-                font-size: 0.8rem;
+                font-size: 11px;
                 color: var(--gray-700);
             }
 
-            .db-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+            .db-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 
             .db-tag {
-                background: var(--primary);
+                background: var(--npj-blue);
                 color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 0.7rem;
+                padding: 1px 6px;
+                border-radius: 2px;
+                font-size: 9px;
+                font-weight: 600;
+                text-transform: uppercase;
             }
 
             .cancer-match {
                 background: var(--success);
                 color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 0.7rem;
+                padding: 1px 6px;
+                border-radius: 2px;
+                font-size: 9px;
+                font-weight: 600;
             }
 
-            .confidence-dots {
-                font-size: 0.9rem;
-            }
+            .confidence-dots { font-size: 12px; }
 
-            /* RAG Interpretation Styles */
+            /* ========== RAG INTERPRETATION ========== */
             .rag-interpretation {
-                margin-top: 15px;
-                padding: 12px;
-                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-                border-radius: 8px;
-                border-left: 3px solid var(--primary);
+                margin-top: 12px;
+                padding: 10px;
+                background: var(--npj-blue-light);
+                border-left: 3px solid var(--npj-blue);
             }
 
             .rag-label {
-                font-size: 0.75rem;
-                font-weight: 600;
-                color: var(--primary);
-                display: block;
-                margin-bottom: 6px;
+                font-size: 10px;
+                font-weight: 700;
+                color: var(--npj-blue);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 4px;
             }
 
             .rag-text {
-                font-size: 0.8rem;
+                font-size: 11px;
                 color: var(--gray-700);
                 line-height: 1.5;
-                margin: 0 0 8px 0;
+                margin: 0 0 6px 0;
             }
 
-            .rag-citations {
-                display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-            }
+            .rag-citations { display: flex; gap: 6px; flex-wrap: wrap; }
 
             .pmid-link {
-                font-size: 0.7rem;
-                color: var(--primary);
+                font-size: 10px;
+                color: var(--npj-blue);
                 background: white;
-                padding: 2px 8px;
-                border-radius: 4px;
+                padding: 2px 6px;
+                border-radius: 2px;
                 text-decoration: none;
-                border: 1px solid var(--primary);
+                border: 1px solid var(--npj-blue);
+                font-weight: 500;
             }
 
             .pmid-link:hover {
-                background: var(--primary);
+                background: var(--npj-blue);
                 color: white;
             }
 
-            .citation-count {
-                font-size: 0.7rem;
-                color: var(--gray-500);
+            .card-footer {
+                padding: 10px 16px;
+                background: white;
+                border-top: 1px solid var(--gray-200);
             }
 
-            .gene-status-card.has-rag {
-                border-color: var(--primary);
-                border-width: 2px;
+            .tags { display: flex; gap: 4px; flex-wrap: wrap; }
+
+            .tag {
+                background: var(--gray-200);
+                color: var(--gray-700);
+                padding: 2px 6px;
+                border-radius: 2px;
+                font-size: 9px;
+                font-weight: 600;
             }
 
             .tag.rag-tag {
-                background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                background: var(--npj-blue);
                 color: white;
             }
 
-            /* RAG Summary Section */
+            .gene-status-card.has-rag {
+                border-color: var(--npj-blue);
+                border-width: 2px;
+            }
+
+            /* ========== RAG SUMMARY SECTION ========== */
             .rag-summary {
-                background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-                border-radius: 16px;
-                padding: 30px;
-                margin-bottom: 24px;
+                background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+                padding: 28px;
+                margin-bottom: 32px;
                 color: white;
             }
 
@@ -1604,191 +1698,156 @@ class ReportAgent(BaseAgent):
                 display: flex;
                 justify-content: space-between;
                 align-items: flex-start;
-                margin-bottom: 24px;
+                margin-bottom: 20px;
                 flex-wrap: wrap;
-                gap: 20px;
+                gap: 16px;
             }
 
             .rag-title-section h2 {
-                font-size: 1.5rem;
-                margin-bottom: 6px;
+                font-size: 18px;
+                font-weight: 700;
+                margin-bottom: 4px;
                 color: white;
+                border-bottom: none;
+                padding-bottom: 0;
             }
 
             .rag-subtitle {
-                font-size: 0.9rem;
+                font-size: 12px;
                 color: rgba(255,255,255,0.7);
             }
 
-            .rag-stats {
-                display: flex;
-                gap: 24px;
-            }
+            .rag-stats { display: flex; gap: 20px; }
 
-            .rag-stat {
-                text-align: center;
-            }
+            .rag-stat { text-align: center; }
 
             .rag-stat-value {
                 display: block;
-                font-size: 1.8rem;
+                font-size: 24px;
                 font-weight: 700;
-                color: #a5b4fc;
+                color: #90caf9;
             }
 
             .rag-stat-label {
-                font-size: 0.75rem;
+                font-size: 10px;
                 color: rgba(255,255,255,0.6);
                 text-transform: uppercase;
-                letter-spacing: 0.05em;
+                letter-spacing: 0.5px;
             }
 
             .rag-method-note {
                 display: flex;
                 align-items: flex-start;
-                gap: 12px;
+                gap: 10px;
                 background: rgba(255,255,255,0.1);
-                border-radius: 10px;
-                padding: 16px;
-                margin-bottom: 24px;
+                padding: 12px;
+                margin-bottom: 20px;
             }
 
-            .method-icon {
-                font-size: 1.5rem;
-            }
+            .method-icon { font-size: 20px; }
 
             .method-text {
-                font-size: 0.85rem;
+                font-size: 12px;
                 color: rgba(255,255,255,0.85);
-                line-height: 1.6;
+                line-height: 1.5;
             }
 
-            .method-text strong {
-                color: #c7d2fe;
-            }
+            .method-text strong { color: #90caf9; }
 
             .rag-genes-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-                gap: 16px;
-                margin-bottom: 20px;
+                grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+                gap: 12px;
+                margin-bottom: 16px;
             }
 
             .rag-gene-card {
                 background: rgba(255,255,255,0.08);
-                border-radius: 12px;
-                overflow: hidden;
                 border: 1px solid rgba(255,255,255,0.1);
-                transition: all 0.2s;
+                overflow: hidden;
             }
 
             .rag-gene-card:hover {
                 background: rgba(255,255,255,0.12);
-                transform: translateY(-2px);
             }
 
             .rag-gene-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 14px 16px;
+                padding: 10px 14px;
                 background: rgba(0,0,0,0.2);
                 border-bottom: 1px solid rgba(255,255,255,0.1);
             }
 
-            .rag-gene-title {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
+            .rag-gene-title { display: flex; align-items: center; gap: 8px; }
 
             .rag-gene-symbol {
-                font-size: 1.1rem;
+                font-size: 13px;
                 font-weight: 700;
-                color: #c7d2fe;
+                color: #90caf9;
+                font-family: var(--font-mono);
             }
 
             .rag-gene-fc {
-                font-size: 0.85rem;
-                padding: 2px 8px;
-                border-radius: 4px;
+                font-size: 11px;
+                padding: 2px 6px;
+                border-radius: 2px;
             }
 
-            .rag-gene-fc.up {
-                background: rgba(239,68,68,0.3);
-                color: #fca5a5;
-            }
-
-            .rag-gene-fc.down {
-                background: rgba(59,130,246,0.3);
-                color: #93c5fd;
-            }
+            .rag-gene-fc.up { background: rgba(198,40,40,0.4); color: #ef9a9a; }
+            .rag-gene-fc.down { background: rgba(0,86,185,0.4); color: #90caf9; }
 
             .hub-indicator {
-                background: linear-gradient(135deg, #f472b6, #fb7185);
+                background: var(--npj-orange);
                 color: white;
-                font-size: 0.65rem;
-                padding: 2px 6px;
-                border-radius: 4px;
-                font-weight: 600;
+                font-size: 9px;
+                padding: 2px 5px;
+                border-radius: 2px;
+                font-weight: 700;
+                text-transform: uppercase;
             }
 
             .rag-confidence {
-                font-size: 0.7rem;
-                padding: 4px 10px;
-                border-radius: 12px;
+                font-size: 9px;
+                padding: 3px 8px;
+                border-radius: 2px;
                 font-weight: 600;
+                text-transform: uppercase;
             }
 
-            .rag-confidence.high {
-                background: rgba(16,185,129,0.3);
-                color: #6ee7b7;
-            }
+            .rag-confidence.high { background: rgba(46,125,50,0.4); color: #a5d6a7; }
+            .rag-confidence.medium { background: rgba(245,158,11,0.4); color: #ffcc80; }
+            .rag-confidence.low { background: rgba(117,117,117,0.4); color: #bdbdbd; }
 
-            .rag-confidence.medium {
-                background: rgba(245,158,11,0.3);
-                color: #fcd34d;
-            }
-
-            .rag-confidence.low {
-                background: rgba(107,114,128,0.3);
-                color: #d1d5db;
-            }
-
-            .rag-gene-body {
-                padding: 16px;
-            }
+            .rag-gene-body { padding: 14px; }
 
             .rag-interpretation-text {
-                font-size: 0.85rem;
+                font-size: 12px;
                 color: rgba(255,255,255,0.85);
-                line-height: 1.6;
-                margin: 0 0 12px 0;
+                line-height: 1.5;
+                margin: 0 0 10px 0;
             }
 
-            .rag-pmids {
-                display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-            }
+            .rag-pmids { display: flex; gap: 6px; flex-wrap: wrap; }
 
             .pmid-chip {
-                font-size: 0.7rem;
-                padding: 4px 10px;
-                background: rgba(99,102,241,0.4);
-                color: #c7d2fe;
-                border-radius: 12px;
+                font-size: 10px;
+                padding: 3px 8px;
+                background: rgba(63,81,181,0.5);
+                color: #c5cae9;
+                border-radius: 2px;
                 text-decoration: none;
-                transition: all 0.2s;
+                font-weight: 500;
             }
 
             .pmid-chip:hover {
-                background: rgba(99,102,241,0.7);
+                background: rgba(63,81,181,0.8);
                 color: white;
             }
 
             .no-pmid {
-                font-size: 0.75rem;
+                font-size: 11px;
                 color: rgba(255,255,255,0.4);
                 font-style: italic;
             }
@@ -1796,264 +1855,268 @@ class ReportAgent(BaseAgent):
             .rag-disclaimer {
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                background: rgba(245,158,11,0.15);
-                border: 1px solid rgba(245,158,11,0.3);
-                border-radius: 8px;
-                padding: 12px 16px;
-                font-size: 0.8rem;
-                color: #fcd34d;
+                gap: 8px;
+                background: rgba(255,152,0,0.15);
+                border: 1px solid rgba(255,152,0,0.3);
+                padding: 10px 14px;
+                font-size: 11px;
+                color: #ffcc80;
             }
 
-            .disclaimer-icon {
-                font-size: 1rem;
-            }
-
-            .card-footer {
-                padding: 12px 20px;
-                background: white;
-                border-top: 1px solid var(--gray-200);
-            }
-
-            .tags { display: flex; gap: 6px; flex-wrap: wrap; }
-
-            .tag {
-                background: var(--gray-200);
-                color: var(--gray-700);
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 0.7rem;
-            }
-
-            /* Detailed Table */
-            .detailed-findings {
-                background: white;
-                border-radius: 16px;
-                padding: 30px;
-                margin-bottom: 24px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            }
-
-            .detailed-findings h2 {
-                font-size: 1.5rem;
-                margin-bottom: 24px;
-            }
-
-            .table-controls {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 20px;
-                gap: 20px;
-            }
-
-            .search-input {
-                flex: 1;
-                max-width: 300px;
-                padding: 10px 16px;
-                border: 2px solid var(--gray-200);
-                border-radius: 8px;
-                font-size: 0.9rem;
-                transition: border-color 0.2s;
-            }
-
-            .search-input:focus {
-                outline: none;
-                border-color: var(--primary);
-            }
-
-            .filter-buttons { display: flex; gap: 8px; }
-
-            .filter-btn {
-                padding: 8px 16px;
-                border: none;
-                border-radius: 6px;
-                background: var(--gray-100);
-                color: var(--gray-700);
-                font-size: 0.85rem;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-
-            .filter-btn:hover, .filter-btn.active {
-                background: var(--primary);
-                color: white;
-            }
-
-            .table-container {
-                max-height: 500px;
-                overflow-y: auto;
-                border-radius: 8px;
-                border: 1px solid var(--gray-200);
-            }
-
-            #gene-table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-
-            #gene-table th {
-                background: var(--gray-50);
-                padding: 14px 16px;
-                text-align: left;
-                font-size: 0.85rem;
-                font-weight: 600;
-                color: var(--gray-700);
-                position: sticky;
-                top: 0;
-                cursor: pointer;
-                user-select: none;
-            }
-
-            #gene-table th:hover { background: var(--gray-100); }
-
-            #gene-table td {
-                padding: 12px 16px;
-                font-size: 0.85rem;
-                border-bottom: 1px solid var(--gray-100);
-            }
-
-            #gene-table tr:hover { background: var(--gray-50); }
-
-            #gene-table td.up { color: var(--danger); }
-            #gene-table td.down { color: var(--primary); }
-
-            .badge {
-                display: inline-block;
-                padding: 4px 10px;
-                border-radius: 12px;
-                font-size: 0.75rem;
-                font-weight: 500;
-            }
-
-            .badge.high { background: #D1FAE5; color: #065F46; }
-            .badge.medium { background: #FEF3C7; color: #92400E; }
-            .badge.low { background: #FEE2E2; color: #991B1B; }
-            .badge.novel_candidate { background: #EDE9FE; color: #5B21B6; }
-            .badge.requires_validation { background: var(--gray-100); color: var(--gray-500); }
-
-            .table-footer {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 16px;
-                padding-top: 16px;
-                border-top: 1px solid var(--gray-200);
-            }
-
-            .table-footer span { font-size: 0.85rem; color: var(--gray-500); }
-
-            .download-btn {
-                padding: 8px 16px;
-                background: var(--primary);
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 0.85rem;
-                cursor: pointer;
-                transition: background 0.2s;
-            }
-
-            .download-btn:hover { background: var(--primary-light); }
-
-            /* Methods Section */
+            /* ========== METHODS SECTION ========== */
             .methods-section {
                 background: white;
-                border-radius: 16px;
-                padding: 30px;
-                margin-bottom: 24px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                margin-bottom: 32px;
             }
 
             .methods-section h2 {
-                font-size: 1.5rem;
-                margin-bottom: 24px;
+                font-size: 20px;
+                margin-bottom: 20px;
             }
 
             .methods-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 20px;
-                margin-bottom: 24px;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 16px;
+                margin-bottom: 20px;
             }
 
             .method-card {
                 background: var(--gray-50);
-                border-radius: 8px;
-                padding: 20px;
+                padding: 16px;
+                border-left: 3px solid var(--npj-blue);
             }
 
             .method-card h4 {
-                font-size: 0.95rem;
-                margin-bottom: 12px;
+                font-size: 13px;
+                font-weight: 700;
+                margin-bottom: 10px;
                 color: var(--gray-900);
             }
 
             .method-card ul {
                 list-style: none;
-                font-size: 0.85rem;
-                color: var(--gray-600);
+                font-size: 12px;
+                color: var(--gray-700);
             }
 
             .method-card li {
-                padding: 4px 0;
+                padding: 3px 0;
+                padding-left: 12px;
+                position: relative;
+            }
+
+            .method-card li::before {
+                content: '•';
+                position: absolute;
+                left: 0;
+                color: var(--npj-blue);
             }
 
             .confidence-explanation {
                 background: var(--gray-50);
-                border-radius: 8px;
-                padding: 20px;
+                padding: 16px;
             }
 
             .confidence-explanation h4 {
+                font-size: 13px;
+                font-weight: 700;
                 margin-bottom: 12px;
             }
 
             .score-table {
                 width: 100%;
-                margin-bottom: 16px;
+                margin-bottom: 12px;
+                font-size: 12px;
             }
 
             .score-table td {
-                padding: 8px;
-                font-size: 0.85rem;
+                padding: 6px 8px;
+                border-bottom: 1px solid var(--gray-200);
             }
 
             .score-table td:last-child {
                 text-align: right;
-                font-weight: 600;
-                color: var(--primary);
+                font-weight: 700;
+                color: var(--npj-blue);
             }
 
             .confidence-legend {
                 display: flex;
                 flex-wrap: wrap;
-                gap: 16px;
-                font-size: 0.8rem;
+                gap: 12px;
+                font-size: 11px;
                 color: var(--gray-600);
             }
 
-            /* Footer */
-            footer {
+            /* ========== EXECUTIVE SUMMARY ========== */
+            .executive-summary {
+                background: white;
+                border: 1px solid var(--gray-200);
+                padding: 24px;
+                margin-bottom: 24px;
+            }
+
+            .summary-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+
+            .summary-title { display: flex; align-items: center; gap: 12px; }
+
+            .summary-title h2 {
+                font-size: 18px;
+                color: var(--gray-900);
+                border-bottom: none;
+                padding-bottom: 0;
+                margin-bottom: 0;
+            }
+
+            .confidence-badge {
+                padding: 4px 12px;
+                border-radius: 2px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .confidence-badge.high { background: #c8e6c9; color: #1b5e20; }
+            .confidence-badge.medium { background: #fff3e0; color: #e65100; }
+            .confidence-badge.low { background: #ffebee; color: #b71c1c; }
+
+            .key-metrics {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 16px;
+                margin-bottom: 20px;
+            }
+
+            .metric-card {
+                background: var(--gray-50);
+                padding: 20px;
                 text-align: center;
-                padding: 40px 20px;
+                border: 1px solid var(--gray-200);
+            }
+
+            .metric-card.primary {
+                background: var(--npj-blue-light);
+                border-color: var(--npj-blue);
+            }
+
+            .metric-card.highlight {
+                background: #fff8e1;
+                border-color: var(--npj-orange);
+            }
+
+            .metric-value {
+                font-size: 28px;
+                font-weight: 700;
+                color: var(--npj-blue);
+            }
+
+            .metric-card.highlight .metric-value { color: var(--npj-orange); }
+
+            .metric-label {
+                color: var(--gray-600);
+                font-size: 12px;
+                font-weight: 500;
+                margin-top: 4px;
+            }
+
+            .metric-detail {
+                font-size: 11px;
                 color: var(--gray-500);
-                font-size: 0.85rem;
+                margin-top: 6px;
+            }
+
+            .one-line-summary {
+                background: var(--gray-50);
+                padding: 14px 16px;
+                margin-bottom: 14px;
+            }
+
+            .one-line-summary h4 {
+                font-size: 11px;
+                color: var(--gray-600);
+                margin-bottom: 6px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .one-line-summary p {
+                font-size: 13px;
+                color: var(--gray-800);
+                line-height: 1.5;
+            }
+
+            .warning-box {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                background: #fff8e1;
+                border: 1px solid #ffe082;
+                padding: 10px 14px;
+                font-size: 12px;
+                color: #f57c00;
+            }
+
+            .warning-icon { font-size: 16px; }
+
+            /* ========== FOOTER ========== */
+            .paper-footer {
+                background: var(--gray-900);
+                color: white;
+                padding: 32px 24px;
+                text-align: center;
+            }
+
+            .footer-content {
+                max-width: 700px;
+                margin: 0 auto;
+            }
+
+            .paper-footer p {
+                font-size: 12px;
+                line-height: 1.6;
+                color: rgba(255,255,255,0.8);
+            }
+
+            .footer-credit {
+                margin-top: 16px;
+                font-size: 11px;
+                color: rgba(255,255,255,0.5);
             }
 
             .no-data {
                 color: var(--gray-400);
                 font-style: italic;
-                padding: 20px;
+                padding: 16px;
                 text-align: center;
+                font-size: 12px;
             }
 
+            /* ========== RESPONSIVE ========== */
             @media (max-width: 768px) {
+                .cover-title { font-size: 24px; }
+                .cover-stats { gap: 24px; }
+                .cover-stat .stat-number { font-size: 28px; }
                 .key-metrics { grid-template-columns: 1fr; }
                 .dashboard-grid { grid-template-columns: 1fr; }
                 .dashboard-panel.main-plot { grid-row: auto; }
                 .cards-grid { grid-template-columns: 1fr; }
+                .rag-genes-grid { grid-template-columns: 1fr; }
                 .table-controls { flex-direction: column; align-items: stretch; }
+                .nav-links { display: none; }
+            }
+
+            @media print {
+                .nav-bar { display: none; }
+                .cover-page { min-height: auto; padding: 40px; }
+                .paper-content { padding: 20px; }
+                .toggle-btn, .filter-btn, .download-btn { display: none; }
             }
         </style>
         '''
@@ -2254,28 +2317,79 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_abstract_html(self, data: Dict) -> str:
-        """Generate paper-style abstract/summary section."""
+        """Generate paper-style extended abstract/summary section."""
+        # Try to load extended abstract first
+        extended_abstract = data.get('abstract_extended', {})
+
+        if extended_abstract and extended_abstract.get('abstract_extended'):
+            abstract_text = extended_abstract['abstract_extended']
+            key_findings = extended_abstract.get('key_findings', [])
+            validation = extended_abstract.get('validation_priorities', {})
+            ml_interp = extended_abstract.get('ml_interpretation', '')
+
+            # Format abstract with paragraphs
+            paragraphs = abstract_text.split('\n\n')
+            formatted_paragraphs = ''.join([f'<p>{p.strip()}</p>' for p in paragraphs if p.strip()])
+
+            # Key findings list
+            findings_html = ''
+            if key_findings:
+                findings_html = '<div class="key-findings"><h4>📌 주요 발견</h4><ul>'
+                for finding in key_findings[:6]:
+                    findings_html += f'<li>{finding}</li>'
+                findings_html += '</ul></div>'
+
+            # Validation priorities
+            validation_html = ''
+            if validation:
+                validation_html = '<div class="validation-priorities"><h4>🧬 실험적 검증 제안</h4><div class="validation-grid">'
+                if validation.get('qPCR'):
+                    validation_html += f'<div class="validation-item"><strong>qRT-PCR:</strong> {", ".join(validation["qPCR"][:5])}</div>'
+                if validation.get('western_blot'):
+                    validation_html += f'<div class="validation-item"><strong>Western Blot:</strong> {", ".join(validation["western_blot"][:3])}</div>'
+                if validation.get('functional_study'):
+                    validation_html += f'<div class="validation-item"><strong>Functional Study:</strong> {", ".join(validation["functional_study"][:3])}</div>'
+                if validation.get('biomarker_candidates'):
+                    validation_html += f'<div class="validation-item"><strong>Biomarker 후보:</strong> {", ".join(validation["biomarker_candidates"][:3])}</div>'
+                validation_html += '</div></div>'
+
+            # ML interpretation
+            ml_html = ''
+            if ml_interp:
+                ml_html = f'<div class="ml-interpretation"><h4>🤖 ML 예측 해석</h4><p>{ml_interp}</p></div>'
+
+            return f'''
+        <section class="abstract-section" id="abstract">
+            <h2>Extended Abstract</h2>
+            <div class="abstract-box extended">
+                <div class="abstract-content">
+                    {formatted_paragraphs}
+                </div>
+                {findings_html}
+                {validation_html}
+                {ml_html}
+            </div>
+        </section>
+            '''
+
+        # Fallback to basic abstract
         interpretation = data.get('interpretation_report', {})
         rag_data = interpretation.get('rag_interpretation', {})
         summary = rag_data.get('summary', '')
 
-        # Get key findings
         deg_count = len(data.get('deg_significant', []))
         hub_genes = data.get('hub_genes', [])
         hub_names = [g.get('gene_symbol', g.get('gene_id', '')) for g in hub_genes[:5]]
 
-        # Get top pathways
         pathways = data.get('pathway_summary', [])[:3]
         pathway_names = [p.get('term_name', '')[:50] for p in pathways]
 
-        # Build abstract if no RAG summary
         if not summary:
             summary = f'''
 본 분석에서는 {deg_count:,}개의 차등발현 유전자(DEGs)를 식별하였습니다.
 네트워크 분석을 통해 {len(hub_genes)}개의 Hub 유전자({", ".join(hub_names[:3])} 등)가
 핵심 조절자로 확인되었습니다. Pathway enrichment 분석 결과,
 {", ".join(pathway_names[:2])} 등의 경로가 유의하게 농축되었습니다.
-이러한 결과는 질환의 분자적 메커니즘에 대한 중요한 통찰을 제공합니다.
             '''
 
         return f'''
@@ -2373,6 +2487,14 @@ class ReportAgent(BaseAgent):
     def run(self) -> Dict[str, Any]:
         """Generate the HTML report."""
         data = self._load_all_data()
+
+        # Generate extended abstract if not already present
+        if 'abstract_extended' not in data:
+            self.logger.info("Generating extended abstract with Claude API...")
+            extended_abstract = self._generate_extended_abstract(data)
+            if extended_abstract:
+                data['abstract_extended'] = extended_abstract
+
         self.save_json(data, "report_data.json")
 
         html_content = self._generate_html(data)
@@ -2388,6 +2510,157 @@ class ReportAgent(BaseAgent):
             "data_sources_loaded": list(data.keys()),
             "figures_embedded": len(data.get('figures', {}))
         }
+
+    def _generate_extended_abstract(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Generate extended abstract using Claude API.
+
+        Creates a comprehensive abstract with:
+        - Background, Methods, Results, Conclusions (Korean)
+        - Key findings list
+        - Validation priorities (qPCR, Western blot, Functional study, Biomarker candidates)
+        - ML prediction interpretation
+        """
+        if not ANTHROPIC_AVAILABLE:
+            self.logger.warning("anthropic package not available, skipping extended abstract generation")
+            return None
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            self.logger.warning("ANTHROPIC_API_KEY not set, skipping extended abstract generation")
+            return None
+
+        # Prepare analysis summary for Claude
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        integrated_df = data.get('integrated_gene_table_df')
+        interpretation = data.get('interpretation_report', {})
+
+        # Basic stats
+        n_deg = len(deg_df) if deg_df is not None else 0
+        n_up = len(deg_df[deg_df['log2FoldChange'] > 0]) if deg_df is not None and 'log2FoldChange' in deg_df.columns else 0
+        n_down = n_deg - n_up
+
+        # Hub genes info
+        hub_genes_info = []
+        if hub_df is not None and len(hub_df) > 0:
+            for _, row in hub_df.head(10).iterrows():
+                gene_name = row.get('gene_name', row.get('gene_symbol', 'Unknown'))
+                degree = row.get('degree', 0)
+                log2fc = row.get('log2FoldChange', 0)
+                hub_genes_info.append(f"- {gene_name} (degree={degree}, log2FC={log2fc:.2f})")
+
+        # Pathway info
+        pathway_info = []
+        if pathway_df is not None and len(pathway_df) > 0:
+            for _, row in pathway_df.head(5).iterrows():
+                term = row.get('Term', row.get('term', 'Unknown'))
+                pval = row.get('P-value', row.get('pvalue', 0))
+                pathway_info.append(f"- {term} (p={pval:.2e})")
+
+        # ML prediction info (check for prediction files)
+        ml_info = ""
+        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+        ml_prediction_path = run_dir / "ml_prediction" / "prediction_summary.json"
+        if ml_prediction_path.exists():
+            try:
+                with open(ml_prediction_path, 'r') as f:
+                    ml_data = json.load(f)
+                ml_info = f"""
+ML 예측 결과:
+- 총 샘플 수: {ml_data.get('total_samples', 0)}
+- 예측 분포: {ml_data.get('prediction_distribution', {})}
+- 평균 신뢰도: {ml_data.get('average_confidence', 0):.2f}
+- 예상 암종: {ml_data.get('expected_cancer', 'Unknown')}
+- 일치율: {ml_data.get('brca_hit_rate', 0) * 100:.1f}%
+"""
+            except Exception as e:
+                self.logger.warning(f"Error loading ML prediction: {e}")
+
+        # Study info from config
+        study_name = self.config.get('study_name', 'RNA-seq Analysis')
+        cancer_type = self.config.get('cancer_type', 'cancer')
+
+        # Build prompt
+        prompt = f"""당신은 바이오인포매틱스 전문가입니다. 아래 RNA-seq 분석 결과를 바탕으로 학술 논문 스타일의 확장된 초록(Extended Abstract)을 작성해주세요.
+
+## 분석 정보
+- 연구명: {study_name}
+- 암종: {cancer_type}
+- 총 DEG 수: {n_deg}개 (상향조절: {n_up}개, 하향조절: {n_down}개)
+
+## Hub 유전자 (Top 10)
+{chr(10).join(hub_genes_info) if hub_genes_info else '정보 없음'}
+
+## 주요 Pathway
+{chr(10).join(pathway_info) if pathway_info else '정보 없음'}
+
+{ml_info}
+
+## 요청 사항
+다음 JSON 형식으로 응답해주세요:
+
+```json
+{{
+  "title": "한국어 제목",
+  "title_en": "English Title",
+  "abstract_extended": "**배경(Background)**: ...\\n\\n**방법(Methods)**: ...\\n\\n**결과(Results)**: ...\\n\\n**ML 예측 분석(Predictive Analysis)**: ...\\n\\n**실험적 검증 제안(Suggested Validations)**: ...\\n\\n**결론 및 의의(Conclusions)**: ...",
+  "key_findings": [
+    "주요 발견 1",
+    "주요 발견 2",
+    ...
+  ],
+  "validation_priorities": {{
+    "qPCR": ["gene1", "gene2", ...],
+    "western_blot": ["gene1", "gene2", ...],
+    "functional_study": ["gene1", "gene2", ...],
+    "biomarker_candidates": ["gene1", "gene2", ...]
+  }},
+  "ml_interpretation": "ML 예측 결과에 대한 해석 (플랫폼 차이, 배치 효과 등 설명)"
+}}
+```
+
+중요:
+1. 한국어로 작성 (영문 제목만 영어)
+2. 발견된 Hub 유전자를 validation_priorities에 실제 유전자명으로 포함
+3. ML 예측이 기대와 다른 경우, 그 원인을 과학적으로 해석
+4. 실험적 검증 방법을 구체적으로 제안
+"""
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+
+            message = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4000,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            response_text = message.content[0].text
+
+            # Extract JSON from response
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                extended_abstract = json.loads(json_str)
+
+                # Save to file
+                output_path = run_dir / "abstract_extended.json"
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(extended_abstract, f, ensure_ascii=False, indent=2)
+
+                self.logger.info(f"Extended abstract generated: {output_path}")
+                return extended_abstract
+            else:
+                self.logger.warning("Could not extract JSON from Claude response")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Error generating extended abstract: {e}")
+            return None
 
     def validate_outputs(self) -> bool:
         """Validate report outputs."""

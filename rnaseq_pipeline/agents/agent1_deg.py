@@ -47,6 +47,7 @@ class DEGAgent(BaseAgent):
             "padj_cutoff": 0.05,
             "log2fc_cutoff": 1.0,
             "condition_column": "condition",
+            "paired_column": None,  # Column for paired samples (e.g., "donor")
             "min_count_filter": 10,
             "use_synthetic_fallback": True,  # Use synthetic DEG if DESeq2 fails
             "use_apeglm_shrinkage": True,  # Apply apeglm LFC shrinkage
@@ -132,7 +133,15 @@ class DEGAgent(BaseAgent):
 
         # Create DESeqDataSet
         self.logger.info("Creating DESeqDataSet...")
-        design_formula = ro.Formula(f"~ {condition_col}")
+
+        # Check for paired design
+        paired_col = self.config.get("paired_column")
+        if paired_col and paired_col in meta_df.columns:
+            self.logger.info(f"Using PAIRED design: ~ {paired_col} + {condition_col}")
+            design_formula = ro.Formula(f"~ {paired_col} + {condition_col}")
+        else:
+            self.logger.info(f"Using UNPAIRED design: ~ {condition_col}")
+            design_formula = ro.Formula(f"~ {condition_col}")
 
         dds = deseq2.DESeqDataSetFromMatrix(
             countData=counts_r,
