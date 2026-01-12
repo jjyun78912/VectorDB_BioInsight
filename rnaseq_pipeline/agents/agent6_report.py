@@ -377,6 +377,35 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _build_network_toggle(self, network_interactive: str) -> str:
+        """Build network view toggle buttons (Python 3.11 compatible)."""
+        if network_interactive:
+            return (
+                '<div class="view-toggle">'
+                '<button class="toggle-btn active" onclick="showNetworkView(\'interactive\')">3D Interactive</button>'
+                '<button class="toggle-btn" onclick="showNetworkView(\'static\')">Static</button>'
+                '</div>'
+            )
+        return ''
+
+    def _build_network_content(self, network_interactive: str, network_src: str) -> str:
+        """Build network content HTML (Python 3.11 compatible)."""
+        if network_interactive:
+            escaped_html = network_interactive.replace('"', '&quot;')
+            return (
+                '<div id="network-interactive" class="network-view active">'
+                f'<iframe id="network-iframe" srcdoc="{escaped_html}" style="width:100%; height:500px; border:none; border-radius:8px;"></iframe>'
+                '<p class="panel-note">💡 마우스 드래그로 회전, 스크롤로 확대/축소, 유전자 클릭으로 포커스</p>'
+                '</div>'
+                '<div id="network-static" class="network-view" style="display:none;">'
+                f'<img src="{network_src}" alt="Network" />'
+                '</div>'
+            )
+        elif network_src:
+            return f'<img src="{network_src}" alt="Network" />'
+        else:
+            return '<p class="no-data">No plot available</p>'
+
     def _generate_visual_dashboard_html(self, data: Dict) -> str:
         """Generate Level 2: Visual Dashboard (30초 파악)."""
         figures = data.get('figures', {})
@@ -498,19 +527,10 @@ class ReportAgent(BaseAgent):
                 <div class="dashboard-panel network-container">
                     <div class="network-header">
                         <h4>Network Hub Genes</h4>
-                        {f'''<div class="view-toggle">
-                            <button class="toggle-btn active" onclick="showNetworkView('interactive')">3D Interactive</button>
-                            <button class="toggle-btn" onclick="showNetworkView('static')">Static</button>
-                        </div>''' if network_interactive else ''}
+                        {self._build_network_toggle(network_interactive)}
                     </div>
                     <p class="panel-desc">유전자 간 공발현(co-expression) 네트워크에서 중심적 역할을 하는 Hub 유전자입니다. Hub는 많은 유전자와 연결되어 있어 핵심 조절자일 가능성이 높습니다.</p>
-                    {f'''<div id="network-interactive" class="network-view active">
-                        <iframe id="network-iframe" srcdoc="{network_interactive.replace('"', '&quot;')}" style="width:100%; height:500px; border:none; border-radius:8px;"></iframe>
-                        <p class="panel-note">💡 마우스 드래그로 회전, 스크롤로 확대/축소, 유전자 클릭으로 포커스</p>
-                    </div>
-                    <div id="network-static" class="network-view" style="display:none;">
-                        <img src="{network_src}" alt="Network" />
-                    </div>''' if network_interactive else f'<img src="{network_src}" alt="Network" />' if network_src else '<p class="no-data">No plot available</p>'}
+                    {self._build_network_content(network_interactive, network_src)}
                 </div>
 
                 <div class="dashboard-panel full-width">
