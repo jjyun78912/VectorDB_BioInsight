@@ -247,6 +247,45 @@ PDF Upload → Text Splitter → PubMedBERT Embedding → ChromaDB → Semantic 
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Network Analysis Performance Optimization
+
+Agent 2 (Network)에서 대규모 유전자 네트워크를 처리할 때 다음 최적화가 적용됩니다:
+
+| 단계 | 최적화 기법 | 성능 향상 |
+|------|-------------|-----------|
+| **Correlation 계산** | Vectorized numpy 행렬 연산 | O(n²) 루프 → 행렬 곱 (100x+) |
+| **Graph 빌딩** | `from_pandas_edgelist()` | iterrows → 벡터화 (10x+) |
+| **Hub Centrality** | Adaptive 알고리즘 | 조건부 최적화 (아래 참조) |
+
+**Hub Gene Centrality 최적화 전략**:
+
+```python
+# Dense graph (>1M edges): betweenness 대신 weighted degree 사용
+if n_edges > 1_000_000:
+    # Weighted degree sum as betweenness proxy (17초 vs 무한대)
+    betweenness = {n: sum(G[n][neighbor]['weight'] for neighbor in G[n]) for n in G.nodes()}
+
+# Large graph (>1K nodes): k-sampling approximate betweenness
+elif n_nodes > 1000:
+    betweenness = nx.betweenness_centrality(G, k=100, weight='weight')
+
+# Small graph: exact betweenness
+else:
+    betweenness = nx.betweenness_centrality(G, weight='weight')
+```
+
+**벤치마크 (TCGA BRCA 50 samples, 7.5K genes, 3.38M edges)**:
+
+| Agent | 소요 시간 | 출력 |
+|-------|----------|------|
+| Agent 1 (DEG) | ~30초 | 7,583 DEGs |
+| Agent 2 (Network) | ~2분 | 3.38M edges, 20 hub genes |
+| Agent 3 (Pathway) | ~22초 | 66 terms |
+| Agent 4 (Validation) | ~2분 | 20 RAG interpretations |
+| Agent 5 (Visualization) | ~2분 | 16 figures |
+| Agent 6 (Report) | ~1분 | 11MB HTML |
+| **Total** | **~8분** | 전체 파이프라인 |
+
 ### Single-cell RNA-seq Pipeline (1-Step Process)
 
 ```
