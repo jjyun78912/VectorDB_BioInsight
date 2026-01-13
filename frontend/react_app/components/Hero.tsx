@@ -8,6 +8,8 @@ import { ChatResult } from './ChatResult';
 import { Glow } from './Glow';
 import ResearchTrends from './ResearchTrends';
 import { useLanguage } from '../contexts/LanguageContext';
+import { RNAseqUploadModal } from './RNAseqUploadModal';
+import { PipelineProgress } from './PipelineProgress';
 import type { ReviewPaper } from '../App';
 
 // Paper detail interface
@@ -70,6 +72,10 @@ export const Hero: React.FC<HeroProps> = ({
   // Research Trends modal state
   const [showResearchTrends, setShowResearchTrends] = useState(false);
   const [researchTrendsTab, setResearchTrendsTab] = useState<'hot-topics' | 'trend-evolution' | 'trending-papers'>('hot-topics');
+
+  // RNA-seq analysis modal state
+  const [showRNAseqModal, setShowRNAseqModal] = useState(false);
+  const [rnaseqJobId, setRnaseqJobId] = useState<string | null>(null);
 
   // Auto-detect DOI in query
   const isDOI = (text: string): boolean => {
@@ -391,6 +397,7 @@ export const Hero: React.FC<HeroProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100/50 rounded-full transition-all text-sm font-medium"
                   title={t.uploadRnaseq}
                   disabled={isLoading}
+                  onClick={() => setShowRNAseqModal(true)}
                 >
                   <Dna className="w-4 h-4" />
                   <span className="hidden sm:inline">{t.uploadRnaseqShort}</span>
@@ -463,6 +470,27 @@ export const Hero: React.FC<HeroProps> = ({
       <ResearchTrends
         onClose={() => setShowResearchTrends(false)}
         initialTab={researchTrendsTab}
+      />
+    )}
+
+    {/* RNA-seq Upload Modal */}
+    <RNAseqUploadModal
+      isOpen={showRNAseqModal}
+      onClose={() => setShowRNAseqModal(false)}
+      onAnalysisStart={(jobId) => {
+        setRnaseqJobId(jobId);
+        setShowRNAseqModal(false);
+      }}
+    />
+
+    {/* Pipeline Progress Modal */}
+    {rnaseqJobId && (
+      <PipelineProgress
+        jobId={rnaseqJobId}
+        onClose={() => setRnaseqJobId(null)}
+        onViewReport={(jobId) => {
+          window.open(`http://localhost:8000/api/rnaseq/report/${jobId}`, '_blank');
+        }}
       />
     )}
   </>

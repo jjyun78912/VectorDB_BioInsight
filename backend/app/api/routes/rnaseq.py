@@ -8,14 +8,26 @@ Provides endpoints for the 6-Agent RNA-seq analysis pipeline:
 4. Database Validation (DisGeNET, OMIM, COSMIC)
 5. Visualization (Volcano, Heatmap, Network)
 6. Report Generation (HTML)
+
+Features:
+- File upload for count matrix and metadata
+- SSE (Server-Sent Events) for real-time progress streaming
+- Background task execution for long-running analyses
 """
 import os
 import sys
+import json
+import asyncio
+import shutil
+import uuid
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, AsyncGenerator
 from datetime import datetime
+from threading import Thread
+from queue import Queue
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 
 # Add project root for imports
@@ -27,6 +39,10 @@ from backend.app.core.config import setup_logging
 logger = setup_logging(__name__)
 
 router = APIRouter(prefix="/rnaseq", tags=["RNA-seq Analysis"])
+
+# Upload directory for RNA-seq data
+UPLOAD_DIR = PROJECT_ROOT / "data" / "rnaseq_uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -114,6 +130,47 @@ class AnalysisResult(BaseModel):
 
 _analysis_jobs: dict[str, AnalysisStatus] = {}
 _analysis_results: dict[str, AnalysisResult] = {}
+_job_queues: dict[str, Queue] = {}  # For SSE streaming
+
+# Agent info for frontend display
+AGENT_INFO = {
+    "agent1_deg": {
+        "name": "DEG Analysis",
+        "description": "DESeq2로 차등 발현 유전자 분석",
+        "icon": "activity",
+        "order": 1
+    },
+    "agent2_network": {
+        "name": "Network Analysis",
+        "description": "유전자 네트워크 및 Hub gene 탐지",
+        "icon": "share-2",
+        "order": 2
+    },
+    "agent3_pathway": {
+        "name": "Pathway Enrichment",
+        "description": "GO/KEGG 경로 농축 분석",
+        "icon": "git-branch",
+        "order": 3
+    },
+    "agent4_validation": {
+        "name": "DB Validation",
+        "description": "DisGeNET, OMIM, COSMIC 검증",
+        "icon": "database",
+        "order": 4
+    },
+    "agent5_visualization": {
+        "name": "Visualization",
+        "description": "Volcano plot, Heatmap, Network 시각화",
+        "icon": "bar-chart-2",
+        "order": 5
+    },
+    "agent6_report": {
+        "name": "Report Generation",
+        "description": "HTML 보고서 생성",
+        "icon": "file-text",
+        "order": 6
+    }
+}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -126,22 +183,170 @@ async def get_rnaseq_info():
     return {
         "module": "RNA-seq Analysis Pipeline",
         "version": "2.0.0",
-        "agents": [
-            "Agent 1: DEG Analysis (DESeq2)",
-            "Agent 2: Network Analysis",
-            "Agent 3: Pathway Enrichment",
-            "Agent 4: Database Validation",
-            "Agent 5: Visualization",
-            "Agent 6: Report Generation"
-        ],
+        "agents": AGENT_INFO,
         "status": "operational",
         "endpoints": {
+            "upload": "/api/rnaseq/upload",
             "analyze": "/api/rnaseq/analyze",
+            "stream": "/api/rnaseq/stream/{job_id}",
             "status": "/api/rnaseq/status/{job_id}",
             "result": "/api/rnaseq/result/{job_id}",
+            "report": "/api/rnaseq/report/{job_id}",
             "genes": "/api/rnaseq/genes/{symbol}"
         }
     }
+
+
+@router.get("/agents")
+async def get_agents_info():
+    """Get detailed information about pipeline agents."""
+    return {
+        "agents": AGENT_INFO,
+        "total": len(AGENT_INFO),
+        "order": list(AGENT_INFO.keys())
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# File Upload Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+class UploadResponse(BaseModel):
+    """Response for file upload."""
+    job_id: str
+    message: str
+    files_received: List[str]
+    input_dir: str
+
+
+@router.post("/upload", response_model=UploadResponse)
+async def upload_rnaseq_files(
+    count_matrix: UploadFile = File(..., description="Count matrix CSV file"),
+    metadata: UploadFile = File(..., description="Sample metadata CSV file"),
+    cancer_type: str = Form(default="unknown", description="Cancer type for analysis"),
+    study_name: str = Form(default="", description="Study name or description"),
+    condition_column: str = Form(default="condition", description="Condition column in metadata"),
+    treatment_label: str = Form(default="tumor", description="Treatment/case label"),
+    control_label: str = Form(default="normal", description="Control label")
+):
+    """
+    Upload RNA-seq count matrix and metadata files.
+
+    Creates a unique job directory and saves the uploaded files.
+    Returns job_id to use for starting analysis.
+
+    Expected file formats:
+    - count_matrix.csv: gene_id column + sample columns with raw counts
+    - metadata.csv: sample_id column + condition column
+    """
+    # Generate unique job ID
+    job_id = str(uuid.uuid4())[:8]
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Save count matrix
+        count_path = job_dir / "count_matrix.csv"
+        with open(count_path, "wb") as f:
+            content = await count_matrix.read()
+            f.write(content)
+
+        # Save metadata
+        meta_path = job_dir / "metadata.csv"
+        with open(meta_path, "wb") as f:
+            content = await metadata.read()
+            f.write(content)
+
+        # Save config
+        config = {
+            "cancer_type": cancer_type,
+            "study_name": study_name or f"RNA-seq Analysis {job_id}",
+            "condition_column": condition_column,
+            "contrast": [treatment_label, control_label],
+            "uploaded_at": datetime.now().isoformat()
+        }
+        config_path = job_dir / "config.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+
+        logger.info(f"Files uploaded for job {job_id}: {count_matrix.filename}, {metadata.filename}")
+
+        return UploadResponse(
+            job_id=job_id,
+            message="Files uploaded successfully",
+            files_received=[count_matrix.filename, metadata.filename],
+            input_dir=str(job_dir)
+        )
+
+    except Exception as e:
+        # Cleanup on error
+        if job_dir.exists():
+            shutil.rmtree(job_dir)
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+class StartAnalysisRequest(BaseModel):
+    """Request to start analysis for an uploaded job."""
+    job_id: str = Field(..., description="Job ID from upload")
+    cancer_type: Optional[str] = Field(None, description="Override cancer type")
+    study_name: Optional[str] = Field(None, description="Override study name")
+
+
+@router.post("/start/{job_id}", response_model=AnalysisStatus)
+async def start_analysis_from_upload(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    cancer_type: Optional[str] = None,
+    study_name: Optional[str] = None
+):
+    """
+    Start RNA-seq analysis for previously uploaded files.
+
+    Use the job_id returned from /upload endpoint.
+    Progress can be monitored via /stream/{job_id} SSE endpoint.
+    """
+    job_dir = UPLOAD_DIR / job_id
+
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found. Please upload files first.")
+
+    # Load config
+    config_path = job_dir / "config.json"
+    if config_path.exists():
+        with open(config_path) as f:
+            config = json.load(f)
+    else:
+        config = {}
+
+    # Apply overrides
+    if cancer_type:
+        config["cancer_type"] = cancer_type
+    if study_name:
+        config["study_name"] = study_name
+
+    # Create job status
+    status = AnalysisStatus(
+        job_id=job_id,
+        status="pending",
+        progress=0,
+        started_at=datetime.now().isoformat()
+    )
+    _analysis_jobs[job_id] = status
+
+    # Create message queue for SSE
+    _job_queues[job_id] = Queue()
+
+    # Start background analysis
+    background_tasks.add_task(
+        run_pipeline_with_streaming,
+        job_id,
+        job_dir,
+        config
+    )
+
+    logger.info(f"Started RNA-seq analysis job: {job_id}")
+    return status
 
 
 @router.post("/analyze", response_model=AnalysisStatus)
@@ -150,12 +355,10 @@ async def start_analysis(
     background_tasks: BackgroundTasks
 ):
     """
-    Start a new RNA-seq analysis job.
+    Start a new RNA-seq analysis job (legacy endpoint).
 
     The analysis runs in the background. Use /status/{job_id} to check progress.
     """
-    import uuid
-
     job_id = str(uuid.uuid4())[:8]
 
     # Create job status
@@ -167,6 +370,9 @@ async def start_analysis(
     )
     _analysis_jobs[job_id] = status
 
+    # Create message queue for SSE
+    _job_queues[job_id] = Queue()
+
     # Start background analysis
     background_tasks.add_task(
         run_pipeline_task,
@@ -176,6 +382,79 @@ async def start_analysis(
 
     logger.info(f"Started RNA-seq analysis job: {job_id}")
     return status
+
+
+# ═══════════════════════════════════════════════════════════════
+# SSE Streaming Endpoint
+# ═══════════════════════════════════════════════════════════════
+
+async def event_generator(job_id: str) -> AsyncGenerator[str, None]:
+    """Generate SSE events for a job."""
+    if job_id not in _job_queues:
+        yield f"data: {json.dumps({'error': 'Job not found'})}\n\n"
+        return
+
+    queue = _job_queues[job_id]
+
+    while True:
+        try:
+            # Non-blocking check with timeout
+            await asyncio.sleep(0.1)
+
+            # Check if there are messages
+            if not queue.empty():
+                message = queue.get_nowait()
+
+                if message is None:  # End signal
+                    yield f"data: {json.dumps({'type': 'complete', 'message': 'Pipeline finished'})}\n\n"
+                    break
+
+                yield f"data: {json.dumps(message)}\n\n"
+
+            # Check job status
+            if job_id in _analysis_jobs:
+                status = _analysis_jobs[job_id]
+                if status.status in ["completed", "failed"]:
+                    final_message = {
+                        "type": "final",
+                        "status": status.status,
+                        "progress": status.progress,
+                        "error": status.error
+                    }
+                    yield f"data: {json.dumps(final_message)}\n\n"
+                    break
+
+        except Exception as e:
+            logger.error(f"SSE error for job {job_id}: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            break
+
+
+@router.get("/stream/{job_id}")
+async def stream_progress(job_id: str):
+    """
+    Server-Sent Events endpoint for real-time pipeline progress.
+
+    Connect to this endpoint to receive live updates as each agent runs.
+    Events include:
+    - agent_start: Agent is starting
+    - agent_progress: Progress update within agent
+    - agent_complete: Agent finished
+    - agent_error: Agent failed
+    - complete: Pipeline finished
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    return StreamingResponse(
+        event_generator(job_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.get("/status/{job_id}", response_model=AnalysisStatus)
@@ -253,6 +532,132 @@ async def delete_job(job_id: str):
         del _analysis_results[job_id]
 
     return {"message": f"Job {job_id} deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Report Serving Endpoints
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/report/{job_id}")
+async def get_report(job_id: str):
+    """
+    Get the HTML report for a completed analysis.
+
+    Returns the report.html file as a downloadable response.
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    status = _analysis_jobs[job_id]
+    if status.status not in ["completed", "completed_with_errors"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job {job_id} is not complete. Current status: {status.status}"
+        )
+
+    # Get run directory from status (stored in current_step after completion)
+    run_dir = status.current_step
+    if not run_dir:
+        raise HTTPException(status_code=404, detail="Report path not found")
+
+    report_path = Path(run_dir) / "report.html"
+    if not report_path.exists():
+        # Try accumulated directory
+        report_path = Path(run_dir) / "accumulated" / "report.html"
+
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="Report file not found")
+
+    return FileResponse(
+        path=report_path,
+        media_type="text/html",
+        filename=f"rnaseq_report_{job_id}.html"
+    )
+
+
+@router.get("/report/{job_id}/figures/{filename}")
+async def get_report_figure(job_id: str, filename: str):
+    """
+    Get a figure from the analysis results.
+
+    Supports PNG, SVG, and HTML (interactive) figures.
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    status = _analysis_jobs[job_id]
+    run_dir = status.current_step
+    if not run_dir:
+        raise HTTPException(status_code=404, detail="Report path not found")
+
+    # Look for figure in multiple locations
+    possible_paths = [
+        Path(run_dir) / "figures" / filename,
+        Path(run_dir) / "accumulated" / "figures" / filename,
+        Path(run_dir) / filename,
+        Path(run_dir) / "accumulated" / filename,
+    ]
+
+    figure_path = None
+    for path in possible_paths:
+        if path.exists():
+            figure_path = path
+            break
+
+    if not figure_path:
+        raise HTTPException(status_code=404, detail=f"Figure {filename} not found")
+
+    # Determine media type
+    suffix = figure_path.suffix.lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".svg": "image/svg+xml",
+        ".html": "text/html",
+        ".json": "application/json"
+    }
+    media_type = media_types.get(suffix, "application/octet-stream")
+
+    return FileResponse(path=figure_path, media_type=media_type)
+
+
+@router.get("/report/{job_id}/data/{filename}")
+async def get_report_data(job_id: str, filename: str):
+    """
+    Get a data file (CSV, JSON) from the analysis results.
+    """
+    if job_id not in _analysis_jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    status = _analysis_jobs[job_id]
+    run_dir = status.current_step
+    if not run_dir:
+        raise HTTPException(status_code=404, detail="Report path not found")
+
+    possible_paths = [
+        Path(run_dir) / filename,
+        Path(run_dir) / "accumulated" / filename,
+    ]
+
+    data_path = None
+    for path in possible_paths:
+        if path.exists():
+            data_path = path
+            break
+
+    if not data_path:
+        raise HTTPException(status_code=404, detail=f"Data file {filename} not found")
+
+    suffix = data_path.suffix.lower()
+    media_types = {
+        ".csv": "text/csv",
+        ".json": "application/json",
+        ".txt": "text/plain"
+    }
+    media_type = media_types.get(suffix, "application/octet-stream")
+
+    return FileResponse(path=data_path, media_type=media_type)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -646,92 +1051,140 @@ async def get_gene_detail(analysis_id: str, gene_id: str):
 
 
 # ═══════════════════════════════════════════════════════════════
-# Background Task
+# Background Tasks
 # ═══════════════════════════════════════════════════════════════
 
-async def run_pipeline_task(job_id: str, request: AnalysisRequest):
+def send_sse_message(job_id: str, message: dict):
+    """Send message to SSE queue."""
+    if job_id in _job_queues:
+        _job_queues[job_id].put(message)
+
+
+def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
     """
-    Run the RNA-seq pipeline as a background task.
+    Run the RNA-seq pipeline with real-time SSE streaming.
+
+    This runs in a background thread and sends progress updates via SSE.
     """
     try:
         status = _analysis_jobs[job_id]
         status.status = "running"
 
-        # Import pipeline components
+        send_sse_message(job_id, {
+            "type": "pipeline_start",
+            "job_id": job_id,
+            "message": "파이프라인 시작",
+            "timestamp": datetime.now().isoformat()
+        })
+
+        # Import pipeline
         try:
-            from rnaseq_pipeline.orchestrator import RNAseqOrchestrator
+            from rnaseq_pipeline.orchestrator import RNAseqPipeline
             pipeline_available = True
-        except ImportError:
+        except ImportError as e:
             pipeline_available = False
-            logger.warning("RNA-seq pipeline not available")
+            logger.warning(f"RNA-seq pipeline not available: {e}")
 
         if not pipeline_available:
-            # Return mock results for demo
-            status.progress = 100
-            status.current_step = "Demo mode"
-            status.status = "completed"
-            status.completed_at = datetime.now().isoformat()
-
-            _analysis_results[job_id] = AnalysisResult(
-                job_id=job_id,
-                status="completed",
-                deg_count=256,
-                up_regulated=150,
-                down_regulated=106,
-                top_deg_genes=[
-                    DEGResult(gene_symbol="KRAS", log2_fold_change=2.5, p_value=0.001, adjusted_p_value=0.01, regulation="up"),
-                    DEGResult(gene_symbol="TP53", log2_fold_change=-1.8, p_value=0.005, adjusted_p_value=0.02, regulation="down"),
-                ],
-                hub_genes=[
-                    HubGene(gene_symbol="KRAS", degree=45, betweenness=0.15, eigenvector=0.8, hub_score=0.9),
-                ],
-                enriched_pathways=[
-                    PathwayResult(pathway_id="KEGG:hsa04010", pathway_name="MAPK signaling", source="KEGG", p_value=0.001, adjusted_p_value=0.01, gene_count=15, genes=["KRAS", "BRAF", "MEK1"]),
-                ],
-                validated_genes=[
-                    ValidationResult(gene_symbol="KRAS", disgenet_score=0.95, omim_associated=True, cosmic_status="Oncogene", associated_diseases=["Pancreatic Cancer", "Lung Cancer"]),
-                ],
-                figures=["volcano_plot.png", "heatmap.png", "network.png"]
-            )
+            # Demo mode - simulate pipeline execution
+            _run_demo_pipeline(job_id)
             return
 
-        # Run actual pipeline
-        output_dir = request.output_dir or f"rnaseq_results/{job_id}"
+        # Setup output directory
+        output_dir = PROJECT_ROOT / "rnaseq_test_results" / f"web_analysis_{job_id}"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Step 1: DEG Analysis
-        status.current_step = "DEG Analysis"
-        status.progress = 15
-        # orchestrator.run_agent1()
+        # Create pipeline
+        pipeline = RNAseqPipeline(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            config=config
+        )
 
-        # Step 2: Network Analysis
-        status.current_step = "Network Analysis"
-        status.progress = 30
-        # orchestrator.run_agent2()
+        # Run agents one by one with progress updates
+        agent_progress = {
+            "agent1_deg": (0, 15),
+            "agent2_network": (15, 35),
+            "agent3_pathway": (35, 55),
+            "agent4_validation": (55, 70),
+            "agent5_visualization": (70, 90),
+            "agent6_report": (90, 100)
+        }
 
-        # Step 3: Pathway Enrichment
-        status.current_step = "Pathway Enrichment"
-        status.progress = 45
-        # orchestrator.run_agent3()
+        completed_agents = []
+        failed_agents = []
 
-        # Step 4: Database Validation
-        status.current_step = "Database Validation"
-        status.progress = 60
-        # orchestrator.run_agent4()
+        for agent_name in pipeline.AGENT_ORDER:
+            try:
+                start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
+                agent_info = AGENT_INFO.get(agent_name, {})
 
-        # Step 5: Visualization
-        status.current_step = "Visualization"
-        status.progress = 80
-        # orchestrator.run_agent5()
+                # Send agent start message
+                send_sse_message(job_id, {
+                    "type": "agent_start",
+                    "agent": agent_name,
+                    "name": agent_info.get("name", agent_name),
+                    "description": agent_info.get("description", ""),
+                    "progress": start_progress,
+                    "timestamp": datetime.now().isoformat()
+                })
 
-        # Step 6: Report Generation
-        status.current_step = "Report Generation"
-        status.progress = 95
-        # orchestrator.run_agent6()
+                status.current_step = agent_info.get("name", agent_name)
+                status.progress = start_progress
 
-        # Complete
-        status.status = "completed"
+                # Run agent
+                result = pipeline.run_agent(agent_name)
+
+                # Send agent complete message
+                send_sse_message(job_id, {
+                    "type": "agent_complete",
+                    "agent": agent_name,
+                    "name": agent_info.get("name", agent_name),
+                    "progress": end_progress,
+                    "result_summary": _get_agent_summary(agent_name, result),
+                    "timestamp": datetime.now().isoformat()
+                })
+
+                status.progress = end_progress
+                completed_agents.append(agent_name)
+
+            except Exception as e:
+                logger.error(f"Agent {agent_name} failed: {e}")
+                send_sse_message(job_id, {
+                    "type": "agent_error",
+                    "agent": agent_name,
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                })
+                failed_agents.append(agent_name)
+                # Continue with next agent
+
+        # Pipeline complete
+        if failed_agents:
+            status.status = "completed_with_errors"
+        else:
+            status.status = "completed"
+
         status.progress = 100
         status.completed_at = datetime.now().isoformat()
+
+        # Store run directory for report access
+        _analysis_jobs[job_id].current_step = str(pipeline.run_dir)
+
+        send_sse_message(job_id, {
+            "type": "pipeline_complete",
+            "job_id": job_id,
+            "status": status.status,
+            "completed_agents": completed_agents,
+            "failed_agents": failed_agents,
+            "run_dir": str(pipeline.run_dir),
+            "report_path": str(pipeline.run_dir / "report.html"),
+            "timestamp": datetime.now().isoformat()
+        })
+
+        # Signal end of SSE stream
+        send_sse_message(job_id, None)
+
         logger.info(f"Completed RNA-seq analysis job: {job_id}")
 
     except Exception as e:
@@ -739,3 +1192,98 @@ async def run_pipeline_task(job_id: str, request: AnalysisRequest):
         status = _analysis_jobs[job_id]
         status.status = "failed"
         status.error = str(e)
+
+        send_sse_message(job_id, {
+            "type": "pipeline_error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        })
+        send_sse_message(job_id, None)
+
+
+def _get_agent_summary(agent_name: str, result: dict) -> dict:
+    """Extract summary from agent result."""
+    summary = {}
+    if agent_name == "agent1_deg":
+        summary["deg_count"] = result.get("deg_count", 0)
+        summary["up_count"] = result.get("up_count", 0)
+        summary["down_count"] = result.get("down_count", 0)
+    elif agent_name == "agent2_network":
+        summary["hub_count"] = result.get("hub_count", 0)
+        summary["edge_count"] = result.get("edge_count", 0)
+    elif agent_name == "agent3_pathway":
+        summary["pathway_count"] = result.get("pathway_count", 0)
+    elif agent_name == "agent4_validation":
+        summary["validated_count"] = result.get("validated_count", 0)
+    elif agent_name == "agent5_visualization":
+        summary["figures"] = result.get("figures", [])
+    elif agent_name == "agent6_report":
+        summary["report_generated"] = result.get("report_generated", False)
+    return summary
+
+
+def _run_demo_pipeline(job_id: str):
+    """Run demo pipeline simulation."""
+    import time
+
+    status = _analysis_jobs[job_id]
+    agents = [
+        ("agent1_deg", "DEG Analysis", 15),
+        ("agent2_network", "Network Analysis", 35),
+        ("agent3_pathway", "Pathway Enrichment", 55),
+        ("agent4_validation", "DB Validation", 70),
+        ("agent5_visualization", "Visualization", 90),
+        ("agent6_report", "Report Generation", 100)
+    ]
+
+    for agent_id, agent_name, progress in agents:
+        send_sse_message(job_id, {
+            "type": "agent_start",
+            "agent": agent_id,
+            "name": agent_name,
+            "progress": progress - 15,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        status.current_step = agent_name
+        time.sleep(1)  # Simulate work
+
+        send_sse_message(job_id, {
+            "type": "agent_complete",
+            "agent": agent_id,
+            "name": agent_name,
+            "progress": progress,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        status.progress = progress
+
+    status.status = "completed"
+    status.completed_at = datetime.now().isoformat()
+
+    send_sse_message(job_id, {
+        "type": "pipeline_complete",
+        "job_id": job_id,
+        "status": "completed",
+        "mode": "demo",
+        "timestamp": datetime.now().isoformat()
+    })
+
+    send_sse_message(job_id, None)
+
+
+async def run_pipeline_task(job_id: str, request: AnalysisRequest):
+    """
+    Run the RNA-seq pipeline as a background task (legacy).
+    """
+    # Create input directory from request
+    input_dir = Path(request.count_matrix_path).parent
+
+    config = {
+        "cancer_type": request.disease_context,
+        "condition_column": request.condition_column,
+        "contrast": [request.treatment_label, request.control_label]
+    }
+
+    # Use new streaming function
+    run_pipeline_with_streaming(job_id, input_dir, config)
