@@ -2765,7 +2765,7 @@ RAG 기반 문헌 해석 결과:
 {{
   "title": "한국어 제목",
   "title_en": "English Title",
-  "abstract_extended": "**배경(Background)**: ...\\n\\n**방법(Methods)**: ...\\n\\n**결과(Results)**: ...\\n\\n**ML 예측 분석(Predictive Analysis)**: ...\\n\\n**RAG 문헌 해석(Literature-based Interpretation)**: ...\\n\\n**실험적 검증 제안(Suggested Validations)**: ...\\n\\n**결론 및 의의(Conclusions)**: ...",
+  "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nML 예측 분석: ...\\n\\n문헌 기반 해석: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
   "key_findings": [
     "주요 발견 1",
     "주요 발견 2",
@@ -2791,8 +2791,14 @@ RAG 기반 문헌 해석 결과:
 2. 발견된 Hub 유전자를 validation_priorities에 실제 유전자명으로 포함
 3. ML 예측의 Top-3 예측율과 유전자 매칭율을 해석에 포함
 4. RAG 문헌 해석 섹션 필수 포함 - 문헌 지원 유전자와 신규 바이오마커 후보를 구분하여 설명
-5. PMID 인용 형식 사용 (예: [PMID: 35409110])
+5. PMID 인용 형식 사용 (예: PMID 35409110)
 6. 실험적 검증 방법을 구체적으로 제안
+
+문체 지침:
+- 마크다운 특수기호 사용 금지 (**, __, ##, [], () 등)
+- 학술 논문처럼 자연스럽고 격식있는 문체 사용
+- 괄호 안의 영문 병기는 최소화하고 필요시 한글로 풀어 설명
+- 불필요한 강조나 꾸밈 없이 명료하게 기술
 """
 
         try:
