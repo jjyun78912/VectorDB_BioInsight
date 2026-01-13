@@ -73,6 +73,8 @@ class NetworkEnhancer:
         - Spearman correlation > 0.6 with p-value < 0.05
         - Creates adjacency matrix for graph convolution
 
+        Uses vectorized correlation calculation for efficiency.
+
         Args:
             expression_df: Expression matrix (genes x samples)
             gene_ids: List of gene IDs to include
@@ -91,62 +93,91 @@ class NetworkEnhancer:
         use_abs = self.config["use_absolute_correlation"]
         method = self.config["correlation_method"]
 
-        edges = []
         genes = expr_data.index.tolist()
         n_genes = len(genes)
+        n_samples = expr_data.shape[1]
 
-        logger.info(f"Calculating pairwise correlations with significance testing...")
+        logger.info(f"Calculating pairwise correlations (vectorized, {n_genes} genes, {n_samples} samples)...")
 
-        # Calculate correlations with p-values
-        for i in range(n_genes):
-            for j in range(i + 1, n_genes):
-                gene1, gene2 = genes[i], genes[j]
-                x = expr_data.loc[gene1].values
-                y = expr_data.loc[gene2].values
+        # Vectorized correlation calculation
+        if method == "spearman":
+            # Convert to ranks for Spearman
+            expr_matrix = expr_data.T.rank().values  # samples x genes
+        else:
+            expr_matrix = expr_data.T.values  # samples x genes
 
-                # Remove NaN pairs
-                mask = ~(np.isnan(x) | np.isnan(y))
-                if mask.sum() < 3:
-                    continue
+        # Standardize
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            expr_mean = np.nanmean(expr_matrix, axis=0, keepdims=True)
+            expr_std = np.nanstd(expr_matrix, axis=0, keepdims=True)
+            expr_std[expr_std == 0] = 1  # Avoid division by zero
+            expr_standardized = (expr_matrix - expr_mean) / expr_std
 
-                x_clean, y_clean = x[mask], y[mask]
+        # Replace NaN with 0 for matrix multiplication
+        expr_standardized = np.nan_to_num(expr_standardized, nan=0.0)
 
-                if method == "spearman":
-                    corr, pval = stats.spearmanr(x_clean, y_clean)
-                else:
-                    corr, pval = stats.pearsonr(x_clean, y_clean)
+        # Compute correlation matrix: corr = (X.T @ X) / (n - 1)
+        corr_matrix = np.dot(expr_standardized.T, expr_standardized) / (n_samples - 1)
 
-                if np.isnan(corr):
-                    continue
+        logger.info(f"Correlation matrix computed ({n_genes}x{n_genes})")
 
-                # Apply thresholds (GCNN style)
-                corr_check = abs(corr) if use_abs else corr
-                if corr_check >= threshold and pval < pvalue_thresh:
-                    edges.append({
-                        'gene1': gene1,
-                        'gene2': gene2,
-                        'correlation': corr,
-                        'abs_correlation': abs(corr),
-                        'pvalue': pval,
-                        'significant': True
-                    })
+        # Calculate approximate p-values using t-distribution
+        # t = r * sqrt((n-2)/(1-r^2))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            t_stat = corr_matrix * np.sqrt((n_samples - 2) / (1 - corr_matrix**2 + 1e-10))
+            pval_matrix = 2 * stats.t.sf(np.abs(t_stat), df=n_samples - 2)
+
+        # Extract significant edges (upper triangle only)
+        logger.info(f"Extracting significant edges (threshold={threshold}, pvalue<{pvalue_thresh})...")
+
+        edges = []
+        # Use numpy operations for speed
+        if use_abs:
+            mask = (np.abs(corr_matrix) >= threshold) & (pval_matrix < pvalue_thresh)
+        else:
+            mask = (corr_matrix >= threshold) & (pval_matrix < pvalue_thresh)
+
+        # Only upper triangle (avoid duplicates and self-loops)
+        upper_mask = np.triu(mask, k=1)
+        edge_indices = np.where(upper_mask)
+
+        for i, j in zip(edge_indices[0], edge_indices[1]):
+            corr = corr_matrix[i, j]
+            pval = pval_matrix[i, j]
+            edges.append({
+                'gene1': genes[i],
+                'gene2': genes[j],
+                'correlation': float(corr),
+                'abs_correlation': float(abs(corr)),
+                'pvalue': float(pval),
+                'significant': True
+            })
 
         edges_df = pd.DataFrame(edges)
         logger.info(f"Found {len(edges_df)} significant edges (corr >= {threshold}, p < {pvalue_thresh})")
 
-        # Build NetworkX graph
-        G = nx.Graph()
-        for gene in genes:
-            G.add_node(gene)
+        # Build NetworkX graph using from_pandas_edgelist (vectorized, much faster)
+        logger.info("Building NetworkX graph (vectorized)...")
 
-        for _, row in edges_df.iterrows():
-            G.add_edge(
-                row['gene1'],
-                row['gene2'],
-                weight=row['abs_correlation'],
-                correlation=row['correlation'],
-                pvalue=row['pvalue']
+        if len(edges_df) > 0:
+            # Rename columns for edge attributes
+            edges_df['weight'] = edges_df['abs_correlation']
+            G = nx.from_pandas_edgelist(
+                edges_df,
+                source='gene1',
+                target='gene2',
+                edge_attr=['weight', 'correlation', 'pvalue']
             )
+            # Add any isolated nodes (genes with no significant edges)
+            isolated_genes = set(genes) - set(G.nodes())
+            G.add_nodes_from(isolated_genes)
+        else:
+            G = nx.Graph()
+            G.add_nodes_from(genes)
+
+        logger.info(f"Graph built: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
         return edges_df, G
 
@@ -453,8 +484,35 @@ class NetworkEnhancer:
         degree_centrality = nx.degree_centrality(G)
 
         if G.number_of_edges() > 0:
-            betweenness = nx.betweenness_centrality(G, weight='weight')
-            closeness = nx.closeness_centrality(G)
+            # Use approximate betweenness centrality with k-sampling for large graphs
+            # For large graphs (>1000 nodes), exact calculation is O(V*E) which is too slow
+            n_nodes = G.number_of_nodes()
+            n_edges = G.number_of_edges()
+
+            # For very dense graphs (>1M edges), skip betweenness entirely
+            # Use degree as primary hub indicator (highly correlated with betweenness)
+            if n_edges > 1_000_000:
+                logger.info(f"Graph too dense ({n_edges:,} edges), using degree-only hub scoring")
+                # Use weighted degree (sum of edge weights) as betweenness proxy
+                betweenness = {n: sum(G[n][neighbor]['weight'] for neighbor in G[n]) for n in G.nodes()}
+                # Normalize to 0-1 range
+                max_b = max(betweenness.values()) if betweenness else 1
+                betweenness = {n: v/max_b for n, v in betweenness.items()}
+            elif n_nodes > 1000:
+                # Sample k nodes for approximate betweenness (much faster)
+                k = min(100, n_nodes // 50)  # Use at most 100 sample nodes
+                logger.info(f"Using approximate betweenness centrality (k={k} samples for {n_nodes} nodes)")
+                betweenness = nx.betweenness_centrality(G, k=k, weight='weight')
+            else:
+                betweenness = nx.betweenness_centrality(G, weight='weight')
+
+            # Skip closeness for large graphs (very expensive)
+            if n_nodes > 1000:
+                # Use degree as a proxy for closeness (highly connected nodes are often central)
+                logger.info("Using degree-based proxy for closeness centrality")
+                closeness = {n: G.degree(n) / (n_nodes - 1) for n in G.nodes()}
+            else:
+                closeness = nx.closeness_centrality(G)
             try:
                 if nx.is_connected(G):
                     eigenvector = nx.eigenvector_centrality(G, max_iter=1000)
