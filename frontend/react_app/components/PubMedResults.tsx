@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Globe, X, Loader2, FileText, Sparkles, Plus, FolderPlus, ArrowUpDown, Calendar, Hash, MessageSquare, Telescope, ExternalLink } from 'lucide-react';
-import api, { CrawlerPaper } from '../services/client';
+import { Globe, X, Loader2, FileText, Sparkles, Plus, FolderPlus, ArrowUpDown, Calendar, Hash, MessageSquare, Telescope, ExternalLink, Lightbulb, Award, Target, FlaskConical, Users, BookOpen, CheckCircle, AlertTriangle, Dna, Activity } from 'lucide-react';
+import api, { CrawlerPaper, PaperExplanation } from '../services/client';
 import { PaperInsightsCard } from './PaperInsightsCard';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { ChatPanel } from './ChatPanel';
@@ -44,6 +44,10 @@ export const PubMedResults: React.FC<PubMedResultsProps> = ({
   const [chatMode, setChatMode] = useState(false);
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
 
+  // Paper explanation state (why recommended + characteristics)
+  const [paperExplanation, setPaperExplanation] = useState<PaperExplanation | null>(null);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
+
   // Full text state
   const [fullTextSessionId, setFullTextSessionId] = useState<string | null>(null);
   const [isLoadingFullText, setIsLoadingFullText] = useState(false);
@@ -69,6 +73,27 @@ export const PubMedResults: React.FC<PubMedResultsProps> = ({
     setFullTextMode(false);
     setFullTextSummary(null);
     setIsLoadingSummary(true);
+    setPaperExplanation(null);
+    setIsLoadingExplanation(true);
+
+    // Fetch paper explanation (why recommended + characteristics) in parallel
+    if (query && paper.abstract) {
+      api.explainPaper(query, paper.title, paper.abstract, {
+        pmid: paper.pmid,
+        year: paper.year?.toString()
+      })
+        .then((explanation) => {
+          setPaperExplanation(explanation);
+        })
+        .catch((err) => {
+          console.error('Failed to get paper explanation:', err);
+        })
+        .finally(() => {
+          setIsLoadingExplanation(false);
+        });
+    } else {
+      setIsLoadingExplanation(false);
+    }
 
     // Try to get full text first
     try {
@@ -390,6 +415,214 @@ export const PubMedResults: React.FC<PubMedResultsProps> = ({
                     <p className="text-sm text-gray-400">No abstract available for summary.</p>
                   )}
                 </div>
+
+                {/* Why Recommended Section */}
+                {(isLoadingExplanation || paperExplanation) && (
+                  <div className="glass-2 rounded-xl p-4 border border-emerald-100/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50">
+                    <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Lightbulb className="w-3.5 h-3.5" />
+                      Why This Paper Is Recommended
+                    </h4>
+                    {isLoadingExplanation ? (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Analyzing relevance to your query...</span>
+                      </div>
+                    ) : paperExplanation ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-gray-700 leading-relaxed">{paperExplanation.why_recommended}</p>
+
+                        {/* Relevance Factors */}
+                        {paperExplanation.relevance_factors && paperExplanation.relevance_factors.length > 0 && (
+                          <div className="pt-2 border-t border-emerald-100/50">
+                            <h5 className="text-xs font-semibold text-teal-600 mb-2 flex items-center gap-1">
+                              <Target className="w-3 h-3" />
+                              Relevance Factors
+                            </h5>
+                            <ul className="flex flex-wrap gap-2">
+                              {paperExplanation.relevance_factors.map((factor, i) => (
+                                <li key={i} className="text-xs px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full">
+                                  {factor}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Scores */}
+                        <div className="flex items-center gap-3 pt-2 border-t border-emerald-100/50">
+                          <div className="flex items-center gap-1.5">
+                            <Target className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-xs text-gray-600">Relevance:</span>
+                            <span className={`text-xs font-bold ${
+                              paperExplanation.relevance_score >= 8 ? 'text-emerald-600' :
+                              paperExplanation.relevance_score >= 6 ? 'text-blue-600' : 'text-gray-600'
+                            }`}>
+                              {paperExplanation.relevance_score}/10
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                            <span className="text-xs text-gray-600">Novelty:</span>
+                            <span className="text-xs font-bold text-violet-600">{paperExplanation.novelty_score}/10</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Award className="w-3.5 h-3.5 text-amber-500" />
+                            <span className="text-xs text-gray-600">Quality:</span>
+                            <span className="text-xs font-bold text-amber-600">{paperExplanation.quality_score}/10</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Paper Characteristics Section */}
+                {paperExplanation?.characteristics && (
+                  <div className="glass-2 rounded-xl p-4 border border-indigo-100/50 bg-gradient-to-br from-indigo-50/50 to-purple-50/50">
+                    <h4 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      Paper Characteristics
+                    </h4>
+                    <div className="space-y-3">
+                      {/* Study Type & Evidence Level */}
+                      <div className="flex flex-wrap gap-2">
+                        {paperExplanation.characteristics.study_type && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full">
+                            <FlaskConical className="w-3 h-3" />
+                            {paperExplanation.characteristics.study_type}
+                          </span>
+                        )}
+                        {paperExplanation.characteristics.evidence_level && (
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full ${
+                            paperExplanation.characteristics.evidence_level.toLowerCase().includes('high')
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : paperExplanation.characteristics.evidence_level.toLowerCase().includes('moderate')
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            <Award className="w-3 h-3" />
+                            {paperExplanation.characteristics.evidence_level}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Main Finding */}
+                      {paperExplanation.characteristics.main_finding && (
+                        <div>
+                          <h5 className="text-xs font-semibold text-purple-600 mb-1">Main Finding</h5>
+                          <p className="text-sm text-gray-700">{paperExplanation.characteristics.main_finding}</p>
+                        </div>
+                      )}
+
+                      {/* Methodology & Sample */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {paperExplanation.characteristics.methodology && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-blue-600 mb-1 flex items-center gap-1">
+                              <FlaskConical className="w-3 h-3" />
+                              Methodology
+                            </h5>
+                            <p className="text-xs text-gray-600">{paperExplanation.characteristics.methodology}</p>
+                          </div>
+                        )}
+                        {paperExplanation.characteristics.sample_info && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-cyan-600 mb-1 flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              Sample Info
+                            </h5>
+                            <p className="text-xs text-gray-600">{paperExplanation.characteristics.sample_info}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Clinical Relevance */}
+                      {paperExplanation.characteristics.clinical_relevance && (
+                        <div className="bg-white/50 rounded-lg p-2.5">
+                          <h5 className="text-xs font-semibold text-rose-600 mb-1">Clinical Relevance</h5>
+                          <p className="text-xs text-gray-600">{paperExplanation.characteristics.clinical_relevance}</p>
+                        </div>
+                      )}
+
+                      {/* Strengths & Limitations */}
+                      <div className="grid grid-cols-2 gap-3">
+                        {paperExplanation.characteristics.strengths && paperExplanation.characteristics.strengths.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-emerald-600 mb-1.5 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              Strengths
+                            </h5>
+                            <ul className="space-y-1">
+                              {paperExplanation.characteristics.strengths.slice(0, 3).map((s, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-start gap-1">
+                                  <span className="text-emerald-500 mt-0.5">+</span>
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {paperExplanation.characteristics.limitations && paperExplanation.characteristics.limitations.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-amber-600 mb-1.5 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              Limitations
+                            </h5>
+                            <ul className="space-y-1">
+                              {paperExplanation.characteristics.limitations.slice(0, 3).map((l, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-start gap-1">
+                                  <span className="text-amber-500 mt-0.5">-</span>
+                                  {l}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Key Genes, Pathways, Techniques */}
+                      <div className="pt-2 border-t border-indigo-100/50 space-y-2">
+                        {paperExplanation.characteristics.key_genes && paperExplanation.characteristics.key_genes.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <Dna className="w-3.5 h-3.5 text-rose-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-wrap gap-1">
+                              {paperExplanation.characteristics.key_genes.map((gene, i) => (
+                                <span key={i} className="text-xs px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-medium">
+                                  {gene}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {paperExplanation.characteristics.key_pathways && paperExplanation.characteristics.key_pathways.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <Activity className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-wrap gap-1">
+                              {paperExplanation.characteristics.key_pathways.map((pathway, i) => (
+                                <span key={i} className="text-xs px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full">
+                                  {pathway}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {paperExplanation.characteristics.techniques && paperExplanation.characteristics.techniques.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <FlaskConical className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex flex-wrap gap-1">
+                              {paperExplanation.characteristics.techniques.map((tech, i) => (
+                                <span key={i} className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                  {tech}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Paper Insights */}
                 {selectedPaper.abstract && (

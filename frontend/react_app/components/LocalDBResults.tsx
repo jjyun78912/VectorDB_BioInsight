@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Target, X, FileText, Loader2, Info, Sparkles, BookOpen, MessageSquare, ExternalLink } from 'lucide-react';
-import api, { PrecisionSearchResult, SearchDiagnostics } from '../services/client';
+import { Target, X, FileText, Loader2, Info, Sparkles, BookOpen, MessageSquare, ExternalLink, Lightbulb, FlaskConical, TrendingUp, AlertTriangle, Dna, Microscope } from 'lucide-react';
+import api, { PrecisionSearchResult, SearchDiagnostics, PaperExplanation } from '../services/client';
 import { ChatPanel } from './ChatPanel';
 import { useChat } from '../hooks/useChat';
 
@@ -9,6 +9,7 @@ interface LocalDBResultsProps {
   diagnostics: SearchDiagnostics | null;
   onClose: () => void;
   onSelectResult: (result: PrecisionSearchResult) => void;
+  query?: string;  // Search query for paper explanation
 }
 
 // Helper to get match field color
@@ -27,7 +28,13 @@ const getMatchFieldStyle = (field: string) => {
   }
 };
 
-export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnostics, onClose, onSelectResult }) => {
+// Helper to get search query from URL or context
+const getSearchQuery = (): string => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('q') || '';
+};
+
+export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnostics, onClose, onSelectResult, query: initialQuery }) => {
   const [selectedResult, setSelectedResult] = useState<PrecisionSearchResult | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
@@ -35,27 +42,80 @@ export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnos
   const [chatMode, setChatMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
+  // Paper explanation state
+  const [paperExplanation, setPaperExplanation] = useState<PaperExplanation | null>(null);
+  const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   const { chatHistory, question, setQuestion, isLoading: isAskingQuestion, sendMessage, clearHistory, chatEndRef } = useChat();
 
-  // Generate AI summary when result is selected
+  // Get search query on mount or from props
+  React.useEffect(() => {
+    const query = initialQuery || getSearchQuery() || diagnostics?.detected_disease || '';
+    setSearchQuery(query);
+  }, [initialQuery, diagnostics]);
+
+  // Generate AI summary and paper explanation when result is selected
   const handleSelectResult = async (result: PrecisionSearchResult) => {
     setSelectedResult(result);
     setAiSummary(null);
     setKeyPoints([]);
+    setPaperExplanation(null);
     clearHistory();
     setChatMode(false);
 
     if (result.content) {
+      // Fetch both summary and explanation in parallel
       setIsLoadingSummary(true);
-      try {
-        const response = await api.summarizeAbstract(result.paper_title, result.content);
-        setAiSummary(response.summary);
-        setKeyPoints(response.key_points || []);
-      } catch (err) {
-        setAiSummary('Unable to generate summary.');
-      } finally {
-        setIsLoadingSummary(false);
-      }
+      setIsLoadingExplanation(true);
+
+      // Get AI Summary
+      const summaryPromise = api.summarizeAbstract(result.paper_title, result.content)
+        .then(response => {
+          setAiSummary(response.summary);
+          setKeyPoints(response.key_points || []);
+        })
+        .catch(() => {
+          setAiSummary('Unable to generate summary.');
+        })
+        .finally(() => {
+          setIsLoadingSummary(false);
+        });
+
+      // Get Paper Explanation (LLM-based for detailed analysis)
+      const query = searchQuery || diagnostics?.detected_disease || '';
+      const explanationPromise = api.explainPaper(
+        query,
+        result.paper_title,
+        result.content,
+        {
+          section: result.section,
+          matchedTerms: result.matched_terms
+        }
+      )
+        .then(explanation => {
+          setPaperExplanation(explanation);
+        })
+        .catch(err => {
+          console.error('Failed to get paper explanation:', err);
+          // Fallback - create a simple explanation
+          setPaperExplanation({
+            why_recommended: `'${query}' 검색어와 관련된 내용이 발견되었습니다.`,
+            relevance_factors: result.matched_terms.slice(0, 3),
+            query_match_explanation: `검색어가 논문의 ${result.section || '본문'}에서 매칭되었습니다.`,
+            characteristics: null,
+            relevance_score: 3,
+            novelty_score: 3,
+            quality_score: 3,
+            generated_at: new Date().toISOString(),
+            model_used: 'fallback'
+          });
+        })
+        .finally(() => {
+          setIsLoadingExplanation(false);
+        });
+
+      await Promise.all([summaryPromise, explanationPromise]);
     }
   };
 
@@ -244,6 +304,175 @@ export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnos
                 </h4>
                 <p className="text-sm text-gray-700 leading-relaxed">{selectedResult.content}</p>
               </div>
+
+              {/* Why Recommended Section */}
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200/50">
+                <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  왜 이 논문이 추천되었나요?
+                </h4>
+                {isLoadingExplanation ? (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">분석 중...</span>
+                  </div>
+                ) : paperExplanation ? (
+                  <div className="space-y-3">
+                    {/* Why Recommended */}
+                    <p className="text-sm text-gray-700 leading-relaxed">{paperExplanation.why_recommended}</p>
+
+                    {/* Relevance Factors */}
+                    {paperExplanation.relevance_factors.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {paperExplanation.relevance_factors.map((factor, i) => (
+                          <span key={i} className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-full">
+                            {factor}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Query Match Explanation */}
+                    {paperExplanation.query_match_explanation && (
+                      <p className="text-xs text-gray-500 italic border-l-2 border-amber-300 pl-2">
+                        {paperExplanation.query_match_explanation}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400">설명을 불러올 수 없습니다.</p>
+                )}
+              </div>
+
+              {/* Paper Characteristics Section */}
+              {paperExplanation?.characteristics && (
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-4 border border-indigo-200/50">
+                  <h4 className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    논문 특성
+                  </h4>
+                  <div className="space-y-3">
+                    {/* Study Type & Design */}
+                    <div className="flex flex-wrap gap-2">
+                      {paperExplanation.characteristics.study_type && (
+                        <span className="text-xs px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full font-medium">
+                          {paperExplanation.characteristics.study_type}
+                        </span>
+                      )}
+                      {paperExplanation.characteristics.study_design && (
+                        <span className="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                          {paperExplanation.characteristics.study_design}
+                        </span>
+                      )}
+                      {paperExplanation.characteristics.evidence_level && (
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                          paperExplanation.characteristics.evidence_level === 'High'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : paperExplanation.characteristics.evidence_level === 'Medium'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          근거수준: {paperExplanation.characteristics.evidence_level}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Main Finding */}
+                    {paperExplanation.characteristics.main_finding && (
+                      <div>
+                        <h5 className="text-xs font-semibold text-indigo-600 mb-1 flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" />
+                          핵심 발견
+                        </h5>
+                        <p className="text-sm text-gray-700">{paperExplanation.characteristics.main_finding}</p>
+                      </div>
+                    )}
+
+                    {/* Methodology */}
+                    {paperExplanation.characteristics.methodology && (
+                      <div>
+                        <h5 className="text-xs font-semibold text-indigo-600 mb-1 flex items-center gap-1">
+                          <Microscope className="w-3 h-3" />
+                          방법론
+                        </h5>
+                        <p className="text-sm text-gray-600">{paperExplanation.characteristics.methodology}</p>
+                      </div>
+                    )}
+
+                    {/* Key Genes */}
+                    {paperExplanation.characteristics.key_genes && paperExplanation.characteristics.key_genes.length > 0 && (
+                      <div>
+                        <h5 className="text-xs font-semibold text-indigo-600 mb-1 flex items-center gap-1">
+                          <Dna className="w-3 h-3" />
+                          주요 유전자
+                        </h5>
+                        <div className="flex flex-wrap gap-1">
+                          {paperExplanation.characteristics.key_genes.map((gene, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 bg-pink-50 text-pink-600 rounded border border-pink-200">
+                              {gene}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Techniques */}
+                    {paperExplanation.characteristics.techniques && paperExplanation.characteristics.techniques.length > 0 && (
+                      <div>
+                        <h5 className="text-xs font-semibold text-indigo-600 mb-1">사용 기법</h5>
+                        <div className="flex flex-wrap gap-1">
+                          {paperExplanation.characteristics.techniques.map((tech, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 bg-cyan-50 text-cyan-600 rounded border border-cyan-200">
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Strengths & Limitations */}
+                    {((paperExplanation.characteristics.strengths && paperExplanation.characteristics.strengths.length > 0) ||
+                      (paperExplanation.characteristics.limitations && paperExplanation.characteristics.limitations.length > 0)) && (
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-indigo-100">
+                        {/* Strengths */}
+                        {paperExplanation.characteristics.strengths && paperExplanation.characteristics.strengths.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-emerald-600 mb-1.5 flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3" />
+                              장점
+                            </h5>
+                            <ul className="space-y-1">
+                              {paperExplanation.characteristics.strengths.map((s, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-start gap-1">
+                                  <span className="text-emerald-500 mt-0.5">•</span>
+                                  <span>{s}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {/* Limitations */}
+                        {paperExplanation.characteristics.limitations && paperExplanation.characteristics.limitations.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-semibold text-orange-600 mb-1.5 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              한계점
+                            </h5>
+                            <ul className="space-y-1">
+                              {paperExplanation.characteristics.limitations.map((l, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-start gap-1">
+                                  <span className="text-orange-500 mt-0.5">•</span>
+                                  <span>{l}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* AI Summary */}
               <div className="glass-2 rounded-xl p-4 border border-purple-100/50">

@@ -318,8 +318,8 @@ async def summarize_paper(request: SummarizeRequest):
     Generate an AI summary of a specific paper.
     """
     try:
-        from backend.app.core.config import PAPERS_DIR, GOOGLE_API_KEY
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from backend.app.core.config import PAPERS_DIR
+        from backend.app.core.llm_helper import get_langchain_llm
         from langchain_core.prompts import ChatPromptTemplate
 
         papers_dir = PAPERS_DIR / request.domain
@@ -350,24 +350,8 @@ async def summarize_paper(request: SummarizeRequest):
                 keywords=paper.get("keywords", [])
             )
 
-        # Generate summary using Gemini
-        if not GOOGLE_API_KEY:
-            # Return basic info without AI summary
-            return PaperSummary(
-                pmid=request.pmid,
-                title=title,
-                executive_summary=abstract[:500] if abstract else "No abstract available.",
-                key_findings=[],
-                methodology=None,
-                conclusions=None,
-                keywords=paper.get("keywords", [])
-            )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.3
-        )
+        # LLM 초기화 (Vertex AI 또는 API 키 자동 선택)
+        llm = get_langchain_llm(temperature=0.3)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a biomedical research assistant. Analyze the following research paper and provide:
@@ -475,8 +459,7 @@ async def summarize_abstract(request: AbstractSummaryRequest):
     Used for PubMed papers that aren't in local DB.
     """
     try:
-        from backend.app.core.config import GOOGLE_API_KEY
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from backend.app.core.llm_helper import get_langchain_llm
         from langchain_core.prompts import ChatPromptTemplate
 
         if not request.abstract:
@@ -486,19 +469,8 @@ async def summarize_abstract(request: AbstractSummaryRequest):
                 key_points=[]
             )
 
-        if not GOOGLE_API_KEY:
-            # Return truncated abstract if no API key
-            return AbstractSummaryResponse(
-                title=request.title,
-                summary=request.abstract[:500],
-                key_points=[]
-            )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.3
-        )
+        # LLM 초기화 (Vertex AI 또는 API 키 자동 선택)
+        llm = get_langchain_llm(temperature=0.3)
 
         # Choose language-specific prompt
         if request.language == "ko":
@@ -611,8 +583,7 @@ async def ask_about_abstract(request: AbstractQARequest):
     Used for PubMed papers that aren't in local DB.
     """
     try:
-        from backend.app.core.config import GOOGLE_API_KEY
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from backend.app.core.llm_helper import get_langchain_llm
         from langchain_core.prompts import ChatPromptTemplate
 
         if not request.abstract:
@@ -621,17 +592,8 @@ async def ask_about_abstract(request: AbstractQARequest):
                 answer="No abstract available to answer questions."
             )
 
-        if not GOOGLE_API_KEY:
-            return AbstractQAResponse(
-                question=request.question,
-                answer="API key not configured. Unable to answer questions."
-            )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.3
-        )
+        # LLM 초기화 (Vertex AI 또는 API 키 자동 선택)
+        llm = get_langchain_llm(temperature=0.3)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a biomedical research expert. Answer the user's question based ONLY on the provided paper abstract.
@@ -701,23 +663,11 @@ async def translate_query(request: TranslateRequest):
         )
 
     try:
-        from backend.app.core.config import GOOGLE_API_KEY
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from backend.app.core.llm_helper import get_langchain_llm
         from langchain_core.prompts import ChatPromptTemplate
 
-        if not GOOGLE_API_KEY:
-            return TranslateResponse(
-                original=request.text,
-                translated=request.text,
-                detected_lang="ko",
-                is_biomedical=True
-            )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.1
-        )
+        # LLM 초기화 (Vertex AI 또는 API 키 자동 선택)
+        llm = get_langchain_llm(temperature=0.1)
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a biomedical translation expert. Translate the given Korean search query to English for PubMed search.
@@ -784,9 +734,9 @@ async def analyze_paper(request: AnalyzeRequest):
     Perform detailed analysis of a paper.
     """
     try:
-        from backend.app.core.config import PAPERS_DIR, GOOGLE_API_KEY
+        from backend.app.core.config import PAPERS_DIR
         from backend.app.core.vector_store import create_vector_store
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        from backend.app.core.llm_helper import get_langchain_llm
         from langchain_core.prompts import ChatPromptTemplate
 
         papers_dir = PAPERS_DIR / request.domain
@@ -827,21 +777,18 @@ async def analyze_paper(request: AnalyzeRequest):
 
         prompt_text = analysis_prompts.get(request.analysis_type, analysis_prompts["full"])
 
-        if not GOOGLE_API_KEY:
+        try:
+            llm = get_langchain_llm(temperature=0.3)
+        except Exception as e:
+            logger.error(f"LLM 초기화 실패: {e}")
             return PaperAnalysis(
                 pmid=request.pmid,
                 title=title,
                 analysis_type=request.analysis_type,
-                content=abstract[:1000] if abstract else "API key not configured for AI analysis.",
+                content=abstract[:1000] if abstract else "LLM not configured for AI analysis.",
                 highlights=[],
                 related_papers=[]
             )
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            google_api_key=GOOGLE_API_KEY,
-            temperature=0.3
-        )
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", f"""You are a biomedical research expert. {prompt_text}
