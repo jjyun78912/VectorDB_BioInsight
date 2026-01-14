@@ -58,7 +58,12 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Credentials
+# Credentials (API keys, service accounts - NEVER commit!)
 *.json
 !package.json
+!package-lock.json
 vertex-app-key.json
+vertex-credentials.json
+gen-lang-client-*.json
+*-credentials.json
+*-service-account.json
