@@ -105,30 +105,6 @@
 
 ## Core Features
 
-### 1. Paper RAG System
-
-```
-PDF Upload → Text Splitter → PubMedBERT Embedding → ChromaDB → Semantic Search → Claude API → Answer + Citations
-```
-
-**API Endpoints**:
-- `POST /api/paper/upload` - PDF 업로드
-- `POST /api/paper/analyze` - 논문 분석
-- `POST /api/chat/ask` - Q&A
-
-### 2. Real-time Search & Web Crawler
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Local DB   │     │  PubMed     │     │  DOI/URL    │
-│   Search    │     │   Live      │     │   Import    │
-└──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-       └──────────────────┬┴─────────────────┘
-                         │
-                   Web Crawler Agent
-                 (PubMed, bioRxiv, CrossRef, Semantic Scholar)
-```
-
 ### 3. Knowledge Graph (3D)
 
 - react-force-graph-3d 기반 Galaxy View
@@ -376,6 +352,68 @@ Gene Symbol + Cancer Type + Direction
                                                    ▼
                               "BRCA1은 DNA 손상 복구에 중요한 역할..." [PMID: 12345678]
 ```
+
+---
+
+## Paper Collection & VectorDB
+
+### RNA-seq 특화 논문 컬렉션 (17종 암종)
+
+ML Pan-Cancer 17종 전체에 대한 RNA-seq 논문이 인덱싱되어 RAG 해석에 활용됩니다.
+
+| TCGA 코드 | 암종명 | 컬렉션명 | 논문 수 |
+|-----------|--------|----------|---------|
+| BLCA | 방광암 | rnaseq_bladder_cancer | 50편 |
+| BRCA | 유방암 | rnaseq_breast_cancer | 50편 |
+| COAD | 대장암 | rnaseq_colorectal_cancer | 50편 |
+| GBM | 교모세포종 | rnaseq_glioblastoma | 50편 |
+| HNSC | 두경부암 | rnaseq_head_neck_cancer | 50편 |
+| KIRC | 신장암 | rnaseq_kidney_cancer | 50편 |
+| LGG | 저등급 신경교종 | rnaseq_low_grade_glioma | 50편 |
+| LIHC | 간암 | rnaseq_liver_cancer | 50편 |
+| LUAD/LUSC | 폐암 | rnaseq_lung_cancer | 50편 |
+| OV | 난소암 | rnaseq_ovarian_cancer | 50편 |
+| PAAD | 췌장암 | rnaseq_pancreatic_cancer | 50편 |
+| PRAD | 전립선암 | rnaseq_prostate_cancer | 50편 |
+| SKCM | 피부흑색종 | rnaseq_melanoma | 50편 |
+| STAD | 위암 | rnaseq_stomach_cancer | 50편 |
+| THCA | 갑상선암 | rnaseq_thyroid_cancer | 50편 |
+| UCEC | 자궁내막암 | rnaseq_uterine_cancer | 50편 |
+| - | 혈액암 | rnaseq_blood_cancer | 50편 |
+
+**총계**: ~850편, ~53,000+ chunks
+
+### 논문 수집 스크립트
+
+```bash
+# RNA-seq 특화 논문 수집
+python scripts/collect_rnaseq_papers.py --all --count 50
+python scripts/collect_rnaseq_papers.py --cancer pancreatic_cancer --count 50
+python scripts/collect_rnaseq_papers.py --list  # 가능한 암종 목록
+
+# 일반 논문 수집
+python scripts/pubmed_collector.py --disease pancreatic_cancer --count 100
+```
+
+### 논문 인용 수 기반 랭킹
+
+Semantic Scholar API를 사용하여 논문 품질 점수를 계산합니다.
+
+```bash
+# 특정 컬렉션 랭킹
+python scripts/paper_citation_ranker.py --collection rnaseq_breast_cancer --top 20
+
+# 전체 RNA-seq 컬렉션 랭킹
+python scripts/paper_citation_ranker.py --all-rnaseq
+
+# 컬렉션 목록
+python scripts/paper_citation_ranker.py --list
+```
+
+**품질 점수 계산 (100점 만점)**:
+- 인용 점수 (0-40): 피인용 횟수 기반 (log scale)
+- 최신성 점수 (0-30): 출판 연도 기반
+- 콘텐츠 점수 (0-30): Full-text 유무, chunk 수
 
 ---
 

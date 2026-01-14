@@ -91,6 +91,11 @@ DISEASE_CONFIGS = {
         "name": "RNA-seq Transcriptomics",
         "query": "(RNA-seq[Title/Abstract] OR RNA sequencing[Title/Abstract] OR transcriptomics[Title/Abstract]) AND (cancer OR tumor) AND (differential expression OR gene regulatory network OR hub gene OR driver gene)",
         "kr_name": "RNA-seq 전사체학"
+    },
+    "thyroid_cancer": {
+        "name": "Thyroid Cancer",
+        "query": "(thyroid cancer[Title/Abstract] OR thyroid carcinoma[Title/Abstract] OR papillary thyroid cancer[Title/Abstract] OR PTC[Title/Abstract] OR follicular thyroid cancer[Title/Abstract] OR anaplastic thyroid cancer[Title/Abstract]) AND (BRAF OR RET OR RAS OR gene expression OR treatment OR therapy OR prognosis OR molecular OR transcriptome)",
+        "kr_name": "갑상선암"
     }
 }
 
