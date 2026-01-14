@@ -163,7 +163,8 @@ export const Hero: React.FC<HeroProps> = ({
             console.warn('Translation failed, using original:', err);
           }
         }
-        const response = await api.precisionSearch(localSearchQuery);
+        // Request more results (200) for disease-only queries to show all papers
+        const response = await api.precisionSearch(localSearchQuery, 'auto', { topK: 200 });
         setSearchResults(response.results);
         setSearchDiagnostics(response.diagnostics);
       }
@@ -441,7 +442,7 @@ export const Hero: React.FC<HeroProps> = ({
     </section>
 
     {/* Modals rendered outside section to avoid overflow:hidden */}
-    {searchResults && <LocalDBResults results={searchResults} diagnostics={searchDiagnostics} onClose={closeResults} onSelectResult={handleSelectResult} />}
+    {searchResults && <LocalDBResults results={searchResults} diagnostics={searchDiagnostics} onClose={closeResults} onSelectResult={handleSelectResult} query={lastSearchQuery} />}
     {pubmedResults && (
         <PubMedResults
           papers={pubmedResults}

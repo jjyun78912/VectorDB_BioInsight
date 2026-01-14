@@ -171,8 +171,8 @@ async def precision_search(
     query: str = Query(..., description="Search query (e.g., 'ADHD treatment')"),
     domain: str = Query("auto", description="Disease domain ('auto' to detect from query)"),
     section: Optional[str] = Query(None, description="Filter by section"),
-    top_k: int = Query(10, ge=1, le=50, description="Number of results"),
-    require_title_match: bool = Query(True, description="Require disease term in title/abstract")
+    top_k: int = Query(10, ge=1, le=500, description="Number of results (max 500 for listing all papers)"),
+    require_title_match: bool = Query(False, description="If True, exclude full-text-only matches")
 ):
     """
     Precision search with MeSH vocabulary and field-aware ranking.
@@ -265,7 +265,7 @@ async def search(
     query: str = Query(..., description="Search query"),
     domain: str = Query("pancreatic_cancer", description="Disease domain"),
     section: Optional[str] = Query(None, description="Filter by section"),
-    top_k: int = Query(10, ge=1, le=50, description="Number of results"),
+    top_k: int = Query(10, ge=1, le=500, description="Number of results (max 500)"),
     use_precision: bool = Query(False, description="Use precision search with MeSH vocabulary")
 ):
     """
@@ -347,7 +347,7 @@ async def search(
 async def search_papers(
     query: str = Query(..., description="Search query (keyword or topic)"),
     domain: str = Query("pancreatic_cancer", description="Disease domain"),
-    top_k: int = Query(10, ge=1, le=50, description="Number of papers")
+    top_k: int = Query(10, ge=1, le=500, description="Number of papers (max 500)")
 ):
     """
     Search for papers by keyword - returns paper-level results.
@@ -706,5 +706,163 @@ async def get_paper_detail(
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Paper Explanation API ==============
+
+class PaperCharacteristicsModel(BaseModel):
+    """논문 특성."""
+    study_type: str = ""
+    study_design: str = ""
+    main_finding: str = ""
+    methodology: str = ""
+    sample_info: str = ""
+    evidence_level: str = ""
+    clinical_relevance: str = ""
+    strengths: List[str] = []
+    limitations: List[str] = []
+    key_genes: List[str] = []
+    key_pathways: List[str] = []
+    techniques: List[str] = []
+
+
+class PaperExplanationResponse(BaseModel):
+    """논문 추천 설명 응답."""
+    why_recommended: str
+    relevance_factors: List[str] = []
+    query_match_explanation: str = ""
+    characteristics: Optional[PaperCharacteristicsModel] = None
+    relevance_score: int = 0
+    novelty_score: int = 0
+    quality_score: int = 0
+    model_used: str = ""
+
+
+class ExplainRequest(BaseModel):
+    """설명 요청."""
+    query: str
+    title: str
+    content: str
+    section: str = ""
+    pmid: Optional[str] = None
+    year: Optional[str] = None
+    matched_terms: List[str] = []
+
+
+@router.post("/explain", response_model=PaperExplanationResponse)
+async def explain_paper_recommendation(request: ExplainRequest):
+    """
+    검색 결과에서 논문이 왜 추천되었는지 설명 생성.
+
+    - **query**: 원래 검색어
+    - **title**: 논문 제목
+    - **content**: 매칭된 내용
+    - **section**: 섹션명
+    - **matched_terms**: 매칭된 검색어들
+
+    Returns:
+        추천 이유, 논문 특성, 장점/한계점 등
+    """
+    try:
+        from backend.app.services.paper_explainer import get_paper_explainer
+
+        explainer = get_paper_explainer(use_llm=True)
+
+        # 동기/비동기 구분
+        import asyncio
+        if asyncio.iscoroutinefunction(explainer.explain):
+            explanation = await explainer.explain(
+                query=request.query,
+                title=request.title,
+                content=request.content,
+                section=request.section,
+                pmid=request.pmid,
+                year=request.year,
+                matched_terms=request.matched_terms
+            )
+        else:
+            explanation = explainer.explain(
+                query=request.query,
+                title=request.title,
+                content=request.content,
+                section=request.section,
+                matched_terms=request.matched_terms
+            )
+
+        # 응답 변환
+        char_model = None
+        if explanation.characteristics:
+            char = explanation.characteristics
+            char_model = PaperCharacteristicsModel(
+                study_type=char.study_type,
+                study_design=char.study_design,
+                main_finding=char.main_finding,
+                methodology=char.methodology,
+                sample_info=char.sample_info,
+                evidence_level=char.evidence_level,
+                clinical_relevance=char.clinical_relevance,
+                strengths=char.strengths,
+                limitations=char.limitations,
+                key_genes=char.key_genes,
+                key_pathways=char.key_pathways,
+                techniques=char.techniques
+            )
+
+        return PaperExplanationResponse(
+            why_recommended=explanation.why_recommended,
+            relevance_factors=explanation.relevance_factors,
+            query_match_explanation=explanation.query_match_explanation,
+            characteristics=char_model,
+            relevance_score=explanation.relevance_score,
+            novelty_score=explanation.novelty_score,
+            quality_score=explanation.quality_score,
+            model_used=explanation.model_used
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/explain-quick")
+async def explain_paper_quick(
+    query: str = Query(..., description="검색어"),
+    title: str = Query(..., description="논문 제목"),
+    content: str = Query("", description="매칭된 내용"),
+    section: str = Query("", description="섹션명")
+):
+    """
+    빠른 논문 설명 (규칙 기반, LLM 미사용).
+    """
+    try:
+        from backend.app.services.paper_explainer import RuleBasedExplainer
+
+        explainer = RuleBasedExplainer()
+        explanation = explainer.explain(
+            query=query,
+            title=title,
+            content=content,
+            section=section
+        )
+
+        char_model = None
+        if explanation.characteristics:
+            char = explanation.characteristics
+            char_model = {
+                "study_type": char.study_type,
+                "key_genes": char.key_genes,
+                "techniques": char.techniques
+            }
+
+        return {
+            "why_recommended": explanation.why_recommended,
+            "relevance_factors": explanation.relevance_factors,
+            "characteristics": char_model,
+            "model_used": "rule-based"
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -102,7 +102,7 @@ class PrecisionSearch:
         vector_store: BioVectorStore | None = None,
         disease_domain: str | None = None,
         min_disease_score: float = 0.3,
-        require_title_abstract_match: bool = True
+        require_title_abstract_match: bool = False
     ):
         """
         Initialize precision search.
@@ -111,7 +111,7 @@ class PrecisionSearch:
             vector_store: Vector store to search
             disease_domain: Disease domain for collection
             min_disease_score: Minimum disease relevance score (0-1)
-            require_title_abstract_match: If True, filter out full-text-only matches
+            require_title_abstract_match: If True, filter out full-text-only matches (default: False for more results)
         """
         self.vector_store = vector_store or create_vector_store(disease_domain=disease_domain)
         self.vocabulary = get_medical_vocabulary()
@@ -139,6 +139,19 @@ class PrecisionSearch:
         """
         # Step 1: Extract disease term and modifiers from query
         disease_key, remaining_query = self.vocabulary.extract_disease_from_query(query)
+
+        # Check if query is disease-name-only (no modifiers)
+        # If so, return ALL papers from the collection
+        is_disease_only_query = disease_key and not remaining_query.strip()
+
+        if is_disease_only_query:
+            return self._list_all_papers(disease_key, top_k, section_filter)
+
+        # Check if query has specific keywords (e.g., gene names, pathways)
+        # If so, prioritize papers containing those keywords
+        keywords = remaining_query.split() if remaining_query else []
+        if disease_key and keywords:
+            return self._search_with_keywords(disease_key, keywords, top_k, section_filter)
 
         # Build structured search query
         if disease_key:
@@ -434,6 +447,250 @@ class PrecisionSearch:
                 "abbreviations": mesh.abbreviations
             })
         return diseases
+
+    def _search_with_keywords(
+        self,
+        disease_key: str,
+        keywords: list[str],
+        top_k: int,
+        section_filter: str | None = None
+    ) -> tuple[list[PrecisionSearchResult], SearchDiagnostics]:
+        """
+        Search for papers containing specific keywords within the disease collection.
+
+        When user searches "breast cancer BRCA1" or "유방암 BRCA1",
+        prioritize papers that contain both the disease AND the keyword(s).
+
+        Scoring:
+        - Papers with keyword in title: 100 points
+        - Papers with keyword in abstract: 80 points
+        - Papers with keyword in full text: 60 points
+        - Multiple keywords matched: additional 20 points each
+        """
+        # Get all documents from the collection
+        all_docs = self.vector_store.collection.get(include=['metadatas', 'documents'])
+
+        # Score papers by keyword match
+        papers_scores: dict[str, dict] = {}
+
+        for i, meta in enumerate(all_docs['metadatas']):
+            pmid = meta.get('pmid', '')
+            if not pmid:
+                continue
+
+            # Apply section filter if specified
+            if section_filter and meta.get('section', '').lower() != section_filter.lower():
+                continue
+
+            paper_title = meta.get('paper_title', '').lower()
+            section = meta.get('section', '').lower()
+            content = all_docs['documents'][i].lower() if all_docs['documents'] else ''
+            is_abstract = 'abstract' in section
+
+            # Initialize paper entry
+            if pmid not in papers_scores:
+                papers_scores[pmid] = {
+                    'pmid': pmid,
+                    'paper_title': meta.get('paper_title', 'Unknown'),
+                    'year': meta.get('year', ''),
+                    'doi': meta.get('doi', ''),
+                    'section': meta.get('section', 'Unknown'),
+                    'content': all_docs['documents'][i][:500] if all_docs['documents'] else '',
+                    'metadata': meta,
+                    'score': 0,
+                    'matched_keywords': [],
+                    'match_locations': []
+                }
+
+            # Score by keyword matches
+            for keyword in keywords:
+                kw_lower = keyword.lower()
+
+                # Check title match (highest priority)
+                if kw_lower in paper_title:
+                    if keyword not in papers_scores[pmid]['matched_keywords']:
+                        papers_scores[pmid]['score'] += 100
+                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                        papers_scores[pmid]['match_locations'].append('title')
+
+                # Check abstract match
+                elif is_abstract and kw_lower in content:
+                    if keyword not in papers_scores[pmid]['matched_keywords']:
+                        papers_scores[pmid]['score'] += 80
+                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                        papers_scores[pmid]['match_locations'].append('abstract')
+
+                # Check full text match
+                elif kw_lower in content:
+                    if keyword not in papers_scores[pmid]['matched_keywords']:
+                        papers_scores[pmid]['score'] += 60
+                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                        papers_scores[pmid]['match_locations'].append('full_text')
+
+            # Bonus for matching multiple keywords
+            n_matched = len(papers_scores[pmid]['matched_keywords'])
+            if n_matched > 1:
+                papers_scores[pmid]['score'] += (n_matched - 1) * 20
+
+        # Filter papers with at least one keyword match and sort by score
+        matched_papers = [
+            p for p in papers_scores.values()
+            if p['score'] > 0
+        ]
+
+        sorted_papers = sorted(
+            matched_papers,
+            key=lambda x: (x['score'], x.get('year', '0000')),
+            reverse=True
+        )
+
+        # Limit to top_k
+        limited_papers = sorted_papers[:top_k]
+
+        # Build results
+        results = []
+        for i, paper in enumerate(limited_papers, 1):
+            match_field = MatchField.FULL_TEXT
+            if 'title' in paper['match_locations']:
+                match_field = MatchField.TITLE
+            elif 'abstract' in paper['match_locations']:
+                match_field = MatchField.ABSTRACT
+
+            diagnostic = MatchDiagnostic(
+                field=match_field,
+                matched_terms=paper['matched_keywords'],
+                disease_score=1.0,
+                modifier_score=len(paper['matched_keywords']) / len(keywords),
+                field_weight=FIELD_WEIGHTS[match_field],
+                explanation=f"Keywords [{', '.join(paper['matched_keywords'])}] found in {', '.join(set(paper['match_locations']))}"
+            )
+
+            results.append(PrecisionSearchResult(
+                rank=i,
+                content=paper['content'],
+                paper_title=paper['paper_title'],
+                section=paper['section'],
+                doi=paper['doi'],
+                year=paper['year'],
+                pmid=paper['pmid'],
+                final_score=paper['score'],
+                disease_relevance=1.0,
+                field_match=match_field,
+                diagnostic=diagnostic,
+                metadata=paper['metadata']
+            ))
+
+        # Build diagnostics
+        mesh_info = self.vocabulary.mesh_terms.get(disease_key)
+        mesh_term = mesh_info.primary if mesh_info else None
+
+        total_papers = len([p for p in papers_scores.values()])
+
+        diagnostics = SearchDiagnostics(
+            query=f"{disease_key} {' '.join(keywords)}",
+            detected_disease=disease_key,
+            mesh_term=mesh_term,
+            search_terms=[disease_key] + keywords,
+            modifiers=keywords,
+            total_candidates=total_papers,
+            filtered_results=len(results),
+            strategy_used="keyword_search",
+            explanation=f"Found {len(matched_papers)} papers matching keywords [{', '.join(keywords)}] in {disease_key} collection (showing top {len(results)})"
+        )
+
+        return results, diagnostics
+
+    def _list_all_papers(
+        self,
+        disease_key: str,
+        top_k: int,
+        section_filter: str | None = None
+    ) -> tuple[list[PrecisionSearchResult], SearchDiagnostics]:
+        """
+        List all papers in the collection for disease-name-only queries.
+
+        When user searches only "breast cancer" without additional keywords,
+        return ALL papers in the breast_cancer collection, aggregated by PMID.
+        """
+        # Get all documents from the collection
+        all_docs = self.vector_store.collection.get(include=['metadatas', 'documents'])
+
+        # Aggregate by PMID to get unique papers
+        papers_by_pmid: dict[str, dict] = {}
+
+        for i, meta in enumerate(all_docs['metadatas']):
+            pmid = meta.get('pmid', '')
+            if not pmid:
+                continue
+
+            # Apply section filter if specified
+            if section_filter and meta.get('section', '').lower() != section_filter.lower():
+                continue
+
+            if pmid not in papers_by_pmid:
+                papers_by_pmid[pmid] = {
+                    'pmid': pmid,
+                    'paper_title': meta.get('paper_title', 'Unknown'),
+                    'year': meta.get('year', ''),
+                    'doi': meta.get('doi', ''),
+                    'section': meta.get('section', 'Unknown'),
+                    'content': all_docs['documents'][i][:500] if all_docs['documents'] else '',
+                    'metadata': meta
+                }
+
+        # Sort by year (newest first), then by title
+        sorted_papers = sorted(
+            papers_by_pmid.values(),
+            key=lambda x: (x.get('year', '0000'), x.get('paper_title', '')),
+            reverse=True
+        )
+
+        # Limit to top_k
+        limited_papers = sorted_papers[:top_k]
+
+        # Build results
+        results = []
+        for i, paper in enumerate(limited_papers, 1):
+            diagnostic = MatchDiagnostic(
+                field=MatchField.TITLE,
+                matched_terms=[disease_key],
+                disease_score=1.0,
+                field_weight=1.0,
+                explanation=f"Paper from {disease_key} collection"
+            )
+
+            results.append(PrecisionSearchResult(
+                rank=i,
+                content=paper['content'],
+                paper_title=paper['paper_title'],
+                section=paper['section'],
+                doi=paper['doi'],
+                year=paper['year'],
+                pmid=paper['pmid'],
+                final_score=100.0,  # All papers in collection are relevant
+                disease_relevance=1.0,
+                field_match=MatchField.TITLE,
+                diagnostic=diagnostic,
+                metadata=paper['metadata']
+            ))
+
+        # Build diagnostics
+        mesh_info = self.vocabulary.mesh_terms.get(disease_key)
+        mesh_term = mesh_info.primary if mesh_info else None
+
+        diagnostics = SearchDiagnostics(
+            query=disease_key,
+            detected_disease=disease_key,
+            mesh_term=mesh_term,
+            search_terms=[disease_key],
+            modifiers=[],
+            total_candidates=len(papers_by_pmid),
+            filtered_results=len(results),
+            strategy_used="list_all_papers",
+            explanation=f"Listing all {len(papers_by_pmid)} papers in {disease_key} collection (showing top {len(results)})"
+        )
+
+        return results, diagnostics
 
 
 def search_with_precision(
