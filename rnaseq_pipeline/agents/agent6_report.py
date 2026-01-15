@@ -794,6 +794,213 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _generate_driver_analysis_html(self, data: Dict) -> str:
+        """Generate Driver Gene Analysis section (Known + Novel tracks)."""
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        driver_summary = data.get('driver_summary', {})
+
+        if not driver_known and not driver_novel:
+            return ""
+
+        # Known drivers cards
+        known_cards_html = ""
+        for idx, driver in enumerate(driver_known[:10]):
+            gene = driver.get('gene_symbol', 'Unknown')
+            score = driver.get('score', 0)
+            log2fc = driver.get('log2fc', 0)
+            direction = "↑" if log2fc > 0 else "↓"
+            dir_class = "up" if log2fc > 0 else "down"
+            cosmic_tier = driver.get('cosmic_tier', '')
+            cosmic_role = driver.get('cosmic_role', '')
+            tcga_freq = driver.get('tcga_mutation_freq', 0) * 100
+            tcga_count = driver.get('tcga_sample_count', 0)
+            hotspots = driver.get('hotspots', [])
+            val_method = driver.get('validation_method', '')
+            val_detail = driver.get('validation_detail', '')
+            is_hub = driver.get('is_hub', False)
+
+            # Score badge color
+            if score >= 70:
+                score_class = "high"
+                score_label = "High"
+            elif score >= 50:
+                score_class = "medium"
+                score_label = "Medium"
+            else:
+                score_class = "low"
+                score_label = "Low"
+
+            hotspot_chips = ""
+            if hotspots:
+                hotspot_chips = "".join([f'<span class="hotspot-chip">{h}</span>' for h in hotspots[:3]])
+
+            known_cards_html += f'''
+            <div class="driver-card known">
+                <div class="driver-header">
+                    <div class="driver-title">
+                        <span class="driver-rank">#{idx + 1}</span>
+                        <span class="driver-gene">{gene}</span>
+                        {'<span class="hub-badge">HUB</span>' if is_hub else ''}
+                    </div>
+                    <span class="driver-score {score_class}">{score:.0f}/100</span>
+                </div>
+                <div class="driver-body">
+                    <div class="driver-evidence">
+                        <div class="evidence-row">
+                            <span class="evidence-label">Expression</span>
+                            <span class="evidence-value {dir_class}">{direction} {abs(log2fc):.2f}</span>
+                        </div>
+                        <div class="evidence-row">
+                            <span class="evidence-label">COSMIC</span>
+                            <span class="evidence-value">{cosmic_tier} · {cosmic_role}</span>
+                        </div>
+                        <div class="evidence-row">
+                            <span class="evidence-label">TCGA Freq</span>
+                            <span class="evidence-value">{tcga_freq:.1f}% ({tcga_count} samples)</span>
+                        </div>
+                        {f'<div class="evidence-row"><span class="evidence-label">Hotspots</span><span class="evidence-value">{hotspot_chips}</span></div>' if hotspot_chips else ''}
+                    </div>
+                    <div class="driver-validation">
+                        <span class="validation-icon">🧪</span>
+                        <div class="validation-text">
+                            <strong>{val_method}</strong>
+                            <span>{val_detail}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            '''
+
+        # Novel drivers cards
+        novel_cards_html = ""
+        for idx, driver in enumerate(driver_novel[:10]):
+            gene = driver.get('gene_symbol', 'Unknown')
+            score = driver.get('score', 0)
+            log2fc = driver.get('log2fc', 0)
+            direction = "↑" if log2fc > 0 else "↓"
+            dir_class = "up" if log2fc > 0 else "down"
+            hub_score = driver.get('hub_score', 0)
+            pathway_impact = driver.get('pathway_impact', 0)
+            val_method = driver.get('validation_method', '')
+            val_detail = driver.get('validation_detail', '')
+            is_hub = driver.get('is_hub', False)
+
+            # Score badge color
+            if score >= 70:
+                score_class = "high"
+            elif score >= 50:
+                score_class = "medium"
+            else:
+                score_class = "low"
+
+            novel_cards_html += f'''
+            <div class="driver-card novel">
+                <div class="driver-header">
+                    <div class="driver-title">
+                        <span class="driver-rank">#{idx + 1}</span>
+                        <span class="driver-gene">{gene}</span>
+                        <span class="novel-badge">NEW</span>
+                        {'<span class="hub-badge">HUB</span>' if is_hub else ''}
+                    </div>
+                    <span class="driver-score {score_class}">{score:.0f}/100</span>
+                </div>
+                <div class="driver-body">
+                    <div class="driver-evidence">
+                        <div class="evidence-row">
+                            <span class="evidence-label">Expression</span>
+                            <span class="evidence-value {dir_class}">{direction} {abs(log2fc):.2f}</span>
+                        </div>
+                        <div class="evidence-row">
+                            <span class="evidence-label">Hub Score</span>
+                            <span class="evidence-value">{'●' * min(5, int(hub_score * 5))}{'○' * (5 - min(5, int(hub_score * 5)))}</span>
+                        </div>
+                        <div class="evidence-row">
+                            <span class="evidence-label">Pathway Impact</span>
+                            <span class="evidence-value">{'●' * min(5, int(pathway_impact * 5))}{'○' * (5 - min(5, int(pathway_impact * 5)))}</span>
+                        </div>
+                    </div>
+                    <div class="driver-validation novel-validation">
+                        <span class="validation-icon">🔬</span>
+                        <div class="validation-text">
+                            <strong>{val_method}</strong>
+                            <span>{val_detail}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            '''
+
+        # Summary stats
+        total_known = driver_summary.get('total_known_candidates', len(driver_known))
+        total_novel = driver_summary.get('total_novel_candidates', len(driver_novel))
+        high_conf_known = driver_summary.get('high_confidence_known', 0)
+        high_conf_novel = driver_summary.get('high_confidence_novel', 0)
+        actionable = driver_summary.get('actionable_targets', [])
+        research = driver_summary.get('research_targets', [])
+
+        return f'''
+        <section class="driver-analysis" id="driver-analysis">
+            <div class="driver-header-section">
+                <h2>🎯 Driver Gene Analysis</h2>
+                <p class="driver-subtitle">RNA-seq 발현 패턴 + TCGA 돌연변이 데이터 기반 Driver 예측</p>
+            </div>
+
+            <div class="driver-summary-stats">
+                <div class="driver-stat known-stat">
+                    <span class="stat-value">{total_known}</span>
+                    <span class="stat-label">Known Drivers</span>
+                    <span class="stat-detail">{high_conf_known} high confidence</span>
+                </div>
+                <div class="driver-stat novel-stat">
+                    <span class="stat-value">{total_novel}</span>
+                    <span class="stat-label">Novel Candidates</span>
+                    <span class="stat-detail">{high_conf_novel} high confidence</span>
+                </div>
+                <div class="driver-stat actionable-stat">
+                    <span class="stat-value">{len(actionable)}</span>
+                    <span class="stat-label">Actionable</span>
+                    <span class="stat-detail">{', '.join(actionable[:3]) if actionable else 'None'}</span>
+                </div>
+            </div>
+
+            <div class="driver-method-note">
+                <span class="method-icon">📊</span>
+                <div class="method-text">
+                    <strong>Known Driver Track:</strong> COSMIC Cancer Gene Census + TCGA 돌연변이 빈도 + 발현 변화량 기반 scoring<br>
+                    <strong>Novel Driver Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 기반 scoring (DB bias 최소화)
+                </div>
+            </div>
+
+            <div class="driver-tracks">
+                <div class="driver-track known-track">
+                    <h3>🏆 Known Driver Track</h3>
+                    <p class="track-desc">COSMIC/OncoKB에서 검증된 암 드라이버 유전자. 타겟 치료제 개발 후보.</p>
+                    <div class="driver-cards-grid">
+                        {known_cards_html if known_cards_html else '<p class="no-data">No known drivers found in DEG list</p>'}
+                    </div>
+                </div>
+
+                <div class="driver-track novel-track">
+                    <h3>🔬 Novel Driver Track</h3>
+                    <p class="track-desc">새로운 드라이버 후보. 기존 DB에 없어 기능 연구가 필요한 유전자.</p>
+                    <div class="driver-cards-grid">
+                        {novel_cards_html if novel_cards_html else '<p class="no-data">No novel driver candidates found</p>'}
+                    </div>
+                </div>
+            </div>
+
+            <div class="driver-disclaimer">
+                <span class="disclaimer-icon">⚠️</span>
+                <div class="disclaimer-text">
+                    <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
+                    실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
+                    위 결과는 '가능성 있는 후보'로, 실험적 검증이 반드시 필요합니다.
+                </div>
+            </div>
+        </section>
+        '''
+
     def _generate_methods_html(self) -> str:
         """Generate Level 4: Methods & Appendix."""
         return '''
@@ -1198,6 +1405,72 @@ class ReportAgent(BaseAgent):
             }
 
             .ml-interpretation p {
+                font-size: 13px;
+                color: var(--gray-700);
+                line-height: 1.6;
+                margin: 0;
+            }
+
+            /* Abstract Title */
+            .abstract-title {
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .abstract-title h3 {
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--npj-blue);
+                margin: 0 0 8px 0;
+                line-height: 1.4;
+            }
+
+            .abstract-title .title-en {
+                font-size: 14px;
+                color: var(--gray-600);
+                font-style: italic;
+                margin: 0;
+            }
+
+            /* Driver Gene Interpretation */
+            .driver-interpretation {
+                margin-top: 20px;
+                padding: 20px;
+                background: linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%);
+                border-radius: 8px;
+                border: 1px solid #fca5a5;
+            }
+
+            .driver-interpretation h4 {
+                color: #991b1b;
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+
+            .driver-interpretation p {
+                font-size: 13px;
+                color: var(--gray-700);
+                line-height: 1.6;
+                margin: 0;
+            }
+
+            /* RAG Literature Interpretation */
+            .rag-interpretation {
+                margin-top: 20px;
+                padding: 20px;
+                background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%);
+                border-radius: 8px;
+                border: 1px solid #93c5fd;
+            }
+
+            .rag-interpretation h4 {
+                color: #1e40af;
+                font-size: 15px;
+                margin-bottom: 12px;
+            }
+
+            .rag-interpretation p {
                 font-size: 13px;
                 color: var(--gray-700);
                 line-height: 1.6;
@@ -2188,6 +2461,299 @@ class ReportAgent(BaseAgent):
                 font-size: 12px;
             }
 
+            /* ========== DRIVER ANALYSIS SECTION ========== */
+            .driver-analysis {
+                background: var(--gray-50);
+                border-radius: 12px;
+                padding: var(--spacing-xl);
+                margin: var(--spacing-xl) 0;
+            }
+
+            .driver-header-section {
+                text-align: center;
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .driver-header-section h2 {
+                font-size: 24px;
+                color: var(--npj-blue);
+                margin-bottom: 8px;
+            }
+
+            .driver-subtitle {
+                color: var(--gray-600);
+                font-size: 14px;
+            }
+
+            .driver-summary-stats {
+                display: flex;
+                justify-content: center;
+                gap: var(--spacing-xl);
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .driver-stat {
+                text-align: center;
+                background: white;
+                padding: var(--spacing-lg);
+                border-radius: 12px;
+                min-width: 140px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            }
+
+            .driver-stat .stat-value {
+                display: block;
+                font-size: 32px;
+                font-weight: 700;
+            }
+
+            .known-stat .stat-value { color: var(--npj-blue); }
+            .novel-stat .stat-value { color: var(--npj-orange); }
+            .actionable-stat .stat-value { color: var(--success); }
+
+            .driver-stat .stat-label {
+                display: block;
+                font-size: 12px;
+                color: var(--gray-600);
+                margin-top: 4px;
+            }
+
+            .driver-stat .stat-detail {
+                display: block;
+                font-size: 11px;
+                color: var(--gray-400);
+                margin-top: 4px;
+            }
+
+            .driver-method-note {
+                display: flex;
+                gap: 12px;
+                background: var(--npj-blue-light);
+                padding: var(--spacing-md);
+                border-radius: 8px;
+                margin-bottom: var(--spacing-xl);
+                font-size: 13px;
+            }
+
+            .driver-method-note .method-icon {
+                font-size: 20px;
+            }
+
+            .driver-method-note .method-text {
+                line-height: 1.6;
+                color: var(--gray-700);
+            }
+
+            .driver-tracks {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: var(--spacing-xl);
+            }
+
+            .driver-track {
+                background: white;
+                border-radius: 12px;
+                padding: var(--spacing-lg);
+            }
+
+            .known-track {
+                border-left: 4px solid var(--npj-blue);
+            }
+
+            .novel-track {
+                border-left: 4px solid var(--npj-orange);
+            }
+
+            .driver-track h3 {
+                font-size: 18px;
+                margin-bottom: 8px;
+            }
+
+            .track-desc {
+                font-size: 13px;
+                color: var(--gray-600);
+                margin-bottom: var(--spacing-md);
+            }
+
+            .driver-cards-grid {
+                display: flex;
+                flex-direction: column;
+                gap: var(--spacing-md);
+            }
+
+            .driver-card {
+                background: var(--gray-50);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .driver-card.known {
+                border: 1px solid var(--npj-blue-light);
+            }
+
+            .driver-card.novel {
+                border: 1px solid #fff3e0;
+            }
+
+            .driver-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                background: white;
+            }
+
+            .driver-title {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .driver-rank {
+                font-size: 12px;
+                color: var(--gray-400);
+            }
+
+            .driver-gene {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--gray-900);
+            }
+
+            .hub-badge {
+                background: var(--info);
+                color: white;
+                font-size: 9px;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-weight: 600;
+            }
+
+            .novel-badge {
+                background: var(--npj-orange);
+                color: white;
+                font-size: 9px;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-weight: 600;
+            }
+
+            .driver-score {
+                font-size: 14px;
+                font-weight: 600;
+                padding: 4px 10px;
+                border-radius: 4px;
+            }
+
+            .driver-score.high {
+                background: #dcfce7;
+                color: #166534;
+            }
+
+            .driver-score.medium {
+                background: #fef3c7;
+                color: #92400e;
+            }
+
+            .driver-score.low {
+                background: #fef2f2;
+                color: #991b1b;
+            }
+
+            .driver-body {
+                padding: 12px 16px;
+            }
+
+            .driver-evidence {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            .evidence-row {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .evidence-label {
+                font-size: 10px;
+                color: var(--gray-500);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .evidence-value {
+                font-size: 13px;
+                color: var(--gray-800);
+            }
+
+            .evidence-value.up { color: #dc2626; }
+            .evidence-value.down { color: #2563eb; }
+
+            .hotspot-chip {
+                display: inline-block;
+                background: var(--gray-200);
+                color: var(--gray-700);
+                font-size: 10px;
+                padding: 2px 6px;
+                border-radius: 3px;
+                margin-right: 4px;
+            }
+
+            .driver-validation {
+                display: flex;
+                gap: 10px;
+                padding: 10px;
+                background: white;
+                border-radius: 6px;
+                border: 1px solid var(--gray-200);
+            }
+
+            .driver-validation .validation-icon {
+                font-size: 18px;
+            }
+
+            .driver-validation .validation-text {
+                font-size: 12px;
+                line-height: 1.5;
+            }
+
+            .driver-validation .validation-text strong {
+                display: block;
+                color: var(--gray-800);
+            }
+
+            .driver-validation .validation-text span {
+                color: var(--gray-600);
+            }
+
+            .novel-validation {
+                background: #fffbeb;
+                border-color: #fef3c7;
+            }
+
+            .driver-disclaimer {
+                display: flex;
+                gap: 12px;
+                background: #fef2f2;
+                padding: var(--spacing-md);
+                border-radius: 8px;
+                margin-top: var(--spacing-xl);
+                border: 1px solid #fecaca;
+            }
+
+            .driver-disclaimer .disclaimer-icon {
+                font-size: 20px;
+            }
+
+            .driver-disclaimer .disclaimer-text {
+                font-size: 13px;
+                line-height: 1.6;
+                color: #991b1b;
+            }
+
             /* ========== RESPONSIVE ========== */
             @media (max-width: 768px) {
                 .cover-title { font-size: 24px; }
@@ -2200,6 +2766,9 @@ class ReportAgent(BaseAgent):
                 .rag-genes-grid { grid-template-columns: 1fr; }
                 .table-controls { flex-direction: column; align-items: stretch; }
                 .nav-links { display: none; }
+                .driver-tracks { grid-template-columns: 1fr; }
+                .driver-summary-stats { flex-direction: column; }
+                .driver-evidence { grid-template-columns: 1fr; }
             }
 
             @media print {
@@ -2416,29 +2985,55 @@ class ReportAgent(BaseAgent):
             key_findings = extended_abstract.get('key_findings', [])
             validation = extended_abstract.get('validation_priorities', {})
             ml_interp = extended_abstract.get('ml_interpretation', '')
+            driver_interp = extended_abstract.get('driver_interpretation', '')
+            rag_interp = extended_abstract.get('rag_interpretation', '')
+            title = extended_abstract.get('title', '')
+            title_en = extended_abstract.get('title_en', '')
 
             # Format abstract with paragraphs
             paragraphs = abstract_text.split('\n\n')
             formatted_paragraphs = ''.join([f'<p>{p.strip()}</p>' for p in paragraphs if p.strip()])
 
+            # Title section
+            title_html = ''
+            if title or title_en:
+                title_html = f'''
+                <div class="abstract-title">
+                    <h3>{title}</h3>
+                    <p class="title-en">{title_en}</p>
+                </div>
+                '''
+
             # Key findings list
             findings_html = ''
             if key_findings:
                 findings_html = '<div class="key-findings"><h4>📌 주요 발견</h4><ul>'
-                for finding in key_findings[:6]:
+                for finding in key_findings[:8]:
                     findings_html += f'<li>{finding}</li>'
                 findings_html += '</ul></div>'
+
+            # Driver Gene interpretation
+            driver_html = ''
+            if driver_interp:
+                driver_html = f'<div class="driver-interpretation"><h4>🧬 Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
+
+            # RAG Literature interpretation
+            rag_html = ''
+            if rag_interp:
+                rag_html = f'<div class="rag-interpretation"><h4>📚 문헌 기반 해석</h4><p>{rag_interp}</p></div>'
 
             # Validation priorities
             validation_html = ''
             if validation:
-                validation_html = '<div class="validation-priorities"><h4>🧬 실험적 검증 제안</h4><div class="validation-grid">'
+                validation_html = '<div class="validation-priorities"><h4>🔬 실험적 검증 제안</h4><div class="validation-grid">'
                 if validation.get('qPCR'):
                     validation_html += f'<div class="validation-item"><strong>qRT-PCR:</strong> {", ".join(validation["qPCR"][:5])}</div>'
                 if validation.get('western_blot'):
                     validation_html += f'<div class="validation-item"><strong>Western Blot:</strong> {", ".join(validation["western_blot"][:3])}</div>'
                 if validation.get('functional_study'):
                     validation_html += f'<div class="validation-item"><strong>Functional Study:</strong> {", ".join(validation["functional_study"][:3])}</div>'
+                if validation.get('targeted_sequencing'):
+                    validation_html += f'<div class="validation-item"><strong>Targeted Sequencing:</strong> {", ".join(validation["targeted_sequencing"][:3])}</div>'
                 if validation.get('biomarker_candidates'):
                     validation_html += f'<div class="validation-item"><strong>Biomarker 후보:</strong> {", ".join(validation["biomarker_candidates"][:3])}</div>'
                 validation_html += '</div></div>'
@@ -2452,48 +3047,191 @@ class ReportAgent(BaseAgent):
         <section class="abstract-section" id="abstract">
             <h2>Extended Abstract</h2>
             <div class="abstract-box extended">
+                {title_html}
                 <div class="abstract-content">
                     {formatted_paragraphs}
                 </div>
                 {findings_html}
+                {driver_html}
+                {rag_html}
                 {validation_html}
                 {ml_html}
             </div>
         </section>
             '''
 
-        # Fallback to basic abstract
+        # Fallback to comprehensive abstract (when Claude API unavailable)
         interpretation = data.get('interpretation_report', {})
-        rag_data = interpretation.get('rag_interpretation', {})
-        summary = rag_data.get('summary', '')
+        cancer_type = self.config.get('cancer_type', 'cancer')
+        contrast = self.config.get('contrast', ['Tumor', 'Normal'])
 
-        deg_count = len(data.get('deg_significant', []))
+        # DEG stats
+        deg_df = data.get('deg_significant_df')
+        deg_count = len(deg_df) if deg_df is not None else len(data.get('deg_significant', []))
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
+        n_down = deg_count - n_up
+
+        # Hub genes - map Ensembl IDs to gene symbols using integrated_gene_table
+        hub_df = data.get('hub_genes_df')
+        integrated_df = data.get('integrated_gene_table_df')
         hub_genes = data.get('hub_genes', [])
-        hub_names = [g.get('gene_symbol', g.get('gene_id', '')) for g in hub_genes[:5]]
 
-        pathways = data.get('pathway_summary', [])[:3]
-        pathway_names = [p.get('term_name', '')[:50] for p in pathways]
+        # Create gene_id to gene_symbol mapping from integrated_gene_table
+        gene_id_to_symbol = {}
+        if integrated_df is not None and len(integrated_df) > 0:
+            if 'gene_id' in integrated_df.columns and 'gene_symbol' in integrated_df.columns:
+                for _, row in integrated_df.iterrows():
+                    gene_id = str(row.get('gene_id', ''))
+                    gene_symbol = str(row.get('gene_symbol', ''))
+                    if gene_id and gene_symbol and gene_symbol != 'nan':
+                        gene_id_to_symbol[gene_id] = gene_symbol
 
-        if not summary:
-            summary = f'''
-본 분석에서는 {deg_count:,}개의 차등발현 유전자(DEGs)를 식별하였습니다.
-네트워크 분석을 통해 {len(hub_genes)}개의 Hub 유전자({", ".join(hub_names[:3])} 등)가
-핵심 조절자로 확인되었습니다. Pathway enrichment 분석 결과,
-{", ".join(pathway_names[:2])} 등의 경로가 유의하게 농축되었습니다.
-            '''
+        hub_names = []
+        if hub_df is not None and len(hub_df) > 0:
+            for _, row in hub_df.head(5).iterrows():
+                gene_id = str(row.get('gene_id', ''))
+                # Try to get symbol from mapping, fallback to gene_id
+                gene_symbol = gene_id_to_symbol.get(gene_id, '')
+                if gene_symbol and not gene_symbol.startswith('ENSG'):
+                    hub_names.append(gene_symbol)
+                elif gene_id:
+                    # If no symbol found, use gene_id but try to clean it
+                    hub_names.append(gene_id.split('.')[0] if '.' in gene_id else gene_id)
+        else:
+            hub_names = [g.get('gene_symbol', g.get('gene_id', '')) for g in hub_genes[:5]]
+
+        # Pathways
+        pathway_df = data.get('pathway_summary_df')
+        pathway_names = []
+        if pathway_df is not None and len(pathway_df) > 0:
+            # Check for different column names
+            term_col = None
+            for col in ['term_name', 'Term', 'term', 'pathway']:
+                if col in pathway_df.columns:
+                    term_col = col
+                    break
+            if term_col:
+                pathway_names = pathway_df[term_col].head(3).tolist()
+        else:
+            pathways = data.get('pathway_summary', [])[:3]
+            pathway_names = [p.get('term_name', p.get('Term', ''))[:50] for p in pathways]
+
+        # Clean pathway names (remove GO IDs for readability)
+        pathway_names = [name.split(' (GO:')[0] if ' (GO:' in str(name) else str(name) for name in pathway_names]
+
+        # Driver info
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        known_count = len(driver_known) if driver_known else 0
+        novel_count = len(driver_novel) if driver_novel else 0
+        known_names = [d.get('gene_symbol', '') for d in driver_known[:3]] if driver_known else []
+        novel_names = [d.get('gene_symbol', '') for d in driver_novel[:3]] if driver_novel else []
+
+        # DB matched genes
+        db_matched_df = data.get('db_matched_genes_df')
+        db_count = len(db_matched_df) if db_matched_df is not None else 0
+
+        # RAG interpretation
+        rag_genes_count = 0
+        rag_path = self.input_dir / "rag_interpretations.json"
+        if rag_path.exists():
+            try:
+                import json
+                with open(rag_path, 'r') as f:
+                    rag_genes_count = json.load(f).get('genes_interpreted', 0)
+            except:
+                pass
+
+        # Build comprehensive abstract sections
+        background = f"""본 연구는 {cancer_type.replace('_', ' ').title()} 환자의 RNA-seq 데이터를 이용하여
+{contrast[0]} 대비 {contrast[1]} 그룹 간의 유전자 발현 차이를 분석하고,
+잠재적 Driver 유전자 및 치료 타겟을 발굴하고자 수행되었습니다."""
+
+        methods = f"""차등발현 분석은 DESeq2를 이용하였으며 (|log2FC| > 1, padj < 0.05),
+상관관계 기반 네트워크 분석으로 Hub 유전자를 도출하였습니다.
+GO/KEGG pathway enrichment 분석(Enrichr)과
+COSMIC/OncoKB/IntOGen 데이터베이스 검증을 수행하였습니다.
+Driver 유전자 예측은 Two-Track 시스템(Known + Novel)을 적용하였습니다."""
+
+        results_deg = f"""총 {deg_count:,}개의 DEGs를 식별하였으며 (상향조절 {n_up:,}개, 하향조절 {n_down:,}개)"""
+        results_hub = f"""네트워크 분석 결과 {len(hub_names) if hub_names else 0}개의 Hub 유전자({', '.join(hub_names[:3]) if hub_names else 'N/A'} 등)가 확인되었습니다."""
+        results_pathway = f"""Pathway 분석에서 {', '.join(pathway_names[:2]) if pathway_names else 'N/A'} 등이 유의하게 농축되었습니다."""
+
+        results_driver = ""
+        if known_count > 0 or novel_count > 0:
+            results_driver = f"""Driver 분석 결과, Known Driver 후보 {known_count}개({', '.join(known_names) if known_names else 'N/A'} 등)와
+Novel Driver 후보 {novel_count}개({', '.join(novel_names) if novel_names else 'N/A'} 등)를 도출하였습니다."""
+
+        results_db = ""
+        if db_count > 0:
+            results_db = f"""COSMIC/OncoKB 데이터베이스에서 {db_count}개의 알려진 암 유전자가 매칭되었습니다."""
+
+        results_rag = ""
+        if rag_genes_count > 0:
+            results_rag = f"""문헌 기반 RAG 해석을 통해 {rag_genes_count}개 핵심 유전자의 암종 특이적 역할을 분석하였습니다."""
+
+        conclusions = f"""본 분석에서 확인된 Hub 유전자와 Driver 후보는
+{cancer_type.replace('_', ' ').title()}의 바이오마커 및 치료 타겟 개발에 유망한 후보입니다.
+특히 Known Driver 유전자들은 Targeted NGS를 통해,
+Novel Driver 후보들은 기능적 검증 실험을 통해 추가 검증이 권장됩니다."""
+
+        # Build key findings
+        key_findings = []
+        if deg_count > 0:
+            key_findings.append(f"총 {deg_count:,}개 DEGs 식별 (상향 {n_up:,}개, 하향 {n_down:,}개)")
+        if hub_names:
+            key_findings.append(f"핵심 Hub 유전자: {', '.join(hub_names[:3])}")
+        if pathway_names:
+            key_findings.append(f"주요 Pathway: {pathway_names[0][:40] if pathway_names else 'N/A'}")
+        if known_count > 0:
+            key_findings.append(f"Known Driver 후보 {known_count}개 (COSMIC/OncoKB/IntOGen 검증)")
+        if novel_count > 0:
+            key_findings.append(f"Novel Driver 후보 {novel_count}개 (새로운 발견)")
+        if db_count > 0:
+            key_findings.append(f"암 유전자 DB 매칭 {db_count}개")
+
+        findings_html = ''
+        if key_findings:
+            findings_html = '<div class="key-findings"><h4>📌 주요 발견</h4><ul>'
+            for finding in key_findings[:8]:
+                findings_html += f'<li>{finding}</li>'
+            findings_html += '</ul></div>'
+
+        # Driver interpretation
+        driver_html = ''
+        if known_count > 0 or novel_count > 0:
+            driver_interp = f"""Known Driver Track에서 {known_count}개의 후보가 COSMIC, OncoKB, IntOGen 데이터베이스에서 검증되었습니다.
+이들은 기존에 알려진 암 유전자로서 Targeted NGS 패널을 통한 변이 확인이 권장됩니다.
+Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특성과 발현 패턴 분석을 통해 도출되었으며,
+이들은 기능적 검증 실험(knockdown/overexpression)을 통한 추가 연구가 필요합니다."""
+            driver_html = f'<div class="driver-interpretation"><h4>🧬 Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
+
+        # Validation suggestions
+        validation_html = '<div class="validation-priorities"><h4>🔬 실험적 검증 제안</h4><div class="validation-grid">'
+        if hub_names:
+            validation_html += f'<div class="validation-item"><strong>qRT-PCR:</strong> {", ".join(hub_names[:5])}</div>'
+        if known_names:
+            validation_html += f'<div class="validation-item"><strong>Targeted Sequencing:</strong> {", ".join(known_names[:3])}</div>'
+        if novel_names:
+            validation_html += f'<div class="validation-item"><strong>Functional Study:</strong> {", ".join(novel_names[:3])}</div>'
+        validation_html += '</div></div>'
 
         return f'''
         <section class="abstract-section" id="abstract">
-            <h2>Abstract</h2>
-            <div class="abstract-box">
+            <h2>Extended Abstract</h2>
+            <div class="abstract-box extended">
                 <div class="abstract-content">
-                    <p><strong>Background:</strong> RNA-seq 기반 전사체 분석을 통해 질환 관련 유전자 발현 변화를 체계적으로 분석하였습니다.</p>
-                    <p><strong>Methods:</strong> DESeq2를 이용한 차등발현 분석, WGCNA 기반 네트워크 분석, GO/KEGG pathway enrichment 분석을 수행하였습니다.</p>
-                    <p><strong>Results:</strong> {summary.strip()}</p>
-                    <p><strong>Conclusions:</strong> 본 분석에서 확인된 Hub 유전자와 enriched pathway는 후속 기능 연구 및 바이오마커 개발의 유망한 후보입니다.</p>
+                    <p><strong>배경:</strong> {background.strip()}</p>
+                    <p><strong>방법:</strong> {methods.strip()}</p>
+                    <p><strong>결과:</strong> {results_deg} {results_hub} {results_pathway} {results_driver} {results_db} {results_rag}</p>
+                    <p><strong>결론:</strong> {conclusions.strip()}</p>
                 </div>
+                {findings_html}
+                {driver_html}
+                {validation_html}
                 <div class="abstract-keywords">
-                    <strong>Keywords:</strong> RNA-seq, Differential Expression, Network Analysis, {", ".join(hub_names[:3])}
+                    <strong>Keywords:</strong> RNA-seq, Differential Expression, Network Analysis, Driver Gene, {cancer_type.replace('_', ' ').title()}, {", ".join(hub_names[:3]) if hub_names else ""}
                 </div>
             </div>
         </section>
@@ -2525,7 +3263,8 @@ class ReportAgent(BaseAgent):
             <div class="nav-links">
                 <a href="#abstract">Abstract</a>
                 <a href="#figures">Figures</a>
-                <a href="#rag-summary">Literature Analysis</a>
+                <a href="#driver-analysis">Driver Analysis</a>
+                <a href="#rag-summary">Literature</a>
                 <a href="#gene-cards">Key Genes</a>
                 <a href="#methods">Methods</a>
             </div>
@@ -2541,6 +3280,9 @@ class ReportAgent(BaseAgent):
             <h2>Figures</h2>
             {self._generate_visual_dashboard_html(data)}
         </section>
+
+        <!-- Driver Gene Analysis -->
+        {self._generate_driver_analysis_html(data)}
 
         <!-- RAG Literature Analysis -->
         {self._generate_rag_summary_html(data)}
@@ -2574,6 +3316,49 @@ class ReportAgent(BaseAgent):
 </html>
 '''
 
+    def _run_driver_prediction(self, data: Dict[str, Any]) -> None:
+        """Run Driver Gene Prediction and add results to data dict."""
+        try:
+            from ..ml.driver_predictor import DriverPredictor
+        except ImportError:
+            self.logger.warning("Driver predictor module not available")
+            return
+
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        integrated_df = data.get('integrated_gene_table_df')
+
+        if deg_df is None or len(deg_df) == 0:
+            self.logger.warning("No DEG data available for driver prediction")
+            return
+
+        # Get cancer type from config or interpretation
+        interpretation = data.get('interpretation_report', {})
+        cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'unknown'))
+
+        self.logger.info(f"Running Driver Gene Prediction for {cancer_type}...")
+
+        try:
+            predictor = DriverPredictor(cancer_type)
+            results = predictor.predict(deg_df, hub_df, integrated_df)
+
+            # Convert DriverCandidate objects to dicts
+            data['driver_known'] = [d.to_dict() for d in results.get('known_drivers', [])]
+            data['driver_novel'] = [d.to_dict() for d in results.get('novel_drivers', [])]
+            data['driver_summary'] = results.get('summary', {})
+
+            # Save results to files
+            output_dir = self.output_dir / "driver_analysis"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            predictor.save_results(output_dir)
+
+            self.logger.info(f"Driver prediction complete: {len(data['driver_known'])} known, {len(data['driver_novel'])} novel")
+
+        except Exception as e:
+            self.logger.warning(f"Driver prediction failed: {e}")
+            import traceback
+            traceback.print_exc()
+
     def run(self) -> Dict[str, Any]:
         """Generate the HTML report."""
         data = self._load_all_data()
@@ -2584,6 +3369,9 @@ class ReportAgent(BaseAgent):
             extended_abstract = self._generate_extended_abstract(data)
             if extended_abstract:
                 data['abstract_extended'] = extended_abstract
+
+        # Run Driver Gene Prediction
+        self._run_driver_prediction(data)
 
         # Generate visualization interpretations
         run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
@@ -2620,12 +3408,15 @@ class ReportAgent(BaseAgent):
     def _generate_extended_abstract(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Generate extended abstract using Claude API.
 
-        Creates a comprehensive abstract with:
-        - Background, Methods, Results, Conclusions (Korean)
-        - Key findings list
-        - Validation priorities (qPCR, Western blot, Functional study, Biomarker candidates)
-        - ML prediction interpretation
-        - RAG-based literature interpretation
+        Creates a comprehensive abstract that summarizes ALL report sections:
+        - DEG Analysis (Volcano, Heatmap)
+        - Network Analysis (Hub genes, PPI)
+        - Pathway Enrichment (GO/KEGG)
+        - Driver Gene Analysis (Known/Novel candidates)
+        - Database Validation (COSMIC, OncoKB, IntOGen)
+        - ML Prediction (if available)
+        - RAG Literature Interpretation
+        - Validation Recommendations
         """
         if not ANTHROPIC_AVAILABLE:
             self.logger.warning("anthropic package not available, skipping extended abstract generation")
@@ -2649,8 +3440,26 @@ class ReportAgent(BaseAgent):
         n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
         n_down = n_deg - n_up
 
+        # Top DEGs by fold change
+        top_up_genes = []
+        top_down_genes = []
+        if deg_df is not None and len(deg_df) > 0:
+            gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
+            sorted_df = deg_df.sort_values(log2fc_col, ascending=False)
+            for _, row in sorted_df.head(5).iterrows():
+                gene = row.get(gene_col, 'Unknown')
+                fc = row.get(log2fc_col, 0)
+                if not str(gene).startswith('ENSG'):
+                    top_up_genes.append(f"{gene} (log2FC={fc:.2f})")
+            for _, row in sorted_df.tail(5).iterrows():
+                gene = row.get(gene_col, 'Unknown')
+                fc = row.get(log2fc_col, 0)
+                if not str(gene).startswith('ENSG'):
+                    top_down_genes.append(f"{gene} (log2FC={fc:.2f})")
+
         # Hub genes info - handle both 'gene_id' and 'gene_symbol' column names
         hub_genes_info = []
+        hub_gene_names = []
         if hub_df is not None and len(hub_df) > 0:
             hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
             for _, row in hub_df.head(10).iterrows():
@@ -2658,25 +3467,112 @@ class ReportAgent(BaseAgent):
                 degree = row.get('degree', 0)
                 log2fc = row.get(hub_log2fc_col, 0)
                 hub_genes_info.append(f"- {gene_name} (degree={degree}, log2FC={log2fc:.2f})")
+                hub_gene_names.append(gene_name)
 
-        # Pathway info
+        # Pathway info - categorize by GO/KEGG
         pathway_info = []
+        go_terms = []
+        kegg_terms = []
         if pathway_df is not None and len(pathway_df) > 0:
-            for _, row in pathway_df.head(5).iterrows():
+            for _, row in pathway_df.head(10).iterrows():
                 term = row.get('Term', row.get('term', 'Unknown'))
                 pval = row.get('P-value', row.get('pvalue', 0))
-                pathway_info.append(f"- {term} (p={pval:.2e})")
+                gene_count = row.get('Overlap', row.get('gene_count', ''))
+                pathway_info.append(f"- {term} (p={pval:.2e}, genes={gene_count})")
+                if 'GO:' in str(term) or 'biological_process' in str(row.get('Gene_set', '')).lower():
+                    go_terms.append(term)
+                else:
+                    kegg_terms.append(term)
+
+        # Driver Gene Analysis info
+        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+        driver_info = ""
+        known_drivers = []
+        novel_drivers = []
+
+        # Check agent6_report folder first
+        driver_dir = run_dir / "agent6_report" / "driver_analysis"
+        if not driver_dir.exists():
+            driver_dir = self.output_dir / "driver_analysis"
+
+        if driver_dir.exists():
+            # Load known drivers
+            known_path = driver_dir / "driver_known.csv"
+            if known_path.exists():
+                try:
+                    known_df = pd.read_csv(known_path)
+                    for _, row in known_df.head(10).iterrows():
+                        gene = row.get('gene_symbol', '')
+                        score = row.get('score', 0)
+                        tier = row.get('cosmic_tier', '')
+                        role = row.get('cosmic_role', '')
+                        direction = row.get('direction', '')
+                        known_drivers.append(f"- {gene} (score={score:.1f}, {tier}, {role}, {direction})")
+                except Exception as e:
+                    self.logger.warning(f"Error loading known drivers: {e}")
+
+            # Load novel drivers
+            novel_path = driver_dir / "driver_novel.csv"
+            if novel_path.exists():
+                try:
+                    novel_df = pd.read_csv(novel_path)
+                    for _, row in novel_df.head(10).iterrows():
+                        gene = row.get('gene_symbol', '')
+                        score = row.get('score', 0)
+                        hub_score = row.get('hub_score', 0)
+                        direction = row.get('direction', '')
+                        novel_drivers.append(f"- {gene} (score={score:.1f}, hub_score={hub_score:.2f}, {direction})")
+                except Exception as e:
+                    self.logger.warning(f"Error loading novel drivers: {e}")
+
+            # Load summary
+            summary_path = driver_dir / "driver_summary.json"
+            if summary_path.exists():
+                try:
+                    with open(summary_path, 'r') as f:
+                        driver_summary = json.load(f)
+                    driver_info = f"""
+## Driver Gene Analysis 결과
+- Known Driver 후보: {driver_summary.get('total_known_candidates', 0)}개
+- Novel Driver 후보: {driver_summary.get('total_novel_candidates', 0)}개
+- High Confidence Known: {driver_summary.get('high_confidence_known', 0)}개
+- High Confidence Novel: {driver_summary.get('high_confidence_novel', 0)}개
+- 연구 타겟 추천: {', '.join(driver_summary.get('research_targets', [])[:5])}
+
+### Top Known Drivers (COSMIC/OncoKB/IntOGen 검증됨)
+{chr(10).join(known_drivers[:5]) if known_drivers else '없음'}
+
+### Top Novel Drivers (신규 발견 후보)
+{chr(10).join(novel_drivers[:5]) if novel_drivers else '없음'}
+"""
+                except Exception as e:
+                    self.logger.warning(f"Error loading driver summary: {e}")
+
+        # Database validation info
+        db_matched_df = data.get('db_matched_genes_df')
+        db_info = ""
+        if db_matched_df is not None and len(db_matched_df) > 0:
+            db_genes = []
+            for _, row in db_matched_df.head(10).iterrows():
+                gene = row.get('gene_symbol', '')
+                sources = row.get('db_sources', '')
+                cancer_match = row.get('cancer_type_match', False)
+                db_genes.append(f"- {gene} ({sources}, cancer_specific={cancer_match})")
+            db_info = f"""
+## 데이터베이스 검증 결과
+- COSMIC/OncoKB 매칭 유전자: {len(db_matched_df)}개
+{chr(10).join(db_genes[:5])}
+"""
 
         # ML prediction info (check for prediction files)
         ml_info = ""
-        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
         ml_prediction_path = run_dir / "ml_prediction" / "prediction_summary.json"
         if ml_prediction_path.exists():
             try:
                 with open(ml_prediction_path, 'r') as f:
                     ml_data = json.load(f)
                 ml_info = f"""
-ML 예측 결과:
+## ML 예측 결과
 - 총 샘플 수: {ml_data.get('total_samples', 0)}
 - 예측 분포: {ml_data.get('prediction_distribution', {})}
 - 평균 신뢰도: {ml_data.get('average_confidence', 0):.2f}
@@ -2703,6 +3599,7 @@ ML 예측 결과:
                 literature_supported = []
                 novel_candidates = []
                 all_pmids = set()
+                interpretation_samples = []
 
                 for gene, gene_data in interpretations.items():
                     interp = gene_data.get('interpretation', '')
@@ -2711,6 +3608,12 @@ ML 예측 결과:
                     direction = gene_data.get('direction', '')
 
                     all_pmids.update(pmids)
+
+                    # Store sample interpretations for abstract
+                    if len(interpretation_samples) < 3 and interp:
+                        interpretation_samples.append({
+                            'gene': gene, 'interpretation': interp[:300], 'pmids': pmids[:2]
+                        })
 
                     # Check if literature supports this gene
                     if 'cannot' not in interp.lower() and 'not directly' not in interp.lower():
@@ -2724,61 +3627,127 @@ ML 예측 결과:
                 rag_summary["pmids"] = list(all_pmids)
                 rag_summary["literature_supported"] = literature_supported[:5]
                 rag_summary["novel_candidates"] = novel_candidates[:10]
+                rag_summary["interpretation_samples"] = interpretation_samples
 
                 rag_info = f"""
-RAG 기반 문헌 해석 결과:
+## RAG 기반 문헌 해석 결과
 - 분석된 유전자 수: {rag_summary['genes_analyzed']}개
 - 참조된 PMID 수: {len(all_pmids)}개
 - 문헌 지원 유전자: {', '.join([g['gene'] for g in literature_supported[:5]]) if literature_supported else '없음'}
 - 신규 바이오마커 후보 (기존 문헌 미기재): {', '.join(novel_candidates[:5]) if novel_candidates else '없음'}
+
+### 주요 유전자 해석 샘플
+{chr(10).join([f"- {s['gene']}: {s['interpretation'][:150]}... (PMID: {', '.join(s['pmids'][:2])})" for s in interpretation_samples[:3]]) if interpretation_samples else '없음'}
 """
                 self.logger.info(f"Loaded RAG interpretations: {rag_summary['genes_analyzed']} genes")
             except Exception as e:
                 self.logger.warning(f"Error loading RAG interpretations: {e}")
 
+        # Figures generated
+        figures_info = ""
+        figures = data.get('figures', [])
+        interactive_figures = data.get('interactive_figures', [])
+        if figures or interactive_figures:
+            figure_types = []
+            for fig in figures:
+                if 'volcano' in fig.lower():
+                    figure_types.append('Volcano Plot (DEG 분포)')
+                elif 'heatmap' in fig.lower():
+                    figure_types.append('Heatmap (발현 패턴)')
+                elif 'pca' in fig.lower():
+                    figure_types.append('PCA Plot (샘플 분리)')
+                elif 'network' in fig.lower():
+                    figure_types.append('Network Graph (유전자 상호작용)')
+                elif 'pathway' in fig.lower():
+                    figure_types.append('Pathway Bar Plot (기능 분석)')
+                elif 'boxplot' in fig.lower():
+                    figure_types.append('Expression Boxplot (발현 비교)')
+
+            figures_info = f"""
+## 생성된 시각화
+- 정적 Figure: {len(figures)}개
+- 인터랙티브 Figure: {len(interactive_figures)}개
+- Figure 종류: {', '.join(figure_types[:6])}
+"""
+
         # Study info from config
-        study_name = self.config.get('study_name', 'RNA-seq Analysis')
+        study_name = self.config.get('report_title', self.config.get('study_name', 'RNA-seq Analysis'))
         cancer_type = self.config.get('cancer_type', 'cancer')
+        contrast = self.config.get('contrast', ['Tumor', 'Normal'])
 
-        # Build prompt
-        prompt = f"""당신은 바이오인포매틱스 전문가입니다. 아래 RNA-seq 분석 결과를 바탕으로 학술 논문 스타일의 확장된 초록(Extended Abstract)을 작성해주세요.
+        # Build comprehensive prompt
+        prompt = f"""당신은 바이오인포매틱스 전문가입니다. 아래 RNA-seq 분석 결과를 바탕으로 학술 논문 스타일의 포괄적인 초록(Extended Abstract)을 작성해주세요.
 
-## 분석 정보
+이 초록은 전체 리포트의 모든 섹션을 요약해야 합니다.
+
+## 연구 개요
 - 연구명: {study_name}
 - 암종: {cancer_type}
-- 총 DEG 수: {n_deg}개 (상향조절: {n_up}개, 하향조절: {n_down}개)
+- 비교 그룹: {contrast[0]} vs {contrast[1]}
 
-## Hub 유전자 (Top 10)
-{chr(10).join(hub_genes_info) if hub_genes_info else '정보 없음'}
+## 1. 차등발현 분석 (DEG Analysis)
+- 총 DEG 수: {n_deg:,}개
+- 상향조절 유전자: {n_up:,}개
+- 하향조절 유전자: {n_down:,}개
 
-## 주요 Pathway
-{chr(10).join(pathway_info) if pathway_info else '정보 없음'}
+### 가장 크게 상향조절된 유전자 (Top 5)
+{chr(10).join(top_up_genes) if top_up_genes else '정보 없음'}
+
+### 가장 크게 하향조절된 유전자 (Top 5)
+{chr(10).join(top_down_genes) if top_down_genes else '정보 없음'}
+
+## 2. 네트워크 분석 (Hub Genes)
+- 총 Hub 유전자: {len(hub_gene_names)}개
+{chr(10).join(hub_genes_info[:10]) if hub_genes_info else '정보 없음'}
+
+## 3. Pathway Enrichment 분석
+{chr(10).join(pathway_info[:10]) if pathway_info else '정보 없음'}
+
+{driver_info}
+
+{db_info}
 
 {ml_info}
 
 {rag_info}
 
+{figures_info}
+
 ## 요청 사항
-다음 JSON 형식으로 응답해주세요:
+위 분석 결과를 종합하여 학술 논문 수준의 Extended Abstract를 JSON 형식으로 작성해주세요.
+
+반드시 아래 모든 섹션을 포함해야 합니다:
+1. 배경 (Background) - 연구의 필요성과 목적
+2. 방법 (Methods) - DESeq2, Network analysis, Pathway enrichment, Driver prediction 등
+3. 결과 (Results) - DEG 수, Hub 유전자, 주요 Pathway, Driver 후보 등 핵심 수치 포함
+4. Driver Gene Analysis - Known Driver와 Novel Driver 후보 구분하여 설명
+5. 문헌 기반 해석 - RAG 분석 결과 요약
+6. 검증 제안 - 실험적 검증 방법 제안
+7. 결론 (Conclusions) - 연구의 의의와 향후 방향
 
 ```json
 {{
-  "title": "한국어 제목",
+  "title": "한국어 제목 (암종, DEG 수, 주요 발견 포함)",
   "title_en": "English Title",
-  "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nML 예측 분석: ...\\n\\n문헌 기반 해석: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
+  "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nDriver Gene Analysis: ...\\n\\n문헌 기반 해석: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
   "key_findings": [
-    "주요 발견 1",
-    "주요 발견 2",
-    ...
+    "주요 발견 1 (DEG 관련)",
+    "주요 발견 2 (Hub 유전자 관련)",
+    "주요 발견 3 (Driver 관련)",
+    "주요 발견 4 (Pathway 관련)",
+    "주요 발견 5 (문헌 해석 관련)",
+    "주요 발견 6 (검증 제안)"
   ],
   "validation_priorities": {{
     "qPCR": ["gene1", "gene2", ...],
     "western_blot": ["gene1", "gene2", ...],
     "functional_study": ["gene1", "gene2", ...],
+    "targeted_sequencing": ["driver1", "driver2", ...],
     "biomarker_candidates": ["gene1", "gene2", ...]
   }},
-  "ml_interpretation": "ML 예측 결과에 대한 해석 (Top-3 예측율, 유전자 매칭율 등 포함)",
-  "rag_interpretation": "RAG 문헌 해석 결과 요약 (문헌 지원 유전자 vs 신규 바이오마커 후보 구분)",
+  "driver_interpretation": "Known Driver와 Novel Driver 후보에 대한 종합 해석",
+  "ml_interpretation": "ML 예측 결과에 대한 해석 (있는 경우)",
+  "rag_interpretation": "RAG 문헌 해석 결과 요약",
   "literature_sources": {{
     "pmid_count": {len(rag_summary.get('pmids', []))},
     "key_pmids": {rag_summary.get('pmids', [])[:5]}
@@ -2786,13 +3755,14 @@ RAG 기반 문헌 해석 결과:
 }}
 ```
 
-중요:
+중요 지침:
 1. 한국어로 작성 (영문 제목만 영어)
-2. 발견된 Hub 유전자를 validation_priorities에 실제 유전자명으로 포함
-3. ML 예측의 Top-3 예측율과 유전자 매칭율을 해석에 포함
-4. RAG 문헌 해석 섹션 필수 포함 - 문헌 지원 유전자와 신규 바이오마커 후보를 구분하여 설명
+2. 모든 수치는 실제 분석 결과에서 가져올 것 (DEG 수: {n_deg:,}개, Hub 유전자: {len(hub_gene_names)}개 등)
+3. Driver Gene Analysis 섹션 필수 - Known/Novel 구분하여 상위 유전자 명시
+4. Hub 유전자와 Driver 후보를 validation_priorities에 실제 유전자명으로 포함
 5. PMID 인용 형식 사용 (예: PMID 35409110)
-6. 실험적 검증 방법을 구체적으로 제안
+6. abstract_extended는 최소 800자 이상으로 상세하게 작성
+7. key_findings는 6개 이상, 각 섹션에서 핵심 발견 포함
 
 문체 지침:
 - 마크다운 특수기호 사용 금지 (**, __, ##, [], () 등)
