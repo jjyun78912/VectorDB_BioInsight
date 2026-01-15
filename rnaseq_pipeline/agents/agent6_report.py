@@ -157,6 +157,49 @@ class ReportAgent(BaseAgent):
             except Exception as e:
                 self.logger.warning(f"Error loading extended abstract: {e}")
 
+        # Load driver analysis data if exists
+        driver_dirs = [
+            self.input_dir / "driver_analysis",
+            run_dir / "driver_analysis",
+            run_dir / "agent6_report" / "driver_analysis"
+        ]
+
+        for driver_dir in driver_dirs:
+            if driver_dir.exists():
+                # Load known drivers
+                known_path = driver_dir / "driver_known.csv"
+                if known_path.exists():
+                    try:
+                        known_df = pd.read_csv(known_path)
+                        data['driver_known'] = known_df.to_dict(orient='records')
+                        self.logger.info(f"Loaded driver_known.csv: {len(known_df)} rows")
+                    except Exception as e:
+                        self.logger.warning(f"Error loading driver_known.csv: {e}")
+
+                # Load candidate regulators (or novel drivers for backward compat)
+                novel_path = driver_dir / "driver_candidate_regulators.csv"
+                if not novel_path.exists():
+                    novel_path = driver_dir / "driver_novel.csv"
+                if novel_path.exists():
+                    try:
+                        novel_df = pd.read_csv(novel_path)
+                        data['driver_novel'] = novel_df.to_dict(orient='records')
+                        self.logger.info(f"Loaded {novel_path.name}: {len(novel_df)} rows")
+                    except Exception as e:
+                        self.logger.warning(f"Error loading candidate regulators: {e}")
+
+                # Load driver summary
+                summary_path = driver_dir / "driver_summary.json"
+                if summary_path.exists():
+                    try:
+                        with open(summary_path, 'r') as f:
+                            data['driver_summary'] = json.load(f)
+                        self.logger.info("Loaded driver_summary.json")
+                    except Exception as e:
+                        self.logger.warning(f"Error loading driver_summary.json: {e}")
+
+                break  # Found driver data, stop searching
+
         return data
 
     def _calculate_overall_confidence(self, data: Dict) -> tuple:
