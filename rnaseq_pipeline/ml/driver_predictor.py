@@ -30,7 +30,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 class DriverCandidate:
     """Driver gene candidate with evidence."""
     gene_symbol: str
-    track: str  # "known" or "novel"
+    track: str  # "known" or "candidate_regulator" (renamed from "novel")
     score: float  # 0-100
 
     # Expression evidence
@@ -50,10 +50,24 @@ class DriverCandidate:
     tcga_sample_count: int = 0
     hotspots: List[str] = None
 
-    # Novel track evidence
+    # Candidate Regulator track evidence (formerly Novel)
     cancer_specific: bool = False
     pathway_impact: float = 0.0
     literature_count: int = 0
+
+    # Literature support level
+    # - "well_established": Multiple studies in this cancer type
+    # - "emerging": Some reports in literature
+    # - "uncharacterized": No significant literature support
+    literature_support: str = "uncharacterized"
+
+    # Pan-cancer driver status
+    is_pancancer_driver: bool = False
+    pancancer_cancers: List[str] = None  # Cancer types where this is a known driver
+
+    # Role-expression consistency
+    # True if Oncogene+up or TSG+down, False if opposite
+    role_expression_consistent: Optional[bool] = None
 
     # Validation suggestion
     validation_method: str = ""
@@ -62,6 +76,8 @@ class DriverCandidate:
     def __post_init__(self):
         if self.hotspots is None:
             self.hotspots = []
+        if self.pancancer_cancers is None:
+            self.pancancer_cancers = []
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -95,6 +111,39 @@ class DriverDatabase:
         'TET2', 'ASXL1', 'BCOR', 'STAG2', 'RAD21', 'SMC1A', 'SMC3',
         'PHF6', 'CEBPA', 'RUNX1', 'GATA2', 'ETV6', 'IKZF1', 'PAX5',
         'BTK', 'CARD11', 'MYD88', 'CD79A', 'CD79B', 'TNFAIP3'
+    }
+
+    # Emerging regulators reported in literature (TSG-like or regulatory roles)
+    # These are NOT confirmed drivers but have literature support
+    EMERGING_REGULATORS = {
+        # lncRNAs with tumor suppressor-like activity
+        'ADAMTS9-AS2': {'role': 'TSG-like lncRNA', 'cancers': ['breast', 'TNBC', 'lung']},
+        'MAGI2-AS3': {'role': 'TSG-like lncRNA', 'cancers': ['breast', 'gastric']},
+        'LINC00052': {'role': 'Oncogenic lncRNA', 'cancers': ['breast', 'hepatocellular']},
+
+        # EMT/metastasis regulators
+        'RBMS3': {'role': 'TSG', 'cancers': ['breast', 'gastric', 'lung']},
+        'SPARCL1': {'role': 'TSG', 'cancers': ['breast', 'colorectal', 'prostate']},
+
+        # Stemness/pluripotency factors
+        'SOX2': {'role': 'Oncogene/Stemness', 'cancers': ['pan-cancer', 'breast CSC']},
+
+        # Signaling adaptors/kinases
+        'NTRK2': {'role': 'Oncogene', 'cancers': ['neuroblastoma', 'breast']},
+
+        # Other emerging candidates with literature support
+        'ANK2': {'role': 'Unknown', 'cancers': ['cardiac', 'emerging cancer']},
+        'RAB26': {'role': 'Unknown', 'cancers': ['autophagy', 'emerging cancer']},
+        'SHE': {'role': 'Adaptor', 'cancers': ['signaling', 'breast']},
+        'SCN4B': {'role': 'Ion channel', 'cancers': ['breast', 'prostate']},
+        'TSHZ2': {'role': 'TF', 'cancers': ['breast', 'lung']},
+        'LDB2': {'role': 'TF cofactor', 'cancers': ['endothelial', 'breast']},
+        'PROS1': {'role': 'Anticoagulant', 'cancers': ['breast', 'ovarian']},
+        'JAM2': {'role': 'Cell adhesion', 'cancers': ['breast', 'endothelial']},
+        'FLRT2': {'role': 'Cell adhesion', 'cancers': ['breast', 'neuronal']},
+        'CYRIA': {'role': 'Actin regulator', 'cancers': ['breast', 'migration']},
+        'RHOJ': {'role': 'Rho GTPase', 'cancers': ['breast', 'angiogenesis']},
+        'STARD9': {'role': 'Lipid transport', 'cancers': ['breast', 'mitotic']},
     }
 
     # TCGA cancer type mapping
@@ -312,6 +361,109 @@ class DriverDatabase:
             return gene_upper in self.intogen_db[cancer]
         return False
 
+    def get_pancancer_driver_status(self, gene: str) -> Tuple[bool, List[str]]:
+        """
+        Check if gene is a pan-cancer driver (driver in multiple cancer types).
+
+        Returns: (is_pancancer_driver, list of cancer types where it's a driver)
+        """
+        gene_upper = gene.upper()
+        driver_cancers = []
+
+        # Check IntOGen database for all cancer types
+        for cancer_type, genes in self.intogen_db.items():
+            if gene_upper in genes:
+                driver_cancers.append(cancer_type)
+
+        # Check COSMIC Tier1 (always pan-cancer relevant)
+        if gene_upper in self.COSMIC_TIER1_ONCOGENES | self.COSMIC_TIER1_TSG:
+            if 'pan-cancer' not in driver_cancers:
+                driver_cancers.append('pan-cancer (COSMIC Tier1)')
+
+        is_pancancer = len(driver_cancers) >= 2  # Driver in 2+ cancer types
+        return is_pancancer, driver_cancers
+
+    def get_literature_support(self, gene: str, cancer_type: str = None) -> str:
+        """
+        Assess literature support level for a gene in the given cancer context.
+
+        Returns:
+        - "well_established": Known driver in COSMIC/OncoKB + IntOGen for this cancer
+        - "emerging": In IntOGen, pan-cancer driver, or curated emerging regulator list
+        - "uncharacterized": No significant database support
+
+        Note: This is a heuristic based on database presence.
+        For true literature search, integrate PubMed API.
+        """
+        gene_upper = gene.upper()
+        cancer = cancer_type or self.cancer_type
+
+        # Well-established: COSMIC Tier1 + IntOGen driver in this cancer
+        is_cosmic_tier1 = gene_upper in (self.COSMIC_TIER1_ONCOGENES | self.COSMIC_TIER1_TSG)
+        is_intogen_this_cancer = self.is_intogen_driver(gene_upper, cancer)
+
+        if is_cosmic_tier1 and is_intogen_this_cancer:
+            return "well_established"
+
+        # COSMIC Tier1 alone is also well-established
+        if is_cosmic_tier1:
+            return "well_established"
+
+        # Check pan-cancer status
+        is_pancancer, driver_cancers = self.get_pancancer_driver_status(gene_upper)
+
+        # Emerging: IntOGen driver (this cancer) OR pan-cancer driver OR COSMIC Tier2
+        if is_intogen_this_cancer:
+            return "emerging"
+        if is_pancancer:
+            return "emerging"
+        if gene_upper in self.COSMIC_TIER2:
+            return "emerging"
+
+        # Check if it's a known gene in any database
+        if gene_upper in self.gene_roles:
+            return "emerging"
+
+        # Check curated EMERGING_REGULATORS list (literature-based)
+        if gene_upper in self.EMERGING_REGULATORS:
+            return "emerging"
+
+        return "uncharacterized"
+
+    def get_emerging_regulator_info(self, gene: str) -> Optional[Dict]:
+        """Get info about an emerging regulator from curated list."""
+        gene_upper = gene.upper()
+        if gene_upper in self.EMERGING_REGULATORS:
+            return self.EMERGING_REGULATORS[gene_upper]
+        return None
+
+    def check_role_expression_consistency(self, gene: str, direction: str) -> Optional[bool]:
+        """
+        Check if expression direction is consistent with known role.
+
+        - Oncogene: expect upregulated in cancer (direction='up' is consistent)
+        - TSG: expect downregulated in cancer (direction='down' is consistent)
+
+        Returns:
+        - True: Consistent (Oncogene+up or TSG+down)
+        - False: Inconsistent (Oncogene+down or TSG+up) - may indicate complex biology
+        - None: Role unknown
+        """
+        gene_upper = gene.upper()
+
+        role_info = self.gene_roles.get(gene_upper)
+        if not role_info:
+            return None
+
+        role = role_info.get('role', 'Unknown')
+
+        if role == 'Oncogene':
+            return direction == 'up'
+        elif role == 'TSG':
+            return direction == 'down'
+        else:
+            return None
+
     def get_validation_suggestion(self, gene: str, cancer_type: str = None) -> Tuple[str, str]:
         """Get validation method suggestion for a gene."""
         gene_upper = gene.upper()
@@ -490,6 +642,11 @@ class DriverPredictor:
             cosmic_info = self.db.get_cosmic_info(gene)
             tcga_freq, tcga_count, hotspots = self.db.get_tcga_mutation_freq(gene)
 
+            # Get new evidence fields
+            literature_support = self.db.get_literature_support(gene, self.cancer_type)
+            is_pancancer, pancancer_cancers = self.db.get_pancancer_driver_status(gene)
+            role_consistent = self.db.check_role_expression_consistency(gene, data['direction'])
+
             # Calculate score components
             # 1. COSMIC tier (25%)
             cosmic_score = 0
@@ -541,6 +698,10 @@ class DriverPredictor:
                 tcga_mutation_freq=tcga_freq,
                 tcga_sample_count=tcga_count,
                 hotspots=hotspots,
+                literature_support=literature_support,
+                is_pancancer_driver=is_pancancer,
+                pancancer_cancers=pancancer_cancers,
+                role_expression_consistent=role_consistent,
                 validation_method=val_method,
                 validation_detail=val_detail
             )
@@ -549,7 +710,13 @@ class DriverPredictor:
         return candidates
 
     def _score_novel_drivers(self, gene_data: Dict[str, Dict]) -> List[DriverCandidate]:
-        """Score genes for Novel Driver track."""
+        """
+        Score genes for Candidate Regulator track (formerly Novel Driver).
+
+        NOTE: These are NOT confirmed drivers but network-level key regulators
+        that warrant further investigation. The term "candidate_regulator" is used
+        instead of "novel_driver" to avoid overclaiming.
+        """
         candidates = []
 
         for gene, data in gene_data.items():
@@ -557,9 +724,13 @@ class DriverPredictor:
             if self.db.is_known_driver(gene):
                 continue
 
-            # Minimum criteria for novel driver consideration
+            # Minimum criteria for candidate regulator consideration
             if abs(data['log2fc']) < 1.0 or data['padj'] > 0.05:
                 continue
+
+            # Get evidence fields
+            literature_support = self.db.get_literature_support(gene, self.cancer_type)
+            is_pancancer, pancancer_cancers = self.db.get_pancancer_driver_status(gene)
 
             # Calculate score components (different weighting)
             # 1. Expression change magnitude (30%)
@@ -603,13 +774,24 @@ class DriverPredictor:
             # Total score
             total_score = expr_score + hub_score + sig_score + pathway_score + db_score
 
-            # Minimum threshold for novel candidates
+            # Minimum threshold for candidates
             if total_score < 40:
                 continue
 
+            # Determine appropriate validation method based on evidence
+            if literature_support == "emerging":
+                val_method = 'Literature validation + Functional'
+                val_detail = f'{gene}: Review existing literature, then knockdown/overexpression assay'
+            elif is_pancancer:
+                val_method = 'Cross-cancer validation'
+                val_detail = f'{gene}: Compare with {", ".join(pancancer_cancers[:2])} datasets'
+            else:
+                val_method = 'Functional validation'
+                val_detail = f'{gene} knockdown/overexpression + phenotype assay'
+
             candidate = DriverCandidate(
                 gene_symbol=gene,
-                track='novel',
+                track='candidate_regulator',  # Renamed from 'novel'
                 score=total_score,
                 log2fc=data['log2fc'],
                 padj=data['padj'],
@@ -617,8 +799,11 @@ class DriverPredictor:
                 hub_score=data['hub_score'],
                 is_hub=data['is_hub'],
                 pathway_impact=pathway_score / 10,
-                validation_method='Functional validation',
-                validation_detail=f'{gene} knockdown/overexpression + phenotype assay'
+                literature_support=literature_support,
+                is_pancancer_driver=is_pancancer,
+                pancancer_cancers=pancancer_cancers,
+                validation_method=val_method,
+                validation_detail=val_detail
             )
             candidates.append(candidate)
 
@@ -627,46 +812,64 @@ class DriverPredictor:
     def _generate_summary(self) -> Dict:
         """Generate analysis summary."""
         known = self.results['known_drivers']
-        novel = self.results['novel_drivers']
+        regulators = self.results['novel_drivers']  # Now called candidate_regulators
 
         # High confidence counts
         high_conf_known = len([d for d in known if d.score >= 70])
-        high_conf_novel = len([d for d in novel if d.score >= 70])
+        high_conf_regulators = len([d for d in regulators if d.score >= 70])
 
-        # Top actionable targets
+        # Top actionable targets (known drivers with high confidence)
         actionable = [d.gene_symbol for d in known if d.score >= 70][:3]
 
-        # Top research targets
-        research = [d.gene_symbol for d in novel if d.score >= 70][:3]
+        # Top research targets (candidate regulators for further study)
+        research = [d.gene_symbol for d in regulators if d.score >= 70][:3]
+
+        # Literature support breakdown for candidate regulators
+        lit_counts = {
+            'well_established': len([d for d in regulators if d.literature_support == 'well_established']),
+            'emerging': len([d for d in regulators if d.literature_support == 'emerging']),
+            'uncharacterized': len([d for d in regulators if d.literature_support == 'uncharacterized'])
+        }
+
+        # Role-expression consistency for known drivers
+        consistent_count = len([d for d in known if d.role_expression_consistent is True])
+        inconsistent_count = len([d for d in known if d.role_expression_consistent is False])
 
         return {
             'total_known_candidates': len(known),
-            'total_novel_candidates': len(novel),
+            'total_candidate_regulators': len(regulators),  # Renamed from novel
             'high_confidence_known': high_conf_known,
-            'high_confidence_novel': high_conf_novel,
+            'high_confidence_regulators': high_conf_regulators,
             'actionable_targets': actionable,
             'research_targets': research,
-            'cancer_type': self.cancer_type
+            'cancer_type': self.cancer_type,
+            # New fields
+            'literature_support_breakdown': lit_counts,
+            'role_expression_consistent': consistent_count,
+            'role_expression_inconsistent': inconsistent_count
         }
 
     def to_dataframe(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Convert results to DataFrames."""
         known_df = pd.DataFrame([d.to_dict() for d in self.results['known_drivers']])
-        novel_df = pd.DataFrame([d.to_dict() for d in self.results['novel_drivers']])
-        return known_df, novel_df
+        regulator_df = pd.DataFrame([d.to_dict() for d in self.results['novel_drivers']])
+        return known_df, regulator_df
 
     def save_results(self, output_dir: Path):
         """Save results to CSV files."""
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        known_df, novel_df = self.to_dataframe()
+        known_df, regulator_df = self.to_dataframe()
 
         if len(known_df) > 0:
             known_df.to_csv(output_dir / 'driver_known.csv', index=False)
 
-        if len(novel_df) > 0:
-            novel_df.to_csv(output_dir / 'driver_novel.csv', index=False)
+        if len(regulator_df) > 0:
+            # Save as candidate_regulators (renamed from novel)
+            regulator_df.to_csv(output_dir / 'driver_candidate_regulators.csv', index=False)
+            # Also keep old filename for backwards compatibility
+            regulator_df.to_csv(output_dir / 'driver_novel.csv', index=False)
 
         # Save summary
         with open(output_dir / 'driver_summary.json', 'w') as f:
