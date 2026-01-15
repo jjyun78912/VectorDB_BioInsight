@@ -543,27 +543,107 @@ class VisualizationAgent(BaseAgent):
         - Blue-White-Red diverging colormap
         - Clean condition annotation bar
         - Gene symbols on y-axis
+        - Sample names with condition on x-axis
         - Clustered by expression pattern
+
+        Generates two heatmaps:
+        1. Full heatmap (Top 50 DEGs)
+        2. Key genes heatmap (Hub genes + Known Drivers)
         """
         if self.norm_counts is None or self.deg_sig is None:
             self.logger.warning("Skipping heatmap - missing data")
             return None
 
-        self.logger.info("Generating npj-style heatmap...")
+        self.logger.info("Generating npj-style heatmaps...")
 
         colors = self.config["colors"]
+        saved_files = []
 
-        # Get top genes
+        # Create custom colormap (Blue-White-Red)
+        from matplotlib.colors import LinearSegmentedColormap
+        npj_cmap = LinearSegmentedColormap.from_list('npj_heatmap',
+            [colors['down'], '#ffffff', colors['up']])
+
+        # ===== FULL HEATMAP (Top 50 DEGs) =====
         n_genes = min(self.config["top_genes_heatmap"], len(self.deg_sig))
         top_genes = self.deg_sig.head(n_genes)['gene_id'].tolist()
 
+        full_files = self._create_heatmap(
+            gene_list=top_genes,
+            title=f'Expression Heatmap (Top {n_genes} DEGs)',
+            filename='heatmap_top50',
+            cmap=npj_cmap,
+            colors=colors,
+            show_sample_names=True
+        )
+        if full_files:
+            saved_files.extend(full_files)
+
+        # ===== KEY GENES HEATMAP (Hub + Drivers) =====
+        key_genes = self._get_key_genes_for_heatmap()
+        if key_genes and len(key_genes) >= 5:
+            key_files = self._create_heatmap(
+                gene_list=key_genes,
+                title=f'Key Genes Heatmap (Hub Genes + Known Drivers, n={len(key_genes)})',
+                filename='heatmap_key_genes',
+                cmap=npj_cmap,
+                colors=colors,
+                show_sample_names=True,
+                figsize=(14, 8)  # Wider for sample names
+            )
+            if key_files:
+                saved_files.extend(key_files)
+
+        return saved_files if saved_files else None
+
+    def _get_key_genes_for_heatmap(self) -> List[str]:
+        """Get key genes (Hub genes + Known Drivers) for focused heatmap."""
+        key_genes = set()
+
+        # Add Hub genes
+        if self.hub_genes is not None and len(self.hub_genes) > 0:
+            hub_ids = self.hub_genes['gene_id'].head(20).tolist()
+            key_genes.update(hub_ids)
+            self.logger.info(f"Added {len(hub_ids)} hub genes to key heatmap")
+
+        # Add Known Drivers from db_matched_genes
+        db_matched_path = self.input_dir / "db_matched_genes.csv"
+        if db_matched_path.exists():
+            try:
+                db_df = pd.read_csv(db_matched_path)
+                if 'gene_id' in db_df.columns:
+                    driver_ids = db_df['gene_id'].head(15).tolist()
+                    key_genes.update(driver_ids)
+                    self.logger.info(f"Added {len(driver_ids)} driver genes to key heatmap")
+            except Exception as e:
+                self.logger.warning(f"Could not load db_matched_genes: {e}")
+
+        # Add integrated genes with high scores
+        integrated_path = self.input_dir / "integrated_gene_table.csv"
+        if integrated_path.exists():
+            try:
+                int_df = pd.read_csv(integrated_path)
+                if 'interpretation_score' in int_df.columns and 'gene_id' in int_df.columns:
+                    high_score = int_df[int_df['interpretation_score'] >= 3.0]
+                    high_score_ids = high_score['gene_id'].head(10).tolist()
+                    key_genes.update(high_score_ids)
+                    self.logger.info(f"Added {len(high_score_ids)} high-score genes to key heatmap")
+            except Exception as e:
+                self.logger.warning(f"Could not load integrated_gene_table: {e}")
+
+        return list(key_genes)
+
+    def _create_heatmap(self, gene_list: List[str], title: str, filename: str,
+                        cmap, colors: dict, show_sample_names: bool = False,
+                        figsize: tuple = None) -> Optional[List[str]]:
+        """Create a single heatmap with given gene list."""
         # Filter expression data
         gene_col = self.norm_counts.columns[0]
-        expr_df = self.norm_counts[self.norm_counts[gene_col].isin(top_genes)]
+        expr_df = self.norm_counts[self.norm_counts[gene_col].isin(gene_list)]
         expr_df = expr_df.set_index(gene_col)
 
         if len(expr_df) == 0:
-            self.logger.warning("No matching genes for heatmap")
+            self.logger.warning(f"No matching genes for {filename}")
             return None
 
         # Sort samples by condition
@@ -584,13 +664,24 @@ class VisualizationAgent(BaseAgent):
             symbol = self._get_gene_symbol(gene_id)
             gene_labels.append(symbol if symbol != gene_id else gene_id.split('.')[0][-8:])
 
-        # npj-style heatmap with seaborn clustermap
-        # Create custom colormap (Blue-White-Red)
-        from matplotlib.colors import LinearSegmentedColormap
-        npj_cmap = LinearSegmentedColormap.from_list('npj_heatmap',
-            [colors['down'], '#ffffff', colors['up']])
+        # Create sample labels with condition
+        sample_labels = []
+        for sample in expr_df.columns:
+            cond = self.sample_to_condition.get(sample, 'Unknown') if self.sample_to_condition else ''
+            # Shorten sample name if too long
+            short_sample = sample[:15] + '...' if len(sample) > 18 else sample
+            # Add condition indicator
+            if cond.lower() in ['tumor', 'tumour', 'cancer']:
+                sample_labels.append(f"{short_sample} (T)")
+            elif cond.lower() == 'normal':
+                sample_labels.append(f"{short_sample} (N)")
+            else:
+                sample_labels.append(f"{short_sample} ({cond[:3]})")
 
         # Prepare condition colors
+        col_colors = None
+        unique_conditions = []
+        cond_palette = {}
         if self.sample_to_condition:
             conditions = [self.sample_to_condition.get(s, 'Unknown') for s in expr_df.columns]
             unique_conditions = sorted(set(conditions))
@@ -601,21 +692,29 @@ class VisualizationAgent(BaseAgent):
                     cond_palette[c] = plt.cm.Set2(i)
             col_colors = pd.Series([cond_palette.get(c, '#9e9e9e') for c in conditions],
                                    index=expr_df.columns)
-        else:
-            col_colors = None
+
+        # Determine figure size
+        n_samples = len(expr_df.columns)
+        n_genes = len(expr_df)
+        if figsize is None:
+            figsize = self.config["figsize"]["heatmap"]
+
+        # Adjust figure size based on sample count for readability
+        if show_sample_names and n_samples > 30:
+            figsize = (max(figsize[0], n_samples * 0.25), figsize[1])
 
         # Create clustermap
         g = sns.clustermap(
             expr_zscore,
-            cmap=npj_cmap,
+            cmap=cmap,
             center=0,
             vmin=-2, vmax=2,
             col_cluster=False,  # Don't cluster samples (keep condition order)
             row_cluster=True,   # Cluster genes
             col_colors=col_colors,
-            yticklabels=gene_labels if n_genes <= 50 else False,
-            xticklabels=False,  # Hide sample labels (too many)
-            figsize=self.config["figsize"]["heatmap"],
+            yticklabels=gene_labels if n_genes <= 60 else False,
+            xticklabels=sample_labels if show_sample_names else False,
+            figsize=figsize,
             dendrogram_ratio=(0.1, 0.05),
             colors_ratio=0.02,
             cbar_pos=(0.02, 0.8, 0.03, 0.15),
@@ -626,13 +725,16 @@ class VisualizationAgent(BaseAgent):
         g.ax_heatmap.set_xlabel('Samples', fontsize=11)
         g.ax_heatmap.set_ylabel('Genes', fontsize=11)
 
+        # Rotate x-axis labels for readability
+        if show_sample_names:
+            plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, ha='right', fontsize=8)
+
         # Colorbar label
         g.cax.set_ylabel('Z-score', fontsize=10, rotation=90)
         g.cax.yaxis.set_label_position('left')
 
         # Title
-        g.fig.suptitle(f'Expression Heatmap (Top {n_genes} DEGs)',
-                      fontsize=12, fontweight='bold', x=0.5, y=1.02)
+        g.fig.suptitle(title, fontsize=12, fontweight='bold', x=0.5, y=1.02)
 
         # Add condition legend if applicable
         if self.sample_to_condition and unique_conditions:
@@ -650,7 +752,7 @@ class VisualizationAgent(BaseAgent):
         # Save using clustermap's figure
         saved_files = []
         for fmt in self.config["figure_format"]:
-            filepath = self.figures_dir / f"heatmap_top50.{fmt}"
+            filepath = self.figures_dir / f"{filename}.{fmt}"
             g.savefig(filepath, dpi=self.config["dpi"], bbox_inches='tight',
                      facecolor='white', edgecolor='none')
             saved_files.append(str(filepath))
