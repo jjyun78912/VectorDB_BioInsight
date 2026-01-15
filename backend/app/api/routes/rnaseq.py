@@ -219,6 +219,214 @@ class UploadResponse(BaseModel):
     input_dir: str
 
 
+class SampleInfo(BaseModel):
+    """Sample information from count matrix."""
+    sample_id: str
+    condition: str = "unknown"
+
+
+class CountMatrixPreviewResponse(BaseModel):
+    """Response for count matrix preview."""
+    job_id: str
+    samples: List[SampleInfo]
+    gene_count: int
+    detected_conditions: Dict[str, List[str]]
+    suggested_treatment: str
+    suggested_control: str
+
+
+@router.post("/preview-samples")
+async def preview_count_matrix_samples(
+    count_matrix: UploadFile = File(..., description="Count matrix CSV/TSV file")
+):
+    """
+    Preview samples from count matrix and auto-detect conditions.
+
+    Analyzes column names to detect tumor/normal, case/control patterns.
+    Returns sample list with suggested condition assignments.
+    """
+    import pandas as pd
+    import io
+    import re
+
+    try:
+        content = await count_matrix.read()
+
+        # Detect separator
+        first_line = content.decode('utf-8').split('\n')[0]
+        sep = '\t' if '\t' in first_line else ','
+
+        # Read only header (first row)
+        df = pd.read_csv(io.BytesIO(content), sep=sep, nrows=5)
+
+        # Get sample columns (exclude gene_id column)
+        gene_col_patterns = ['gene_id', 'gene', 'ensembl', 'symbol', 'name', 'id']
+        sample_columns = []
+        gene_col = None
+
+        for col in df.columns:
+            col_lower = col.lower()
+            is_gene_col = any(p in col_lower for p in gene_col_patterns)
+            if is_gene_col and gene_col is None:
+                gene_col = col
+            else:
+                sample_columns.append(col)
+
+        # If no gene column detected, assume first column is gene_id
+        if gene_col is None and len(df.columns) > 0:
+            gene_col = df.columns[0]
+            sample_columns = list(df.columns[1:])
+
+        # Count total genes
+        df_full = pd.read_csv(io.BytesIO(content), sep=sep, usecols=[gene_col] if gene_col else [0])
+        gene_count = len(df_full)
+
+        # Auto-detect conditions from column names
+        treatment_patterns = [
+            r'tumor', r'cancer', r'case', r'disease', r'patient', r'treated',
+            r'_t[0-9]*$', r'_t$', r'^t[0-9]+', r'primary', r'metastatic'
+        ]
+        control_patterns = [
+            r'normal', r'control', r'healthy', r'untreated', r'reference',
+            r'_n[0-9]*$', r'_n$', r'^n[0-9]+', r'adjacent', r'baseline'
+        ]
+
+        samples = []
+        detected_conditions = {"treatment": [], "control": [], "unknown": []}
+
+        for sample in sample_columns:
+            sample_lower = sample.lower()
+            condition = "unknown"
+
+            # Check treatment patterns
+            for pattern in treatment_patterns:
+                if re.search(pattern, sample_lower):
+                    condition = "treatment"
+                    break
+
+            # Check control patterns if not treatment
+            if condition == "unknown":
+                for pattern in control_patterns:
+                    if re.search(pattern, sample_lower):
+                        condition = "control"
+                        break
+
+            samples.append(SampleInfo(sample_id=sample, condition=condition))
+            detected_conditions[condition].append(sample)
+
+        # Suggest labels based on detected patterns
+        suggested_treatment = "tumor" if detected_conditions["treatment"] else "treatment"
+        suggested_control = "normal" if detected_conditions["control"] else "control"
+
+        # Generate temporary job_id for this preview
+        job_id = str(uuid.uuid4())[:8]
+
+        return CountMatrixPreviewResponse(
+            job_id=job_id,
+            samples=samples,
+            gene_count=gene_count,
+            detected_conditions=detected_conditions,
+            suggested_treatment=suggested_treatment,
+            suggested_control=suggested_control
+        )
+
+    except Exception as e:
+        logger.error(f"Preview failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse count matrix: {str(e)}")
+
+
+@router.post("/upload-with-auto-metadata", response_model=UploadResponse)
+async def upload_with_auto_metadata(
+    count_matrix: UploadFile = File(..., description="Count matrix CSV file"),
+    sample_conditions: str = Form(..., description="JSON: {sample_id: condition}"),
+    cancer_type: str = Form(default="unknown", description="Cancer type for analysis"),
+    study_name: str = Form(default="", description="Study name or description"),
+    treatment_label: str = Form(default="tumor", description="Treatment/case label"),
+    control_label: str = Form(default="normal", description="Control label")
+):
+    """
+    Upload count matrix and auto-generate metadata from user-selected conditions.
+
+    sample_conditions: JSON mapping of sample_id to condition (treatment/control)
+    Example: {"tumor_1": "treatment", "tumor_2": "treatment", "normal_1": "control"}
+    """
+    import pandas as pd
+    import io
+
+    # Generate unique job ID
+    job_id = str(uuid.uuid4())[:8]
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Parse sample conditions
+        conditions_map = json.loads(sample_conditions)
+
+        # Save count matrix
+        count_content = await count_matrix.read()
+        count_path = job_dir / "count_matrix.csv"
+
+        # Detect separator and re-save as CSV if needed
+        first_line = count_content.decode('utf-8').split('\n')[0]
+        sep = '\t' if '\t' in first_line else ','
+
+        df = pd.read_csv(io.BytesIO(count_content), sep=sep)
+        df.to_csv(count_path, index=False)
+
+        # Generate metadata from conditions map
+        metadata_rows = []
+        for sample_id, condition_type in conditions_map.items():
+            # Map "treatment"/"control" to actual labels
+            if condition_type == "treatment":
+                condition = treatment_label
+            elif condition_type == "control":
+                condition = control_label
+            else:
+                condition = condition_type
+
+            metadata_rows.append({
+                "sample_id": sample_id,
+                "condition": condition
+            })
+
+        # Save auto-generated metadata
+        metadata_df = pd.DataFrame(metadata_rows)
+        meta_path = job_dir / "metadata.csv"
+        metadata_df.to_csv(meta_path, index=False)
+
+        # Save config
+        config = {
+            "cancer_type": cancer_type,
+            "study_name": study_name or f"RNA-seq Analysis {job_id}",
+            "condition_column": "condition",
+            "contrast": [treatment_label, control_label],
+            "auto_metadata": True,
+            "uploaded_at": datetime.now().isoformat()
+        }
+        config_path = job_dir / "config.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+
+        logger.info(f"Files uploaded with auto-metadata for job {job_id}")
+
+        return UploadResponse(
+            job_id=job_id,
+            message="Files uploaded with auto-generated metadata",
+            files_received=[count_matrix.filename, "metadata.csv (auto-generated)"],
+            input_dir=str(job_dir)
+        )
+
+    except json.JSONDecodeError as e:
+        if job_dir.exists():
+            shutil.rmtree(job_dir)
+        raise HTTPException(status_code=400, detail=f"Invalid sample_conditions JSON: {str(e)}")
+    except Exception as e:
+        if job_dir.exists():
+            shutil.rmtree(job_dir)
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_rnaseq_files(
     count_matrix: UploadFile = File(..., description="Count matrix CSV file"),
