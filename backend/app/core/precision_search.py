@@ -502,29 +502,34 @@ class PrecisionSearch:
                     'match_locations': []
                 }
 
-            # Score by keyword matches
+            # Score by keyword matches - check ALL chunks for this paper
+            # We need to track which keywords have been matched for this paper
             for keyword in keywords:
                 kw_lower = keyword.lower()
 
+                # Skip if this keyword already matched for this paper
+                if keyword in papers_scores[pmid]['matched_keywords']:
+                    continue
+
                 # Check title match (highest priority)
                 if kw_lower in paper_title:
-                    if keyword not in papers_scores[pmid]['matched_keywords']:
-                        papers_scores[pmid]['score'] += 100
-                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                    papers_scores[pmid]['score'] += 100
+                    papers_scores[pmid]['matched_keywords'].append(keyword)
+                    if 'title' not in papers_scores[pmid]['match_locations']:
                         papers_scores[pmid]['match_locations'].append('title')
 
                 # Check abstract match
                 elif is_abstract and kw_lower in content:
-                    if keyword not in papers_scores[pmid]['matched_keywords']:
-                        papers_scores[pmid]['score'] += 80
-                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                    papers_scores[pmid]['score'] += 80
+                    papers_scores[pmid]['matched_keywords'].append(keyword)
+                    if 'abstract' not in papers_scores[pmid]['match_locations']:
                         papers_scores[pmid]['match_locations'].append('abstract')
 
                 # Check full text match
                 elif kw_lower in content:
-                    if keyword not in papers_scores[pmid]['matched_keywords']:
-                        papers_scores[pmid]['score'] += 60
-                        papers_scores[pmid]['matched_keywords'].append(keyword)
+                    papers_scores[pmid]['score'] += 60
+                    papers_scores[pmid]['matched_keywords'].append(keyword)
+                    if 'full_text' not in papers_scores[pmid]['match_locations']:
                         papers_scores[pmid]['match_locations'].append('full_text')
 
             # Bonus for matching multiple keywords
@@ -532,10 +537,11 @@ class PrecisionSearch:
             if n_matched > 1:
                 papers_scores[pmid]['score'] += (n_matched - 1) * 20
 
-        # Filter papers with at least one keyword match and sort by score
+        # Filter papers that match ALL keywords (AND logic, not OR)
+        # A paper must contain ALL keywords to be considered relevant
         matched_papers = [
             p for p in papers_scores.values()
-            if p['score'] > 0
+            if len(p['matched_keywords']) == len(keywords)  # Must match ALL keywords
         ]
 
         sorted_papers = sorted(

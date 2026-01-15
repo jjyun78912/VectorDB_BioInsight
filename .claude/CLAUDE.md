@@ -95,15 +95,40 @@
 |-------|------------|
 | **Frontend** | React 18+ / Vite / TypeScript / Tailwind CSS |
 | **Backend** | Python 3.11+ / FastAPI / Uvicorn |
-| **AI/LLM** | Claude API / PubMedBERT / LangChain |
-| **Vector DB** | ChromaDB |
+| **AI/LLM** | OpenAI (gpt-4o-mini) / Claude API / Vertex AI (fallback chain) |
+| **Vector DB** | ChromaDB + PubMedBERT embeddings |
 | **Database** | PostgreSQL |
 | **RNA-seq** | DESeq2 (R) / Scanpy / CatBoost / SHAP |
 | **Visualization** | Plotly / D3.js / 3d-force-graph / NetworkX |
 
+### LLM Provider Fallback Chain
+
+시스템은 다음 순서로 LLM provider를 시도합니다:
+1. **OpenAI** (gpt-4o-mini) - Primary, 빠르고 저렴
+2. **Claude API** (Anthropic) - Fallback
+3. **Vertex AI** (Google) - Secondary fallback
+
 ---
 
 ## Core Features
+
+### 1. Paper Search & RAG
+
+- **Local DB Search**: ChromaDB 기반 벡터 검색 (정밀도 모드 지원)
+- **PubMed Live Search**: 실시간 PubMed 검색 (한→영 자동 번역)
+- **Paper Explainer**: Quick (규칙 기반) + LLM (상세 분석) 2단계
+- **Paper Insights**: Bottom Line, Study Quality, Evidence Level 평가
+
+### 2. Translation Service (양방향)
+
+| 방향 | 용도 |
+|------|------|
+| **한국어 → 영어** | PubMed 검색 쿼리 번역 |
+| **영어 → 한국어** | 논문 제목/초록 번역, BOTTOM LINE |
+
+**성능 최적화**:
+- 검색 결과 번역: 동기 → 비동기 백그라운드 (55초 → 2.5초)
+- Abstract 번역 제한: 2000자 → 5000자 확장
 
 ### 3. Knowledge Graph (3D)
 
@@ -352,6 +377,28 @@ Gene Symbol + Cancer Type + Direction
                                                    ▼
                               "BRCA1은 DNA 손상 복구에 중요한 역할..." [PMID: 12345678]
 ```
+
+### Paper Explainer 평가 기준
+
+**Paper Characteristics** (`paper_explainer.py`):
+
+| 카테고리 | 항목 | 설명 |
+|----------|------|------|
+| **기본 정보** | study_type | 연구 유형 (Clinical Trial, Cohort, etc.) |
+| | study_design | 연구 설계 (Randomized, Retrospective, etc.) |
+| | main_finding | 핵심 발견 요약 |
+| **방법론** | methodology | 사용된 분석 방법 |
+| | sample_info | 샘플 정보 (n=, source) |
+| | techniques | 사용 기술 (RNA-seq, WGS, etc.) |
+| **근거 수준** | evidence_level | 근거 수준 (I-IV) |
+| | clinical_relevance | 임상 관련성 (High/Medium/Low) |
+| **강점/한계** | strengths | 연구의 강점 (리스트) |
+| | limitations | 연구의 한계점 (리스트) |
+| **평가 점수** | relevance_score | 관련성 점수 (1-5) |
+| | novelty_score | 혁신성 점수 (1-5) |
+| | quality_score | 품질 점수 (1-5) |
+| **핵심 요소** | key_genes | 주요 유전자 (리스트) |
+| | key_pathways | 주요 경로 (리스트) |
 
 ---
 
@@ -646,4 +693,4 @@ clinical_trials = [
 
 ---
 
-*Last Updated: 2026-01-13*
+*Last Updated: 2026-01-15*

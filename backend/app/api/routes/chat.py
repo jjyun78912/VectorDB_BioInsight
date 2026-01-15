@@ -644,8 +644,8 @@ class TranslateResponse(BaseModel):
 @router.post("/translate", response_model=TranslateResponse)
 async def translate_query(request: TranslateRequest):
     """
-    Translate search query from Korean to English for PubMed search.
-    Auto-detects Korean text and translates to English with biomedical context.
+    Translate text between Korean and English.
+    Supports bidirectional translation based on target_lang parameter.
     """
     import re
 
@@ -653,51 +653,40 @@ async def translate_query(request: TranslateRequest):
     def contains_korean(text: str) -> bool:
         return bool(re.search(r'[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]', text))
 
-    # If no Korean, return as-is
-    if not contains_korean(request.text):
+    is_korean = contains_korean(request.text)
+    detected_lang = "ko" if is_korean else "en"
+
+    # Determine if translation is needed
+    if request.target_lang == "ko" and not is_korean:
+        # English → Korean translation needed
+        pass
+    elif request.target_lang == "en" and is_korean:
+        # Korean → English translation needed
+        pass
+    else:
+        # No translation needed (same language)
         return TranslateResponse(
             original=request.text,
             translated=request.text,
-            detected_lang="en",
+            detected_lang=detected_lang,
             is_biomedical=True
         )
 
     try:
-        from backend.app.core.llm_helper import get_langchain_llm
-        from langchain_core.prompts import ChatPromptTemplate
+        from backend.app.core.translator import get_translator
+        translator = get_translator()
 
-        # LLM 초기화 (Vertex AI 또는 API 키 자동 선택)
-        llm = get_langchain_llm(temperature=0.1)
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a biomedical translation expert. Translate the given Korean search query to English for PubMed search.
-
-Rules:
-1. Use proper medical/scientific terminology
-2. Keep disease names, gene names, and drug names in their standard English form
-3. Return ONLY the translated text, nothing else
-4. If it's already in English, return as-is
-
-Examples:
-- "췌장암 치료" → "pancreatic cancer treatment"
-- "BRCA1 돌연변이" → "BRCA1 mutation"
-- "알츠하이머 예방" → "Alzheimer's prevention"
-- "당뇨병 인슐린 저항성" → "diabetes insulin resistance"
-- "폐암 면역치료" → "lung cancer immunotherapy" """),
-            ("human", "{text}")
-        ])
-
-        chain = prompt | llm
-        result = chain.invoke({"text": request.text})
-
-        translated = result.content.strip()
-        # Remove any quotes if the model wrapped the response
-        translated = translated.strip('"\'')
+        if request.target_lang == "ko":
+            # English → Korean
+            translated = translator.translate_to_korean(request.text)
+        else:
+            # Korean → English
+            translated = translator.translate_to_english(request.text)
 
         return TranslateResponse(
             original=request.text,
             translated=translated,
-            detected_lang="ko",
+            detected_lang=detected_lang,
             is_biomedical=True
         )
 
@@ -706,7 +695,7 @@ Examples:
         return TranslateResponse(
             original=request.text,
             translated=request.text,
-            detected_lang="ko",
+            detected_lang=detected_lang,
             is_biomedical=True
         )
 

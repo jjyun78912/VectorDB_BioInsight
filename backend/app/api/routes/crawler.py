@@ -507,25 +507,9 @@ async def search_pubmed_get(
                 min_date=min_date
             )
 
-        # Translate results to Korean if original query was Korean
-        paper_responses = []
-        if translate_results and papers:
-            try:
-                translator = get_translator()
-                for p in papers:
-                    # Translate title and abstract to Korean
-                    title_ko = translator.translate_to_korean(p.title) if p.title else None
-                    # Only translate abstract if not too long (to save API calls)
-                    abstract_ko = None
-                    if p.abstract and len(p.abstract) < 2000:
-                        abstract_ko = translator.translate_to_korean(p.abstract)
-                    paper_responses.append(paper_to_response(p, title_ko=title_ko, abstract_ko=abstract_ko))
-            except Exception as e:
-                print(f"Result translation error: {e}")
-                # Fallback to non-translated results
-                paper_responses = [paper_to_response(p) for p in papers]
-        else:
-            paper_responses = [paper_to_response(p) for p in papers]
+        # Return results immediately without translation (for speed)
+        # Translation can be done client-side or via separate endpoint
+        paper_responses = [paper_to_response(p) for p in papers]
 
         # Group papers by lens
         lens_groups = group_papers_by_lens(paper_responses) if paper_responses else None
@@ -598,7 +582,7 @@ async def get_trending(
                     if paper_resp.title and not paper_resp.title_ko:
                         paper_resp.title_ko = translator.translate_to_korean(paper_resp.title)
                     # Translate abstract (limit length to avoid timeout)
-                    if paper_resp.abstract and not paper_resp.abstract_ko and len(paper_resp.abstract) < 2000:
+                    if paper_resp.abstract and not paper_resp.abstract_ko and len(paper_resp.abstract) < 5000:
                         paper_resp.abstract_ko = translator.translate_to_korean(paper_resp.abstract)
                 except Exception as e:
                     print(f"Translation error for paper {paper_resp.id}: {e}")

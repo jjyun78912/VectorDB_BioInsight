@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
-from .config import GOOGLE_API_KEY, GEMINI_MODEL
+# Using unified LLM helper for Vertex AI / API key auto-selection
 
 
 class StudyDesign(Enum):
@@ -162,16 +162,10 @@ class PaperInsightsExtractor:
 
     @property
     def llm(self):
-        """Lazy load LLM."""
+        """Lazy load LLM using unified helper (Vertex AI or API key)."""
         if self._llm is None:
-            if not GOOGLE_API_KEY:
-                raise ValueError("GOOGLE_API_KEY not configured")
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            self._llm = ChatGoogleGenerativeAI(
-                model=GEMINI_MODEL,
-                google_api_key=GOOGLE_API_KEY,
-                temperature=0.1  # Low temperature for factual extraction
-            )
+            from .llm_helper import get_langchain_llm
+            self._llm = get_langchain_llm(temperature=0.1)  # Low temperature for factual extraction
         return self._llm
 
     def extract_all(self, title: str, abstract: str, full_text: str = None) -> PaperInsights:
@@ -197,31 +191,37 @@ class PaperInsightsExtractor:
         from langchain_core.prompts import ChatPromptTemplate
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You extract the BOTTOM LINE from research papers - a single actionable sentence.
+            ("system", """논문에서 핵심 메시지를 한 문장으로 요약하는 BOTTOM LINE을 추출합니다.
 
-Rules:
-1. ONE sentence only (max 25 words)
-2. Start with the key finding or recommendation
-3. Include specific numbers if available (e.g., "reduces mortality by 36%")
-4. Make it actionable for clinicians/researchers
-5. No hedging words like "may", "might", "suggests" - be direct
+작업: 가장 중요한 발견이나 결론을 담은 한 문장을 추출하세요.
 
-Examples:
-- "T-DXd doubles progression-free survival vs T-DM1 in HER2+ metastatic breast cancer (22.1 vs 6.8 months)"
-- "KRAS G12C inhibitors achieve 37% response rate in previously treated NSCLC patients"
-- "Adding pembrolizumab to chemotherapy reduces death risk by 35% in advanced gastric cancer"
+가이드라인:
+1. 반드시 한국어로 작성 (30단어 이내)
+2. 주요 발견, 결론에 집중
+3. 구체적인 숫자/퍼센트가 있으면 포함 (예: "90%의 환자에서", "2배 증가")
+4. 리뷰 논문: 핵심 통찰이나 종합 요약
+5. 메커니즘 연구: 발견된 내용 설명
+6. 임상 연구: 주요 결과 기술
+7. 모호한 초록이라도 반드시 bottom_line 제공
 
-Output JSON:
-{
-  "bottom_line": "...",
+연구 유형별 예시:
+- 임상: "펨브롤리주맙+화학요법이 진행성 위암에서 전체 생존율을 개선함 (HR 0.65)"
+- 메커니즘: "KRAS 돌연변이가 RAF-MEK-ERK 신호전달 활성화를 통해 췌장암 진행을 유도함"
+- 리뷰: "현재 근거는 HER2+ 유방암의 1차 치료로 병용요법을 지지함"
+- 바이오마커: "높은 PD-L1 발현(>50%)이 NSCLC에서 면역치료 반응을 예측함"
+- 역학: "50세 미만 성인에서 대장암 발생률이 지난 10년간 50% 증가함"
+
+JSON만 출력 (마크다운 없이):
+{{
+  "bottom_line": "한국어로 작성된 핵심 요약 문장",
   "clinical_relevance": "High|Medium|Low",
-  "action_type": "Treatment|Diagnosis|Mechanism|Prevention|Prognosis|Epidemiology"
-}"""),
-            ("human", """Title: {title}
+  "action_type": "Treatment|Diagnosis|Mechanism|Prevention|Prognosis|Epidemiology|Review|Biomarker"
+}}"""),
+            ("human", """제목: {title}
 
-Abstract: {abstract}
+초록: {abstract}
 
-Extract the bottom line:""")
+Bottom line을 추출하세요 (JSON만 응답):""")
         ])
 
         try:
@@ -230,22 +230,46 @@ Extract the bottom line:""")
 
             import json
             content = result.content.strip()
+
+            # Clean up markdown code blocks
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0]
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
 
+            # Try to find JSON object in content
+            content = content.strip()
+            if not content.startswith("{"):
+                # Try to find JSON object
+                start = content.find("{")
+                end = content.rfind("}") + 1
+                if start != -1 and end > start:
+                    content = content[start:end]
+
             data = json.loads(content)
 
+            bottom_line_text = data.get("bottom_line", "")
+
+            # Validate that we got something useful
+            if not bottom_line_text or len(bottom_line_text) < 10:
+                # Fallback: extract from title if bottom_line failed
+                bottom_line_text = title if len(title) < 100 else title[:100] + "..."
+
             return BottomLine(
-                summary=data.get("bottom_line", ""),
+                summary=bottom_line_text,
                 clinical_relevance=data.get("clinical_relevance", "Medium"),
                 action_type=data.get("action_type", "Unknown"),
-                confidence=0.8 if data.get("bottom_line") else 0.3
+                confidence=0.8 if data.get("bottom_line") else 0.5
             )
         except Exception as e:
             print(f"Bottom line extraction error: {e}")
-            return None
+            # Fallback: return title-based bottom line
+            return BottomLine(
+                summary=title[:100] if len(title) > 100 else title,
+                clinical_relevance="Medium",
+                action_type="Unknown",
+                confidence=0.3
+            )
 
     def extract_quality(self, title: str, abstract: str, text: str = None) -> StudyQuality:
         """

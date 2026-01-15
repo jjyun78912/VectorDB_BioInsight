@@ -860,6 +860,27 @@ class BioInsightAPI {
     return /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/.test(text);
   }
 
+  /**
+   * Translate text to target language
+   */
+  async translateText(text: string, targetLang: 'ko' | 'en'): Promise<string | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          target_lang: targetLang
+        }),
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.translated || null;
+    } catch {
+      return null;
+    }
+  }
+
   // ============== Paper Insights API ==============
 
   /**
@@ -1068,6 +1089,110 @@ class BioInsightAPI {
       throw new Error(`Validated domain trends failed: ${response.statusText}`);
     }
     return response.json();
+  }
+}
+
+// ============== Paper Explanation Types ==============
+
+export interface PaperCharacteristics {
+  study_type: string;
+  study_design: string;
+  main_finding: string;
+  methodology: string;
+  sample_info: string;
+  evidence_level: string;
+  clinical_relevance: string;
+  strengths: string[];
+  limitations: string[];
+  key_genes: string[];
+  key_pathways: string[];
+  techniques: string[];
+}
+
+export interface PaperExplanation {
+  why_recommended: string;
+  relevance_factors: string[];
+  query_match_explanation: string;
+  characteristics: PaperCharacteristics | null;
+  relevance_score: number;
+  novelty_score: number;
+  quality_score: number;
+  model_used: string;
+}
+
+// Add methods to BioInsightAPI class
+BioInsightAPI.prototype.explainPaper = async function(
+  query: string,
+  title: string,
+  content: string,
+  options?: {
+    section?: string;
+    pmid?: string;
+    year?: string;
+    matchedTerms?: string[];
+  }
+): Promise<PaperExplanation> {
+  const response = await fetch(`${this.baseUrl}/search/explain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query,
+      title,
+      content,
+      section: options?.section || '',
+      pmid: options?.pmid,
+      year: options?.year,
+      matched_terms: options?.matchedTerms || []
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Explain failed: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+BioInsightAPI.prototype.explainPaperQuick = async function(
+  query: string,
+  title: string,
+  content: string,
+  section?: string
+): Promise<PaperExplanation> {
+  const params = new URLSearchParams({
+    query,
+    title,
+    content: content || '',
+    section: section || ''
+  });
+
+  const response = await fetch(`${this.baseUrl}/search/explain-quick?${params}`);
+  if (!response.ok) {
+    throw new Error(`Quick explain failed: ${response.statusText}`);
+  }
+  return response.json();
+};
+
+// Extend interface for TypeScript
+declare module './client' {
+  interface BioInsightAPI {
+    explainPaper(
+      query: string,
+      title: string,
+      content: string,
+      options?: {
+        section?: string;
+        pmid?: string;
+        year?: string;
+        matchedTerms?: string[];
+      }
+    ): Promise<PaperExplanation>;
+
+    explainPaperQuick(
+      query: string,
+      title: string,
+      content: string,
+      section?: string
+    ): Promise<PaperExplanation>;
   }
 }
 

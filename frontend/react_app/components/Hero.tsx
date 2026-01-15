@@ -82,6 +82,30 @@ export const Hero: React.FC<HeroProps> = ({
     return /^10\.\d{4,}\//.test(text.trim()) || text.includes('doi.org/');
   };
 
+  // Translate papers in background (non-blocking)
+  const translatePapersInBackground = async (papers: any[]) => {
+    for (let i = 0; i < papers.length; i++) {
+      const paper = papers[i];
+      if (paper.title && !paper.title_ko) {
+        try {
+          const translated = await api.translateText(paper.title, 'ko');
+          if (translated) {
+            setPubmedResults(prev => {
+              if (!prev) return prev;
+              const updated = [...prev];
+              if (updated[i]) {
+                updated[i] = { ...updated[i], title_ko: translated };
+              }
+              return updated;
+            });
+          }
+        } catch (e) {
+          // Ignore translation errors
+        }
+      }
+    }
+  };
+
   // Calculate min year based on year range filter
   const getMinYear = (yearRange: string): number | undefined => {
     if (yearRange === 'all') return undefined;
@@ -131,7 +155,7 @@ export const Hero: React.FC<HeroProps> = ({
         setDoiResult(paper);
         setPubmedResults([paper]); // Show in results list
       } else if (searchMode === 'pubmed') {
-        // Real-time PubMed search (backend handles Korean translation automatically)
+        // Real-time PubMed search (fast - no result translation)
         const response = await api.searchPubMed(searchQuery, {
           limit: searchFilters.limit,
           sort: searchFilters.sort,
@@ -144,7 +168,13 @@ export const Hero: React.FC<HeroProps> = ({
         if (response.was_translated && response.query_translated) {
           console.log(`번역됨: "${searchQuery}" → "${response.query_translated}"`);
         }
+        // Show results immediately
         setPubmedResults(response.papers);
+
+        // Translate titles/abstracts in background (non-blocking)
+        if (isKorean && response.papers?.length > 0) {
+          translatePapersInBackground(response.papers);
+        }
       } else if (query.trim().endsWith('?')) {
         // Question mode - use RAG
         const response = await api.ask(query);

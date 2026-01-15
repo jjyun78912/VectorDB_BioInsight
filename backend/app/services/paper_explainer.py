@@ -2,13 +2,18 @@
 논문 추천 설명 서비스 (Paper Recommendation Explainer).
 
 검색 결과에서 논문이 왜 추천되었는지, 논문의 특성은 무엇인지
-Gemini API를 사용하여 설명을 생성합니다.
+OpenAI 또는 Gemini API를 사용하여 설명을 생성합니다.
 
 Features:
 - 검색어와 논문 내용 기반 추천 이유 생성
 - 논문 특성 분석 (연구 유형, 방법론, 핵심 발견 등)
 - 장점/한계점 요약
 - 적합성 평가
+
+LLM 우선순위:
+1. OpenAI (OPENAI_API_KEY 설정 시)
+2. Vertex AI (PAPER_EXPLAINER_USE_VERTEX=true 시)
+3. Gemini REST API (GOOGLE_API_KEY 설정 시)
 """
 
 import os
@@ -23,6 +28,14 @@ try:
     import aiohttp
 except ImportError:
     aiohttp = None
+
+# OpenAI
+try:
+    from openai import AsyncOpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    AsyncOpenAI = None
+    OPENAI_AVAILABLE = False
 
 # 새로운 google.genai SDK 사용 (deprecated google.generativeai 대체)
 try:
@@ -47,9 +60,10 @@ from backend.app.core.config import setup_logging
 
 logger = setup_logging(__name__)
 
-# Gemini API 설정
+# API 설정
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-DEFAULT_MODEL = os.getenv("PAPER_EXPLAINER_MODEL", "gemini-3-pro-preview")
+DEFAULT_MODEL = os.getenv("PAPER_EXPLAINER_MODEL", "gpt-4o-mini")  # OpenAI 모델로 변경
+DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
 USE_VERTEX = os.getenv("PAPER_EXPLAINER_USE_VERTEX", "false").lower() == "true"
 
 
@@ -220,6 +234,40 @@ class GeminiClient:
                 return ""
 
 
+class OpenAIClient:
+    """OpenAI API 클라이언트 (비동기)."""
+
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENAI_API_KEY 환경 변수가 필요합니다")
+
+        self.model = model
+        self.client = AsyncOpenAI(api_key=self.api_key) if OPENAI_AVAILABLE else None
+
+    async def generate(self, prompt: str, system_instruction: str = None) -> str:
+        """Generate content using OpenAI API."""
+        if not OPENAI_AVAILABLE or not self.client:
+            raise ImportError("openai 패키지가 필요합니다: pip install openai")
+
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            logger.error(f"OpenAI API 오류: {e}")
+            raise
+
+
 class PaperExplainer:
     """논문 추천 설명 생성기."""
 
@@ -279,14 +327,43 @@ class PaperExplainer:
 
     @property
     def client(self):
-        """Lazy initialization of Gemini/Vertex AI client."""
+        """Lazy initialization of LLM client.
+
+        우선순위:
+        1. OpenAI (OPENAI_API_KEY 설정 시)
+        2. Vertex AI (PAPER_EXPLAINER_USE_VERTEX=true 시)
+        3. Gemini REST API (GOOGLE_API_KEY 설정 시)
+        """
         if self._client is None:
+            # 1. OpenAI 우선 시도
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key and OPENAI_AVAILABLE:
+                try:
+                    logger.info(f"OpenAI 클라이언트 사용: gpt-4o-mini")
+                    self._client = OpenAIClient(api_key=openai_key, model="gpt-4o-mini")
+                    self.model = "gpt-4o-mini"
+                    return self._client
+                except Exception as e:
+                    logger.warning(f"OpenAI 초기화 실패: {e}")
+
+            # 2. Vertex AI 시도
             if self._use_vertex and NEW_GENAI_AVAILABLE:
-                logger.info(f"Vertex AI 클라이언트 사용 (새 SDK): {self.model}")
-                self._client = VertexAIClient(model=self.model)
-            else:
-                logger.info(f"Gemini REST API 클라이언트 사용: {self.model}")
-                self._client = GeminiClient(api_key=self._api_key, model=self.model)
+                try:
+                    logger.info(f"Vertex AI 클라이언트 사용 (새 SDK): {self.model}")
+                    self._client = VertexAIClient(model=self.model)
+                    return self._client
+                except Exception as e:
+                    logger.warning(f"Vertex AI 초기화 실패: {e}")
+
+            # 3. Gemini REST API
+            try:
+                logger.info(f"Gemini REST API 클라이언트 사용: {DEFAULT_GEMINI_MODEL}")
+                self._client = GeminiClient(api_key=self._api_key, model=DEFAULT_GEMINI_MODEL)
+                self.model = DEFAULT_GEMINI_MODEL
+            except Exception as e:
+                logger.error(f"모든 LLM 클라이언트 초기화 실패: {e}")
+                raise ValueError("LLM API 키가 설정되지 않았습니다. OPENAI_API_KEY 또는 GOOGLE_API_KEY를 설정하세요.")
+
         return self._client
 
     @property

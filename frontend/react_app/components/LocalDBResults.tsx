@@ -65,12 +65,55 @@ export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnos
     setChatMode(false);
 
     if (result.content) {
-      // Fetch both summary and explanation in parallel
       setIsLoadingSummary(true);
       setIsLoadingExplanation(true);
 
-      // Get AI Summary
-      const summaryPromise = api.summarizeAbstract(result.paper_title, result.content)
+      const query = searchQuery || diagnostics?.detected_disease || '';
+
+      // 1. Quick explain 먼저 (빠른 규칙 기반) - 즉시 표시
+      api.explainPaperQuick(query, result.paper_title, result.content, result.section)
+        .then(quickExplanation => {
+          // Quick 결과를 먼저 표시
+          setPaperExplanation(quickExplanation);
+          setIsLoadingExplanation(false);
+        })
+        .catch(() => {
+          // Quick도 실패하면 기본값
+          setPaperExplanation({
+            why_recommended: `'${query}' 검색어와 관련된 내용이 발견되었습니다.`,
+            relevance_factors: result.matched_terms?.slice(0, 3) || [],
+            query_match_explanation: `검색어가 논문의 ${result.section || '본문'}에서 매칭되었습니다.`,
+            characteristics: null,
+            relevance_score: 3,
+            novelty_score: 3,
+            quality_score: 3,
+            generated_at: new Date().toISOString(),
+            model_used: 'fallback'
+          });
+          setIsLoadingExplanation(false);
+        });
+
+      // 2. LLM explain 백그라운드에서 (상세 분석) - 나중에 업데이트
+      api.explainPaper(
+        query,
+        result.paper_title,
+        result.content,
+        {
+          section: result.section,
+          matchedTerms: result.matched_terms
+        }
+      )
+        .then(detailedExplanation => {
+          // LLM 결과로 업데이트 (더 상세함)
+          setPaperExplanation(detailedExplanation);
+        })
+        .catch(err => {
+          console.error('LLM explanation failed (keeping quick result):', err);
+          // Quick 결과 유지
+        });
+
+      // 3. AI Summary (병렬)
+      api.summarizeAbstract(result.paper_title, result.content)
         .then(response => {
           setAiSummary(response.summary);
           setKeyPoints(response.key_points || []);
@@ -81,41 +124,6 @@ export const LocalDBResults: React.FC<LocalDBResultsProps> = ({ results, diagnos
         .finally(() => {
           setIsLoadingSummary(false);
         });
-
-      // Get Paper Explanation (LLM-based for detailed analysis)
-      const query = searchQuery || diagnostics?.detected_disease || '';
-      const explanationPromise = api.explainPaper(
-        query,
-        result.paper_title,
-        result.content,
-        {
-          section: result.section,
-          matchedTerms: result.matched_terms
-        }
-      )
-        .then(explanation => {
-          setPaperExplanation(explanation);
-        })
-        .catch(err => {
-          console.error('Failed to get paper explanation:', err);
-          // Fallback - create a simple explanation
-          setPaperExplanation({
-            why_recommended: `'${query}' 검색어와 관련된 내용이 발견되었습니다.`,
-            relevance_factors: result.matched_terms.slice(0, 3),
-            query_match_explanation: `검색어가 논문의 ${result.section || '본문'}에서 매칭되었습니다.`,
-            characteristics: null,
-            relevance_score: 3,
-            novelty_score: 3,
-            quality_score: 3,
-            generated_at: new Date().toISOString(),
-            model_used: 'fallback'
-          });
-        })
-        .finally(() => {
-          setIsLoadingExplanation(false);
-        });
-
-      await Promise.all([summaryPromise, explanationPromise]);
     }
   };
 

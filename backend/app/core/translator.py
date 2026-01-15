@@ -1,42 +1,91 @@
 """
-Translation Service using Claude API.
+Translation Service with OpenAI/Claude fallback.
 
 Features:
 - Korean <-> English translation
 - Language detection
 - Batch translation for search results
+
+Priority:
+1. OpenAI (OPENAI_API_KEY 설정 시)
+2. Claude/Anthropic (ANTHROPIC_API_KEY 설정 시)
 """
+import os
 import re
 from typing import Optional
-import anthropic
-
-from .config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
 
 class TranslationService:
-    """Translate text between Korean and English using Claude."""
+    """Translate text between Korean and English using OpenAI or Claude."""
 
     def __init__(self):
-        if not ANTHROPIC_API_KEY:
-            raise ValueError("ANTHROPIC_API_KEY not set")
+        self.client = None
+        self.provider = None
+        self.model = None
 
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        self.model = CLAUDE_MODEL or "claude-sonnet-4-20250514"
+        # 1. OpenAI 우선 시도
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                from openai import OpenAI
+                self.client = OpenAI(api_key=openai_key)
+                self.provider = "openai"
+                self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+                print(f"TranslationService: OpenAI 사용 ({self.model})")
+                return
+            except ImportError:
+                print("TranslationService: openai 패키지 미설치")
+            except Exception as e:
+                print(f"TranslationService: OpenAI 초기화 실패: {e}")
 
-    def _call_claude(self, system_prompt: str, user_text: str) -> str:
-        """Call Claude API with system and user prompts."""
+        # 2. Claude/Anthropic fallback
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            try:
+                import anthropic
+                self.client = anthropic.Anthropic(api_key=anthropic_key)
+                self.provider = "anthropic"
+                self.model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+                print(f"TranslationService: Anthropic 사용 ({self.model})")
+                return
+            except ImportError:
+                print("TranslationService: anthropic 패키지 미설치")
+            except Exception as e:
+                print(f"TranslationService: Anthropic 초기화 실패: {e}")
+
+        raise ValueError("OPENAI_API_KEY 또는 ANTHROPIC_API_KEY가 필요합니다")
+
+    def _call_llm(self, system_prompt: str, user_text: str) -> str:
+        """Call LLM API with system and user prompts."""
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": user_text}
-                ]
-            )
-            return response.content[0].text.strip()
+            if self.provider == "openai":
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_text}
+                    ],
+                    max_tokens=4096,
+                    temperature=0.3
+                )
+                return response.choices[0].message.content.strip()
+
+            elif self.provider == "anthropic":
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    system=system_prompt,
+                    messages=[
+                        {"role": "user", "content": user_text}
+                    ]
+                )
+                return response.content[0].text.strip()
+
+            else:
+                raise ValueError(f"Unknown provider: {self.provider}")
+
         except Exception as e:
-            print(f"Claude API error: {e}")
+            print(f"LLM API error ({self.provider}): {e}")
             raise
 
     def detect_language(self, text: str) -> str:
@@ -62,7 +111,7 @@ class TranslationService:
         # Use LLM for ambiguous cases
         try:
             system = "Detect the language of the given text. Reply with only 'ko' for Korean, 'en' for English, or 'other' for other languages. No explanation."
-            result = self._call_claude(system, text)
+            result = self._call_llm(system, text)
             lang = result.lower()
             if lang in ['ko', 'en', 'other']:
                 return lang
@@ -78,7 +127,7 @@ Translate the Korean text to English.
 - Keep scientific terms accurate
 - Preserve medical terminology
 - Output ONLY the translation, nothing else"""
-            return self._call_claude(system, text)
+            return self._call_llm(system, text)
         except Exception as e:
             print(f"Translation error: {e}")
             return text
@@ -91,7 +140,7 @@ Translate the English text to Korean.
 - Keep scientific terms accurate (can keep English terms in parentheses if commonly used)
 - Preserve medical terminology
 - Output ONLY the translation, nothing else"""
-            return self._call_claude(system, text)
+            return self._call_llm(system, text)
         except Exception as e:
             print(f"Translation error: {e}")
             return text
@@ -131,7 +180,7 @@ Translate the English text to Korean.
             translated['title_ko'] = self.translate_to_korean(paper['title'])
 
         # Translate abstract (if present and not too long)
-        if paper.get('abstract') and len(paper['abstract']) < 3000:
+        if paper.get('abstract') and len(paper['abstract']) < 5000:
             translated['abstract_ko'] = self.translate_to_korean(paper['abstract'])
 
         return translated
