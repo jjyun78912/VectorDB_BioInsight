@@ -764,7 +764,7 @@ class ReportAgent(BaseAgent):
                     <button class="filter-btn active" onclick="filterByConfidence('all')">All</button>
                     <button class="filter-btn" onclick="filterByConfidence('high')">High</button>
                     <button class="filter-btn" onclick="filterByConfidence('medium')">Medium</button>
-                    <button class="filter-btn" onclick="filterByConfidence('novel_candidate')">Novel</button>
+                    <button class="filter-btn" onclick="filterByConfidence('novel_candidate')">Candidate</button>
                 </div>
             </div>
 
@@ -795,7 +795,7 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_driver_analysis_html(self, data: Dict) -> str:
-        """Generate Driver Gene Analysis section (Known + Novel tracks)."""
+        """Generate Driver Gene Analysis section (Known + Candidate Regulator tracks)."""
         driver_known = data.get('driver_known', [])
         driver_novel = data.get('driver_novel', [])
         driver_summary = data.get('driver_summary', {})
@@ -872,7 +872,7 @@ class ReportAgent(BaseAgent):
             </div>
             '''
 
-        # Novel drivers cards
+        # Candidate regulator cards
         novel_cards_html = ""
         for idx, driver in enumerate(driver_novel[:10]):
             gene = driver.get('gene_symbol', 'Unknown')
@@ -954,7 +954,7 @@ class ReportAgent(BaseAgent):
                 </div>
                 <div class="driver-stat novel-stat">
                     <span class="stat-value">{total_novel}</span>
-                    <span class="stat-label">Novel Candidates</span>
+                    <span class="stat-label">Candidate Regulators</span>
                     <span class="stat-detail">{high_conf_novel} high confidence</span>
                 </div>
                 <div class="driver-stat actionable-stat">
@@ -968,7 +968,7 @@ class ReportAgent(BaseAgent):
                 <span class="method-icon">📊</span>
                 <div class="method-text">
                     <strong>Known Driver Track:</strong> COSMIC Cancer Gene Census + TCGA 돌연변이 빈도 + 발현 변화량 기반 scoring<br>
-                    <strong>Novel Driver Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 기반 scoring (DB bias 최소화)
+                    <strong>Candidate Regulator Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 + 문헌 지지도 기반 scoring
                 </div>
             </div>
 
@@ -982,10 +982,10 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="driver-track novel-track">
-                    <h3>🔬 Novel Driver Track</h3>
-                    <p class="track-desc">새로운 드라이버 후보. 기존 DB에 없어 기능 연구가 필요한 유전자.</p>
+                    <h3>🔬 Candidate Regulator Track</h3>
+                    <p class="track-desc">네트워크 분석 기반 핵심 조절인자 후보. 문헌 검증 및 기능 연구가 필요한 유전자.</p>
                     <div class="driver-cards-grid">
-                        {novel_cards_html if novel_cards_html else '<p class="no-data">No novel driver candidates found</p>'}
+                        {novel_cards_html if novel_cards_html else '<p class="no-data">No candidate regulators found</p>'}
                     </div>
                 </div>
             </div>
@@ -994,8 +994,8 @@ class ReportAgent(BaseAgent):
                 <span class="disclaimer-icon">⚠️</span>
                 <div class="disclaimer-text">
                     <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
+                    Candidate Regulator는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
                     실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
-                    위 결과는 '가능성 있는 후보'로, 실험적 검증이 반드시 필요합니다.
                 </div>
             </div>
         </section>
@@ -3152,7 +3152,7 @@ class ReportAgent(BaseAgent):
 상관관계 기반 네트워크 분석으로 Hub 유전자를 도출하였습니다.
 GO/KEGG pathway enrichment 분석(Enrichr)과
 COSMIC/OncoKB/IntOGen 데이터베이스 검증을 수행하였습니다.
-Driver 유전자 예측은 Two-Track 시스템(Known + Novel)을 적용하였습니다."""
+Driver 유전자 예측은 Two-Track 시스템(Known Driver + Candidate Regulator)을 적용하였습니다."""
 
         results_deg = f"""총 {deg_count:,}개의 DEGs를 식별하였으며 (상향조절 {n_up:,}개, 하향조절 {n_down:,}개)"""
         results_hub = f"""네트워크 분석 결과 {len(hub_names) if hub_names else 0}개의 Hub 유전자({', '.join(hub_names[:3]) if hub_names else 'N/A'} 등)가 확인되었습니다."""
@@ -3161,7 +3161,7 @@ Driver 유전자 예측은 Two-Track 시스템(Known + Novel)을 적용하였습
         results_driver = ""
         if known_count > 0 or novel_count > 0:
             results_driver = f"""Driver 분석 결과, Known Driver 후보 {known_count}개({', '.join(known_names) if known_names else 'N/A'} 등)와
-Novel Driver 후보 {novel_count}개({', '.join(novel_names) if novel_names else 'N/A'} 등)를 도출하였습니다."""
+Candidate Regulator 후보 {novel_count}개({', '.join(novel_names) if novel_names else 'N/A'} 등)를 도출하였습니다."""
 
         results_db = ""
         if db_count > 0:
@@ -3174,7 +3174,7 @@ Novel Driver 후보 {novel_count}개({', '.join(novel_names) if novel_names else
         conclusions = f"""본 분석에서 확인된 Hub 유전자와 Driver 후보는
 {cancer_type.replace('_', ' ').title()}의 바이오마커 및 치료 타겟 개발에 유망한 후보입니다.
 특히 Known Driver 유전자들은 Targeted NGS를 통해,
-Novel Driver 후보들은 기능적 검증 실험을 통해 추가 검증이 권장됩니다."""
+Candidate Regulator 후보들은 문헌 검토 후 기능적 검증 실험을 통해 추가 검증이 권장됩니다."""
 
         # Build key findings
         key_findings = []
@@ -3187,7 +3187,7 @@ Novel Driver 후보들은 기능적 검증 실험을 통해 추가 검증이 권
         if known_count > 0:
             key_findings.append(f"Known Driver 후보 {known_count}개 (COSMIC/OncoKB/IntOGen 검증)")
         if novel_count > 0:
-            key_findings.append(f"Novel Driver 후보 {novel_count}개 (새로운 발견)")
+            key_findings.append(f"Candidate Regulator 후보 {novel_count}개 (문헌 검토 필요)")
         if db_count > 0:
             key_findings.append(f"암 유전자 DB 매칭 {db_count}개")
 
@@ -3203,8 +3203,8 @@ Novel Driver 후보들은 기능적 검증 실험을 통해 추가 검증이 권
         if known_count > 0 or novel_count > 0:
             driver_interp = f"""Known Driver Track에서 {known_count}개의 후보가 COSMIC, OncoKB, IntOGen 데이터베이스에서 검증되었습니다.
 이들은 기존에 알려진 암 유전자로서 Targeted NGS 패널을 통한 변이 확인이 권장됩니다.
-Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특성과 발현 패턴 분석을 통해 도출되었으며,
-이들은 기능적 검증 실험(knockdown/overexpression)을 통한 추가 연구가 필요합니다."""
+Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hub gene 특성과 발현 패턴 분석을 통해 도출되었으며,
+이들은 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"로, 문헌 검토 후 기능적 검증 실험이 필요합니다."""
             driver_html = f'<div class="driver-interpretation"><h4>🧬 Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
 
         # Validation suggestions
@@ -3344,7 +3344,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
 
             # Convert DriverCandidate objects to dicts
             data['driver_known'] = [d.to_dict() for d in results.get('known_drivers', [])]
-            data['driver_novel'] = [d.to_dict() for d in results.get('novel_drivers', [])]
+            data['driver_novel'] = [d.to_dict() for d in results.get('candidate_regulators', results.get('novel_drivers', []))]
             data['driver_summary'] = results.get('summary', {})
 
             # Save results to files
@@ -3352,7 +3352,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
             output_dir.mkdir(parents=True, exist_ok=True)
             predictor.save_results(output_dir)
 
-            self.logger.info(f"Driver prediction complete: {len(data['driver_known'])} known, {len(data['driver_novel'])} novel")
+            self.logger.info(f"Driver prediction complete: {len(data['driver_known'])} known, {len(data['driver_novel'])} candidate regulators")
 
         except Exception as e:
             self.logger.warning(f"Driver prediction failed: {e}")
@@ -3412,7 +3412,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
         - DEG Analysis (Volcano, Heatmap)
         - Network Analysis (Hub genes, PPI)
         - Pathway Enrichment (GO/KEGG)
-        - Driver Gene Analysis (Known/Novel candidates)
+        - Driver Gene Analysis (Known/Candidate Regulator)
         - Database Validation (COSMIC, OncoKB, IntOGen)
         - ML Prediction (if available)
         - RAG Literature Interpretation
@@ -3488,7 +3488,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
         run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
         driver_info = ""
         known_drivers = []
-        novel_drivers = []
+        candidate_regulators = []
 
         # Check agent6_report folder first
         driver_dir = run_dir / "agent6_report" / "driver_analysis"
@@ -3511,8 +3511,10 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
                 except Exception as e:
                     self.logger.warning(f"Error loading known drivers: {e}")
 
-            # Load novel drivers
-            novel_path = driver_dir / "driver_novel.csv"
+            # Load candidate regulators
+            novel_path = driver_dir / "driver_candidate_regulators.csv"
+            if not novel_path.exists():
+                novel_path = driver_dir / "driver_novel.csv"  # fallback to old name
             if novel_path.exists():
                 try:
                     novel_df = pd.read_csv(novel_path)
@@ -3521,9 +3523,10 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
                         score = row.get('score', 0)
                         hub_score = row.get('hub_score', 0)
                         direction = row.get('direction', '')
-                        novel_drivers.append(f"- {gene} (score={score:.1f}, hub_score={hub_score:.2f}, {direction})")
+                        lit_support = row.get('literature_support', 'unknown')
+                        candidate_regulators.append(f"- {gene} (score={score:.1f}, hub={hub_score:.2f}, {direction}, lit={lit_support})")
                 except Exception as e:
-                    self.logger.warning(f"Error loading novel drivers: {e}")
+                    self.logger.warning(f"Error loading candidate regulators: {e}")
 
             # Load summary
             summary_path = driver_dir / "driver_summary.json"
@@ -3531,19 +3534,21 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
                 try:
                     with open(summary_path, 'r') as f:
                         driver_summary = json.load(f)
+                    lit_breakdown = driver_summary.get('literature_support_breakdown', {})
                     driver_info = f"""
 ## Driver Gene Analysis 결과
 - Known Driver 후보: {driver_summary.get('total_known_candidates', 0)}개
-- Novel Driver 후보: {driver_summary.get('total_novel_candidates', 0)}개
+- Candidate Regulator 후보: {driver_summary.get('total_candidate_regulators', driver_summary.get('total_novel_candidates', 0))}개
 - High Confidence Known: {driver_summary.get('high_confidence_known', 0)}개
-- High Confidence Novel: {driver_summary.get('high_confidence_novel', 0)}개
+- High Confidence Regulators: {driver_summary.get('high_confidence_regulators', driver_summary.get('high_confidence_novel', 0))}개
+- Literature Support: emerging={lit_breakdown.get('emerging', 0)}, uncharacterized={lit_breakdown.get('uncharacterized', 0)}
 - 연구 타겟 추천: {', '.join(driver_summary.get('research_targets', [])[:5])}
 
 ### Top Known Drivers (COSMIC/OncoKB/IntOGen 검증됨)
 {chr(10).join(known_drivers[:5]) if known_drivers else '없음'}
 
-### Top Novel Drivers (신규 발견 후보)
-{chr(10).join(novel_drivers[:5]) if novel_drivers else '없음'}
+### Top Candidate Regulators (문헌 검토 + 기능 검증 필요)
+{chr(10).join(candidate_regulators[:5]) if candidate_regulators else '없음'}
 """
                 except Exception as e:
                     self.logger.warning(f"Error loading driver summary: {e}")
@@ -3720,7 +3725,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
 1. 배경 (Background) - 연구의 필요성과 목적
 2. 방법 (Methods) - DESeq2, Network analysis, Pathway enrichment, Driver prediction 등
 3. 결과 (Results) - DEG 수, Hub 유전자, 주요 Pathway, Driver 후보 등 핵심 수치 포함
-4. Driver Gene Analysis - Known Driver와 Novel Driver 후보 구분하여 설명
+4. Driver Gene Analysis - Known Driver와 Candidate Regulator 후보 구분하여 설명
 5. 문헌 기반 해석 - RAG 분석 결과 요약
 6. 검증 제안 - 실험적 검증 방법 제안
 7. 결론 (Conclusions) - 연구의 의의와 향후 방향
@@ -3745,7 +3750,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
     "targeted_sequencing": ["driver1", "driver2", ...],
     "biomarker_candidates": ["gene1", "gene2", ...]
   }},
-  "driver_interpretation": "Known Driver와 Novel Driver 후보에 대한 종합 해석",
+  "driver_interpretation": "Known Driver와 Candidate Regulator 후보에 대한 종합 해석",
   "ml_interpretation": "ML 예측 결과에 대한 해석 (있는 경우)",
   "rag_interpretation": "RAG 문헌 해석 결과 요약",
   "literature_sources": {{
@@ -3758,7 +3763,7 @@ Novel Driver Track에서는 {novel_count}개의 새로운 후보가 Hub gene 특
 중요 지침:
 1. 한국어로 작성 (영문 제목만 영어)
 2. 모든 수치는 실제 분석 결과에서 가져올 것 (DEG 수: {n_deg:,}개, Hub 유전자: {len(hub_gene_names)}개 등)
-3. Driver Gene Analysis 섹션 필수 - Known/Novel 구분하여 상위 유전자 명시
+3. Driver Gene Analysis 섹션 필수 - Known Driver/Candidate Regulator 구분하여 상위 유전자 명시
 4. Hub 유전자와 Driver 후보를 validation_priorities에 실제 유전자명으로 포함
 5. PMID 인용 형식 사용 (예: PMID 35409110)
 6. abstract_extended는 최소 800자 이상으로 상세하게 작성
