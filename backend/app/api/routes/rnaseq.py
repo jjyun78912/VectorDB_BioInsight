@@ -2364,7 +2364,8 @@ def _get_agent_summary(agent_name: str, result: dict) -> dict:
     elif agent_name == "agent5_visualization":
         summary["figures"] = result.get("figures", [])
     elif agent_name == "agent6_report":
-        summary["report_generated"] = result.get("report_generated", False)
+        # agent6_report uses "success" field from base_agent, check report_path exists
+        summary["report_generated"] = bool(result.get("report_path")) or result.get("report_generated", False)
     elif agent_name == "singlecell":
         # Single-cell pipeline summary
         summary["n_cells"] = result.get("n_cells", 0)
