@@ -2358,9 +2358,9 @@ def _get_agent_summary(agent_name: str, result: dict) -> dict:
         summary["hub_count"] = result.get("hub_count", 0)
         summary["edge_count"] = result.get("edge_count", 0)
     elif agent_name == "agent3_pathway":
-        summary["pathway_count"] = result.get("pathway_count", 0)
+        summary["pathway_count"] = result.get("total_significant_terms", result.get("pathway_count", 0))
     elif agent_name == "agent4_validation":
-        summary["validated_count"] = result.get("validated_count", 0)
+        summary["validated_count"] = result.get("db_matched_count", result.get("validated_count", 0))
     elif agent_name == "agent5_visualization":
         summary["figures"] = result.get("figures", [])
     elif agent_name == "agent6_report":
