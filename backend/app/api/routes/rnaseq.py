@@ -92,15 +92,36 @@ def detect_file_format(content: bytes, filename: str) -> str:
 
 
 def convert_tsv_to_csv(content: bytes) -> bytes:
-    """Convert TSV content to CSV format."""
+    """
+    Convert TSV content to CSV format using pandas for safety.
+
+    Simple tab-to-comma replacement can fail if data contains commas.
+    Using pandas ensures proper CSV quoting and escaping.
+    """
+    import pandas as pd
+    import io
+
     try:
         text = content.decode('utf-8', errors='ignore')
-        # Replace tabs with commas
-        csv_text = text.replace('\t', ',')
-        return csv_text.encode('utf-8')
+
+        # Use pandas to safely read TSV and write CSV
+        df = pd.read_csv(io.StringIO(text), sep='\t', low_memory=False)
+
+        # Write to CSV with proper quoting
+        csv_buffer = io.StringIO()
+        df.to_csv(csv_buffer, index=False)
+        return csv_buffer.getvalue().encode('utf-8')
+
     except Exception as e:
-        logger.warning(f"TSV to CSV conversion failed: {e}")
-        return content
+        logger.warning(f"TSV to CSV conversion with pandas failed: {e}, trying simple replacement")
+        # Fallback to simple replacement (for files without problematic data)
+        try:
+            text = content.decode('utf-8', errors='ignore')
+            csv_text = text.replace('\t', ',')
+            return csv_text.encode('utf-8')
+        except Exception as e2:
+            logger.warning(f"Simple TSV to CSV conversion also failed: {e2}")
+            return content
 
 
 def generate_metadata_from_count_matrix(count_content: bytes) -> tuple:
@@ -917,6 +938,8 @@ async def preview_count_matrix_samples(
     Analyzes column names to detect tumor/normal, case/control patterns.
     Also fetches GEO metadata if GSE ID is detected in filename.
     Returns sample list with suggested condition assignments.
+
+    Supports both CSV and TSV formats with automatic detection.
     """
     import pandas as pd
     import io
@@ -926,6 +949,8 @@ async def preview_count_matrix_samples(
         content = await count_matrix.read()
         filename = count_matrix.filename or ""
 
+        logger.info(f"Preview request for file: {filename}, size: {len(content)} bytes")
+
         # Try to extract GSE ID from filename
         gse_match = re.search(r'GSE\d+', filename, re.IGNORECASE)
         geo_metadata = {}
@@ -934,12 +959,40 @@ async def preview_count_matrix_samples(
             logger.info(f"Detected GSE ID: {gse_id}, fetching GEO metadata...")
             geo_metadata = await fetch_geo_metadata(gse_id)
 
-        # Detect separator
-        first_line = content.decode('utf-8').split('\n')[0]
-        sep = '\t' if '\t' in first_line else ','
+        # Detect separator - use smarter detection
+        try:
+            first_line = content.decode('utf-8', errors='ignore').split('\n')[0]
+        except Exception:
+            first_line = content.decode('latin-1').split('\n')[0]
 
-        # Read only header (first row)
-        df = pd.read_csv(io.BytesIO(content), sep=sep, nrows=5)
+        # Count delimiters to determine format
+        tab_count = first_line.count('\t')
+        comma_count = first_line.count(',')
+
+        # Use the more frequent delimiter (TSV files typically have many tabs)
+        if tab_count > comma_count and tab_count > 5:
+            sep = '\t'
+            logger.info(f"Detected TSV format: {tab_count} tabs vs {comma_count} commas in header")
+        elif comma_count > tab_count and comma_count > 5:
+            sep = ','
+            logger.info(f"Detected CSV format: {comma_count} commas vs {tab_count} tabs in header")
+        elif '\t' in first_line:
+            sep = '\t'
+            logger.info(f"Defaulting to TSV (found tabs)")
+        else:
+            sep = ','
+            logger.info(f"Defaulting to CSV")
+
+        # Read only header (first row) with error handling
+        try:
+            df = pd.read_csv(io.BytesIO(content), sep=sep, nrows=5, low_memory=False)
+        except Exception as parse_error:
+            logger.error(f"Failed to parse with sep='{sep}': {parse_error}")
+            # Try the other separator
+            alt_sep = ',' if sep == '\t' else '\t'
+            logger.info(f"Retrying with alternative separator: '{alt_sep}'")
+            df = pd.read_csv(io.BytesIO(content), sep=alt_sep, nrows=5, low_memory=False)
+            sep = alt_sep
 
         # Get sample columns (exclude gene_id column)
         gene_col_patterns = ['gene_id', 'gene', 'ensembl', 'symbol', 'name', 'id']
@@ -1066,8 +1119,28 @@ async def preview_count_matrix_samples(
         )
 
     except Exception as e:
+        import traceback
         logger.error(f"Preview failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to parse count matrix: {str(e)}")
+        logger.error(traceback.format_exc())
+
+        # Provide more helpful error message
+        error_msg = str(e)
+        if "tokenizing" in error_msg.lower() or "expected" in error_msg.lower():
+            error_detail = (
+                f"Failed to parse count matrix: {error_msg}. "
+                "This usually means inconsistent column counts. "
+                "Please ensure your file has the same number of columns in every row. "
+                "Supported formats: CSV (comma-separated), TSV (tab-separated)."
+            )
+        elif "decode" in error_msg.lower() or "codec" in error_msg.lower():
+            error_detail = (
+                f"Failed to parse count matrix: encoding error. "
+                "Please ensure your file is UTF-8 encoded."
+            )
+        else:
+            error_detail = f"Failed to parse count matrix: {error_msg}"
+
+        raise HTTPException(status_code=400, detail=error_detail)
 
 
 @router.post("/upload-with-auto-metadata", response_model=UploadResponse)

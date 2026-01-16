@@ -279,6 +279,148 @@ class RNAseqPipeline:
             self.execution_state["failed_agents"].append(agent_name)
             raise
 
+    def _predict_cancer_type(self) -> Optional[Dict[str, Any]]:
+        """
+        Predict cancer type using Pan-Cancer ML model.
+
+        This is called at the START of the pipeline to:
+        1. Classify the tumor samples into one of 17 cancer types
+        2. Store prediction results for Driver analysis and Report
+        3. Update config with predicted cancer_type
+
+        Returns:
+            Prediction results dict or None if prediction fails
+        """
+        # Skip if cancer_type is already specified and not "unknown"
+        current_cancer = self.config.get('cancer_type', 'unknown')
+        if current_cancer and current_cancer.lower() != 'unknown':
+            self.logger.info(f"Cancer type already specified: {current_cancer}")
+            return None
+
+        try:
+            from .ml.pancancer_classifier import PanCancerClassifier
+            import pandas as pd
+        except ImportError as e:
+            self.logger.warning(f"Pan-Cancer classifier not available: {e}")
+            return None
+
+        # Check if model exists
+        model_dir = Path(__file__).parent.parent / "models" / "rnaseq" / "pancancer"
+        if not model_dir.exists():
+            self.logger.warning(f"Pan-Cancer model not found at {model_dir}")
+            return None
+
+        # Load count matrix
+        accumulated_dir = self.run_dir / "accumulated"
+        count_file = accumulated_dir / "count_matrix.csv"
+        if not count_file.exists():
+            count_file = self.input_dir / "count_matrix.csv"
+
+        if not count_file.exists():
+            self.logger.warning("Count matrix not found for cancer type prediction")
+            return None
+
+        self.logger.info("=" * 60)
+        self.logger.info("Running Cancer Type Prediction (Pan-Cancer ML Model)")
+        self.logger.info("=" * 60)
+
+        try:
+            # Load count matrix
+            counts = pd.read_csv(count_file, index_col=0)
+            self.logger.info(f"Loaded count matrix: {counts.shape[0]} genes x {counts.shape[1]} samples")
+
+            # Filter to tumor samples only (if metadata available)
+            metadata_file = accumulated_dir / "metadata.csv"
+            if not metadata_file.exists():
+                metadata_file = self.input_dir / "metadata.csv"
+
+            tumor_samples = None
+            if metadata_file.exists():
+                metadata = pd.read_csv(metadata_file)
+                condition_col = self.config.get('condition_column', 'condition')
+                contrast = self.config.get('contrast', ['tumor', 'normal'])
+                if condition_col in metadata.columns:
+                    tumor_cond = contrast[0] if isinstance(contrast, list) else 'tumor'
+                    sample_col = 'sample_id' if 'sample_id' in metadata.columns else metadata.columns[0]
+                    tumor_samples = metadata[metadata[condition_col] == tumor_cond][sample_col].tolist()
+                    self.logger.info(f"Found {len(tumor_samples)} tumor samples")
+
+            # Use tumor samples if available
+            if tumor_samples:
+                available_samples = [s for s in tumor_samples if s in counts.columns]
+                if available_samples:
+                    counts = counts[available_samples]
+                    self.logger.info(f"Using {len(available_samples)} tumor samples for prediction")
+
+            # Run prediction
+            classifier = PanCancerClassifier(str(model_dir))
+            classifier.load()
+
+            results = classifier.predict(counts, top_k=5)
+
+            # Aggregate results (majority vote or highest confidence)
+            if results:
+                # Count predictions
+                from collections import Counter
+                predictions = [r.predicted_cancer for r in results if not r.is_unknown]
+
+                if predictions:
+                    cancer_counts = Counter(predictions)
+                    predicted_cancer, count = cancer_counts.most_common(1)[0]
+
+                    # Get average confidence for the predicted cancer
+                    confidences = [r.confidence for r in results if r.predicted_cancer == predicted_cancer]
+                    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+
+                    # Get cancer info
+                    cancer_info = classifier.cancer_info.get(predicted_cancer, {})
+                    korean_name = cancer_info.get('korean', predicted_cancer)
+
+                    prediction_result = {
+                        'predicted_cancer': predicted_cancer,
+                        'predicted_cancer_korean': korean_name,
+                        'confidence': avg_confidence,
+                        'sample_count': len(results),
+                        'agreement_count': count,
+                        'agreement_ratio': count / len(predictions) if predictions else 0,
+                        'top_k_summary': [
+                            {
+                                'cancer': c,
+                                'count': cnt,
+                                'ratio': cnt / len(predictions)
+                            }
+                            for c, cnt in cancer_counts.most_common(5)
+                        ],
+                        'all_results': [r.to_dict() for r in results[:10]]  # Top 10 samples
+                    }
+
+                    # Update config with predicted cancer type
+                    self.config['cancer_type'] = predicted_cancer
+                    self.config['cancer_type_korean'] = korean_name
+                    self.config['cancer_prediction'] = prediction_result
+
+                    self.logger.info(f"🎯 Predicted Cancer Type: {predicted_cancer} ({korean_name})")
+                    self.logger.info(f"   Confidence: {avg_confidence:.2%}")
+                    self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
+
+                    # Save prediction results
+                    prediction_file = self.run_dir / "cancer_prediction.json"
+                    with open(prediction_file, 'w', encoding='utf-8') as f:
+                        json.dump(prediction_result, f, indent=2, ensure_ascii=False)
+
+                    return prediction_result
+                else:
+                    self.logger.warning("All samples classified as UNKNOWN")
+            else:
+                self.logger.warning("No prediction results returned")
+
+        except Exception as e:
+            self.logger.error(f"Cancer type prediction failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return None
+
     def run(self, stop_after: Optional[str] = None) -> Dict[str, Any]:
         """Run the full pipeline or until a specific agent."""
         self.execution_state["start_time"] = datetime.now().isoformat()
@@ -291,6 +433,13 @@ class RNAseqPipeline:
 
         # Copy initial inputs
         self._copy_initial_inputs()
+
+        # ===== STEP 0: Predict Cancer Type =====
+        # Run cancer type prediction BEFORE any agents
+        cancer_prediction = self._predict_cancer_type()
+        if cancer_prediction:
+            self.execution_state["cancer_prediction"] = cancer_prediction
+            self.logger.info(f"Cancer type set to: {self.config.get('cancer_type')}")
 
         # Get appropriate agent order
         agent_order = self.get_agent_order()

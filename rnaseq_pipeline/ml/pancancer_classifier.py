@@ -116,19 +116,141 @@ class PanCancerPreprocessor:
             logger.warning(f"Gene mapping file not found: {mapping_file}")
 
     def _convert_gene_ids(self, counts: pd.DataFrame) -> pd.DataFrame:
-        """Gene Symbol을 ENSEMBL ID로 변환 (필요한 경우)"""
+        """
+        Gene ID 변환 → 모델이 기대하는 ENSEMBL ID로 변환
+
+        지원 형식:
+        - Entrez ID (숫자): mygene API로 ENSEMBL ID 변환
+        - Gene Symbol: symbol_to_ensembl 매핑으로 변환
+        - ENSEMBL ID: 그대로 사용
+        """
         if self.symbol_to_ensembl is None:
             return counts
 
         # 입력 데이터의 유전자 ID 형식 감지
         sample_genes = counts.index[:10].tolist()
         is_ensembl = any(str(g).startswith('ENSG') for g in sample_genes)
+        is_entrez = all(str(g).isdigit() for g in sample_genes if str(g) != 'GeneID')
+
+        if is_entrez:
+            # Entrez ID -> ENSEMBL ID 변환
+            logger.info("Input is in Entrez ID format, converting to ENSEMBL ID...")
+
+            entrez_ids = [str(g) for g in counts.index if str(g).isdigit()]
+            entrez_to_ensembl = {}
+
+            # 1. 먼저 로컬 캐시 확인
+            cache_file = Path(__file__).parent.parent.parent / "models" / "rnaseq" / "pancancer" / "entrez_to_ensembl_cache.json"
+            if cache_file.exists():
+                try:
+                    with open(cache_file, 'r') as f:
+                        cached_mapping = json.load(f)
+                    # 캐시된 매핑 사용
+                    for entrez_id in entrez_ids:
+                        if entrez_id in cached_mapping:
+                            entrez_to_ensembl[entrez_id] = cached_mapping[entrez_id]
+                    logger.info(f"Loaded {len(entrez_to_ensembl)} mappings from local cache")
+                except Exception as e:
+                    logger.warning(f"Failed to load cache: {e}")
+
+            # 2. 캐시에 없는 ID는 mygene API로 조회
+            missing_ids = [eid for eid in entrez_ids if eid not in entrez_to_ensembl]
+            if missing_ids and len(missing_ids) > 0:
+                try:
+                    import mygene
+                    mg = mygene.MyGeneInfo()
+
+                    batch_size = 1000
+                    new_mappings = {}
+
+                    for i in range(0, len(missing_ids), batch_size):
+                        batch = missing_ids[i:i+batch_size]
+                        results = mg.querymany(batch, scopes='entrezgene',
+                                             fields='ensembl.gene,symbol',
+                                             species='human', verbose=False)
+                        for r in results:
+                            if 'query' not in r:
+                                continue
+                            query = r['query']
+
+                            # ensembl ID가 있으면 사용
+                            if 'ensembl' in r:
+                                ensembl_data = r['ensembl']
+                                if isinstance(ensembl_data, list):
+                                    ensembl_id = ensembl_data[0].get('gene') if ensembl_data else None
+                                else:
+                                    ensembl_id = ensembl_data.get('gene')
+                                if ensembl_id:
+                                    # 모델의 ENSEMBL ID 형식과 매칭 (버전 포함)
+                                    for model_ensembl in self.symbol_to_ensembl.values():
+                                        if model_ensembl.startswith(ensembl_id):
+                                            new_mappings[query] = model_ensembl
+                                            break
+                                    else:
+                                        new_mappings[query] = ensembl_id
+
+                            # ensembl이 없으면 symbol을 통해 변환
+                            if query not in new_mappings and 'symbol' in r:
+                                symbol = r['symbol']
+                                if symbol in self.symbol_to_ensembl:
+                                    new_mappings[query] = self.symbol_to_ensembl[symbol]
+
+                    entrez_to_ensembl.update(new_mappings)
+                    logger.info(f"Fetched {len(new_mappings)} new mappings from mygene API")
+
+                    # 캐시 업데이트
+                    if new_mappings:
+                        try:
+                            existing_cache = {}
+                            if cache_file.exists():
+                                with open(cache_file, 'r') as f:
+                                    existing_cache = json.load(f)
+                            existing_cache.update(new_mappings)
+                            with open(cache_file, 'w') as f:
+                                json.dump(existing_cache, f)
+                            logger.info(f"Updated cache with {len(new_mappings)} new entries")
+                        except Exception as e:
+                            logger.warning(f"Failed to update cache: {e}")
+
+                except Exception as e:
+                    logger.warning(f"mygene API failed: {e}, using cached data only")
+
+            if entrez_to_ensembl:
+                logger.info(f"Total Entrez → ENSEMBL mappings: {len(entrez_to_ensembl)}")
+
+                # Convert counts
+                converted_index = []
+                converted_data = []
+                conversion_stats = {'matched': 0, 'unmatched': 0}
+
+                for gene in counts.index:
+                    gene_str = str(gene)
+                    if gene_str in entrez_to_ensembl:
+                        ensembl_id = entrez_to_ensembl[gene_str]
+                        converted_index.append(ensembl_id)
+                        converted_data.append(counts.loc[gene].values)
+                        conversion_stats['matched'] += 1
+                    else:
+                        conversion_stats['unmatched'] += 1
+
+                logger.info(f"Gene ID conversion (Entrez → ENSEMBL): {conversion_stats['matched']} matched, "
+                           f"{conversion_stats['unmatched']} unmatched")
+
+                if converted_data:
+                    converted_df = pd.DataFrame(
+                        converted_data,
+                        index=converted_index,
+                        columns=counts.columns
+                    )
+                    return converted_df
 
         if is_ensembl:
-            logger.info("Input already in ENSEMBL format, skipping conversion")
+            # ENSEMBL ID가 이미 사용중 - 그대로 반환
+            logger.info("Input is already in ENSEMBL format")
             return counts
 
         # Gene Symbol -> ENSEMBL 변환
+        logger.info("Input appears to be Gene Symbol, converting to ENSEMBL ID...")
         converted_index = []
         converted_data = []
         conversion_stats = {'matched': 0, 'unmatched': 0}
@@ -143,7 +265,7 @@ class PanCancerPreprocessor:
             else:
                 conversion_stats['unmatched'] += 1
 
-        logger.info(f"Gene ID conversion: {conversion_stats['matched']} matched, "
+        logger.info(f"Gene ID conversion (Symbol → ENSEMBL): {conversion_stats['matched']} matched, "
                    f"{conversion_stats['unmatched']} unmatched")
 
         if converted_data:
@@ -251,12 +373,22 @@ class PanCancerPreprocessor:
         else:
             transformed = normalized
 
+        # 중복 gene index 처리 (평균 사용)
+        if transformed.index.duplicated().any():
+            logger.info(f"Found {transformed.index.duplicated().sum()} duplicate gene indices, averaging...")
+            transformed = transformed.groupby(transformed.index).mean()
+
         # 선택된 유전자 추출 (없는 건 0으로)
         X = pd.DataFrame(0.0, index=counts.columns, columns=self.selected_genes)
         matched_genes = 0
         for gene in self.selected_genes:
             if gene in transformed.index:
-                X[gene] = transformed.loc[gene].values
+                gene_values = transformed.loc[gene]
+                if isinstance(gene_values, pd.Series):
+                    X[gene] = gene_values.values
+                else:
+                    # 여전히 중복이 있으면 첫 번째 사용
+                    X[gene] = gene_values.iloc[0].values
                 matched_genes += 1
 
         logger.info(f"Feature matching: {matched_genes}/{len(self.selected_genes)} genes "

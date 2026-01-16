@@ -200,6 +200,23 @@ class ReportAgent(BaseAgent):
 
                 break  # Found driver data, stop searching
 
+        # Load cancer type prediction if exists
+        cancer_pred_paths = [
+            run_dir / "cancer_prediction.json",
+            self.input_dir / "cancer_prediction.json",
+            self.input_dir.parent / "cancer_prediction.json"
+        ]
+
+        for pred_path in cancer_pred_paths:
+            if pred_path.exists():
+                try:
+                    with open(pred_path, 'r', encoding='utf-8') as f:
+                        data['cancer_prediction'] = json.load(f)
+                    self.logger.info(f"Loaded cancer_prediction.json: {data['cancer_prediction'].get('predicted_cancer', 'unknown')}")
+                except Exception as e:
+                    self.logger.warning(f"Error loading cancer_prediction.json: {e}")
+                break
+
         return data
 
     def _calculate_overall_confidence(self, data: Dict) -> tuple:
@@ -1045,10 +1062,47 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_study_overview_html(self, data: Dict) -> str:
-        """Generate Study Overview section."""
+        """Generate Study Overview section with ML-predicted cancer type."""
         deg_df = data.get('deg_significant_df')
-        interpretation = data.get('interpretation_report', {})
-        cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'Unknown'))
+
+        # Get cancer prediction from ML model
+        cancer_prediction = data.get('cancer_prediction', {})
+
+        # Determine cancer type display
+        if cancer_prediction:
+            predicted_cancer = cancer_prediction.get('predicted_cancer', 'Unknown')
+            cancer_korean = cancer_prediction.get('cancer_korean', '')
+            confidence = cancer_prediction.get('confidence', 0)
+            agreement_ratio = cancer_prediction.get('agreement_ratio', 0)
+
+            # Format cancer type display with Korean name and confidence
+            if cancer_korean:
+                cancer_type_display = f"{predicted_cancer} ({cancer_korean})"
+            else:
+                cancer_type_display = predicted_cancer
+
+            # Confidence badge styling
+            if confidence >= 0.8:
+                confidence_badge = f'<span class="confidence-badge high">신뢰도: {confidence:.1%}</span>'
+            elif confidence >= 0.6:
+                confidence_badge = f'<span class="confidence-badge medium">신뢰도: {confidence:.1%}</span>'
+            else:
+                confidence_badge = f'<span class="confidence-badge low">신뢰도: {confidence:.1%}</span>'
+
+            prediction_method = "🤖 ML 예측 (Pan-Cancer Classifier)"
+            prediction_note = f"<small>샘플 일치율: {agreement_ratio:.1%}</small>"
+        else:
+            # Fallback to config-specified cancer type
+            cancer_type_display = self.config.get('cancer_type_korean', self.config.get('cancer_type', 'Unknown'))
+            if cancer_type_display.lower() == 'unknown':
+                cancer_type_display = '암종 미확인'
+                confidence_badge = '<span class="confidence-badge low">예측 불가</span>'
+                prediction_method = "⚠️ ML 예측 실패"
+                prediction_note = "<small>count matrix 확인 필요</small>"
+            else:
+                confidence_badge = '<span class="confidence-badge medium">사용자 지정</span>'
+                prediction_method = "사용자 지정"
+                prediction_note = ""
 
         # Get sample info from config
         original_files = self.config.get('original_files', {})
@@ -1069,7 +1123,14 @@ class ReportAgent(BaseAgent):
                 <div class="overview-table">
                     <table class="info-table">
                         <tr><td><strong>Dataset ID</strong></td><td>{dataset_id}</td></tr>
-                        <tr><td><strong>Cancer Type</strong></td><td>{cancer_type}</td></tr>
+                        <tr>
+                            <td><strong>예측 암종 (Cancer Type)</strong></td>
+                            <td>
+                                <span class="cancer-type-predicted">{cancer_type_display}</span> {confidence_badge}
+                                <br/>{prediction_note}
+                            </td>
+                        </tr>
+                        <tr><td><strong>예측 방법</strong></td><td>{prediction_method}</td></tr>
                         <tr><td><strong>Comparison</strong></td><td>{contrast[0]} vs {contrast[1]}</td></tr>
                         <tr><td><strong>Analysis Pipeline</strong></td><td>BioInsight AI v2.0</td></tr>
                         <tr><td><strong>Analysis Date</strong></td><td>{datetime.now().strftime("%Y-%m-%d")}</td></tr>
@@ -2810,6 +2871,13 @@ class ReportAgent(BaseAgent):
             .confidence-badge.high { background: #c8e6c9; color: #1b5e20; }
             .confidence-badge.medium { background: #fff3e0; color: #e65100; }
             .confidence-badge.low { background: #ffebee; color: #b71c1c; }
+
+            .cancer-type-predicted {
+                font-size: 1.2em;
+                font-weight: 700;
+                color: var(--primary);
+                margin-right: 8px;
+            }
 
             .key-metrics {
                 display: grid;
