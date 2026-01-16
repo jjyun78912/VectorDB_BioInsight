@@ -40,8 +40,10 @@ app = FastAPI(
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else [
     "http://localhost:5173",  # Vite dev server
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
 ]
 app.add_middleware(
     CORSMiddleware,

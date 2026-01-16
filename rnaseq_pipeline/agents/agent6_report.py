@@ -3142,7 +3142,7 @@ class ReportAgent(BaseAgent):
                     # If no symbol found, use gene_id but try to clean it
                     hub_names.append(gene_id.split('.')[0] if '.' in gene_id else gene_id)
         else:
-            hub_names = [g.get('gene_symbol', g.get('gene_id', '')) for g in hub_genes[:5]]
+            hub_names = [str(g.get('gene_symbol', g.get('gene_id', ''))) for g in hub_genes[:5]]
 
         # Pathways
         pathway_df = data.get('pathway_summary_df')
@@ -3490,14 +3490,14 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
             sorted_df = deg_df.sort_values(log2fc_col, ascending=False)
             for _, row in sorted_df.head(5).iterrows():
-                gene = row.get(gene_col, 'Unknown')
+                gene = str(row.get(gene_col, 'Unknown'))
                 fc = row.get(log2fc_col, 0)
-                if not str(gene).startswith('ENSG'):
+                if not gene.startswith('ENSG'):
                     top_up_genes.append(f"{gene} (log2FC={fc:.2f})")
             for _, row in sorted_df.tail(5).iterrows():
-                gene = row.get(gene_col, 'Unknown')
+                gene = str(row.get(gene_col, 'Unknown'))
                 fc = row.get(log2fc_col, 0)
-                if not str(gene).startswith('ENSG'):
+                if not gene.startswith('ENSG'):
                     top_down_genes.append(f"{gene} (log2FC={fc:.2f})")
 
         # Hub genes info - handle both 'gene_id' and 'gene_symbol' column names
@@ -3506,7 +3506,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         if hub_df is not None and len(hub_df) > 0:
             hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
             for _, row in hub_df.head(10).iterrows():
-                gene_name = row.get('gene_id', row.get('gene_symbol', row.get('gene_name', 'Unknown')))
+                gene_name = str(row.get('gene_id', row.get('gene_symbol', row.get('gene_name', 'Unknown'))))
                 degree = row.get('degree', 0)
                 log2fc = row.get(hub_log2fc_col, 0)
                 hub_genes_info.append(f"- {gene_name} (degree={degree}, log2FC={log2fc:.2f})")
@@ -3891,15 +3891,15 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         if deg_df is not None and log2fc_col in deg_df.columns:
             deg_sorted = deg_df.sort_values(log2fc_col, ascending=False)
             gene_col = 'gene_id' if 'gene_id' in deg_df.columns else 'gene_symbol'
-            top_up_genes = deg_sorted.head(5)[gene_col].tolist()
-            top_down_genes = deg_sorted.tail(5)[gene_col].tolist()
+            top_up_genes = [str(g) for g in deg_sorted.head(5)[gene_col].tolist()]
+            top_down_genes = [str(g) for g in deg_sorted.tail(5)[gene_col].tolist()]
 
         # Hub genes for network
         hub_genes_list = []
         if hub_df is not None:
             hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
             for _, row in hub_df.head(10).iterrows():
-                gene_name = row.get('gene_id', row.get('gene_symbol', 'Unknown'))
+                gene_name = str(row.get('gene_id', row.get('gene_symbol', 'Unknown')))
                 degree = row.get('degree', 0)
                 log2fc = row.get(hub_log2fc_col, 0)
                 hub_genes_list.append(f"{gene_name}(degree={degree}, log2FC={log2fc:.2f})")

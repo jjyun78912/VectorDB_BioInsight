@@ -164,11 +164,17 @@ AGENT_INFO = {
         "icon": "bar-chart-2",
         "order": 5
     },
+    "ml_prediction": {
+        "name": "ML Prediction",
+        "description": "암종 예측 및 SHAP 분석",
+        "icon": "brain",
+        "order": 6
+    },
     "agent6_report": {
         "name": "Report Generation",
         "description": "HTML 보고서 생성",
         "icon": "file-text",
-        "order": 6
+        "order": 7
     }
 }
 
@@ -235,6 +241,79 @@ class CountMatrixPreviewResponse(BaseModel):
     suggested_control: str
 
 
+async def fetch_geo_metadata(gse_id: str) -> dict:
+    """Fetch sample metadata from GEO for a GSE dataset."""
+    import aiohttp
+
+    url = f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={gse_id}&targ=gsm&form=text&view=brief"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    return {}
+                text = await response.text()
+
+        # Parse GEO text format
+        samples = {}
+        current_gsm = None
+        current_title = None
+        current_condition = None
+
+        for line in text.split('\n'):
+            line = line.strip()
+            if line.startswith('^SAMPLE = '):
+                # Save previous sample
+                if current_gsm and current_title:
+                    # Detect condition from title (ends with T or N)
+                    title_upper = current_title.upper()
+                    if title_upper.endswith('T') or '_T' in title_upper or '-T' in title_upper:
+                        current_condition = 'treatment'
+                    elif title_upper.endswith('N') or '_N' in title_upper or '-N' in title_upper:
+                        current_condition = 'control'
+                    samples[current_gsm] = {
+                        'title': current_title,
+                        'condition': current_condition or 'unknown'
+                    }
+                # Start new sample
+                current_gsm = line.replace('^SAMPLE = ', '')
+                current_title = None
+                current_condition = None
+            elif line.startswith('!Sample_title = '):
+                current_title = line.replace('!Sample_title = ', '')
+            elif 'tumor (t) or normal (n):' in line.lower():
+                # Direct condition annotation
+                value = line.split(':')[-1].strip().upper()
+                if value.endswith('T'):
+                    current_condition = 'treatment'
+                elif value.endswith('N'):
+                    current_condition = 'control'
+            elif 'tissue:' in line.lower() or 'sample type:' in line.lower():
+                value = line.split(':')[-1].strip().lower()
+                if any(w in value for w in ['tumor', 'tumour', 'cancer', 'malignant']):
+                    current_condition = 'treatment'
+                elif any(w in value for w in ['normal', 'healthy', 'adjacent', 'control']):
+                    current_condition = 'control'
+
+        # Save last sample
+        if current_gsm and current_title:
+            title_upper = current_title.upper()
+            if not current_condition:
+                if title_upper.endswith('T') or '_T' in title_upper or '-T' in title_upper:
+                    current_condition = 'treatment'
+                elif title_upper.endswith('N') or '_N' in title_upper or '-N' in title_upper:
+                    current_condition = 'control'
+            samples[current_gsm] = {
+                'title': current_title,
+                'condition': current_condition or 'unknown'
+            }
+
+        return samples
+    except Exception as e:
+        logger.warning(f"Failed to fetch GEO metadata for {gse_id}: {e}")
+        return {}
+
+
 @router.post("/preview-samples")
 async def preview_count_matrix_samples(
     count_matrix: UploadFile = File(..., description="Count matrix CSV/TSV file")
@@ -243,6 +322,7 @@ async def preview_count_matrix_samples(
     Preview samples from count matrix and auto-detect conditions.
 
     Analyzes column names to detect tumor/normal, case/control patterns.
+    Also fetches GEO metadata if GSE ID is detected in filename.
     Returns sample list with suggested condition assignments.
     """
     import pandas as pd
@@ -251,6 +331,15 @@ async def preview_count_matrix_samples(
 
     try:
         content = await count_matrix.read()
+        filename = count_matrix.filename or ""
+
+        # Try to extract GSE ID from filename
+        gse_match = re.search(r'GSE\d+', filename, re.IGNORECASE)
+        geo_metadata = {}
+        if gse_match:
+            gse_id = gse_match.group(0).upper()
+            logger.info(f"Detected GSE ID: {gse_id}, fetching GEO metadata...")
+            geo_metadata = await fetch_geo_metadata(gse_id)
 
         # Detect separator
         first_line = content.decode('utf-8').split('\n')[0]
@@ -277,38 +366,84 @@ async def preview_count_matrix_samples(
             gene_col = df.columns[0]
             sample_columns = list(df.columns[1:])
 
-        # Count total genes
-        df_full = pd.read_csv(io.BytesIO(content), sep=sep, usecols=[gene_col] if gene_col else [0])
-        gene_count = len(df_full)
+        # Count total genes (fast: just count newlines instead of parsing)
+        gene_count = content.count(b'\n') - 1  # subtract header row
+        if gene_count < 0:
+            gene_count = 0
 
         # Auto-detect conditions from column names
-        treatment_patterns = [
-            r'tumor', r'cancer', r'case', r'disease', r'patient', r'treated',
-            r'_t[0-9]*$', r'_t$', r'^t[0-9]+', r'primary', r'metastatic'
+        # Priority: Check T/N suffix patterns first (more specific), then keywords
+
+        # T suffix/prefix patterns (highest priority - most specific)
+        t_suffix_patterns = [
+            r'[_\-\.]t[0-9]*$',      # ends with _T, _T1, _T01, .T
+            r'^t[0-9]+[_\-\.]',      # starts with T1_, T01-
+            r'[_\-]t[_\-]',          # contains _T_ or -T-
+            r'[_\-]t$',              # ends with _T or -T
         ]
-        control_patterns = [
-            r'normal', r'control', r'healthy', r'untreated', r'reference',
-            r'_n[0-9]*$', r'_n$', r'^n[0-9]+', r'adjacent', r'baseline'
+        # N suffix/prefix patterns (highest priority - most specific)
+        n_suffix_patterns = [
+            r'[_\-\.]n[0-9]*$',      # ends with _N, _N1, _N01, .N
+            r'^n[0-9]+[_\-\.]',      # starts with N1_, N01-
+            r'[_\-]n[_\-]',          # contains _N_ or -N-
+            r'[_\-]n$',              # ends with _N or -N
+        ]
+
+        # Treatment/Tumor keyword patterns (lower priority)
+        treatment_keywords = [
+            r'tumor', r'tumour', r'cancer', r'carcinoma', r'malignant',
+            r'disease', r'treated', r'treatment',
+            r'primary', r'metastatic', r'metastasis', r'lesion',
+            r'종양', r'암',
+        ]
+        # Control/Normal keyword patterns (lower priority)
+        control_keywords = [
+            r'normal', r'control', r'ctrl', r'healthy', r'benign',
+            r'untreated', r'reference', r'ref', r'baseline', r'base',
+            r'adjacent', r'adj',
+            r'정상', r'대조군',
         ]
 
         samples = []
         detected_conditions = {"treatment": [], "control": [], "unknown": []}
+        geo_matched = 0
 
         for sample in sample_columns:
             sample_lower = sample.lower()
             condition = "unknown"
 
-            # Check treatment patterns
-            for pattern in treatment_patterns:
-                if re.search(pattern, sample_lower):
-                    condition = "treatment"
-                    break
+            # 0. First check GEO metadata if available (highest priority)
+            if geo_metadata and sample in geo_metadata:
+                condition = geo_metadata[sample].get('condition', 'unknown')
+                if condition != 'unknown':
+                    geo_matched += 1
 
-            # Check control patterns if not treatment
+            # 1. Check N suffix (control)
             if condition == "unknown":
-                for pattern in control_patterns:
+                for pattern in n_suffix_patterns:
                     if re.search(pattern, sample_lower):
                         condition = "control"
+                        break
+
+            # 2. Check T suffix (treatment)
+            if condition == "unknown":
+                for pattern in t_suffix_patterns:
+                    if re.search(pattern, sample_lower):
+                        condition = "treatment"
+                        break
+
+            # 3. Check control keywords
+            if condition == "unknown":
+                for pattern in control_keywords:
+                    if re.search(pattern, sample_lower):
+                        condition = "control"
+                        break
+
+            # 4. Check treatment keywords (lowest priority)
+            if condition == "unknown":
+                for pattern in treatment_keywords:
+                    if re.search(pattern, sample_lower):
+                        condition = "treatment"
                         break
 
             samples.append(SampleInfo(sample_id=sample, condition=condition))
@@ -317,6 +452,13 @@ async def preview_count_matrix_samples(
         # Suggest labels based on detected patterns
         suggested_treatment = "tumor" if detected_conditions["treatment"] else "treatment"
         suggested_control = "normal" if detected_conditions["control"] else "control"
+
+        # Log detection results
+        if geo_metadata:
+            logger.info(f"GEO metadata: {len(geo_metadata)} samples found, {geo_matched} matched")
+        logger.info(f"Detection results: {len(detected_conditions['treatment'])} treatment, "
+                   f"{len(detected_conditions['control'])} control, "
+                   f"{len(detected_conditions['unknown'])} unknown")
 
         # Generate temporary job_id for this preview
         job_id = str(uuid.uuid4())[:8]
@@ -1310,13 +1452,15 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
         )
 
         # Run agents one by one with progress updates
+        # ML prediction is virtual - runs within agent6_report
         agent_progress = {
             "agent1_deg": (0, 15),
-            "agent2_network": (15, 35),
-            "agent3_pathway": (35, 55),
-            "agent4_validation": (55, 70),
-            "agent5_visualization": (70, 90),
-            "agent6_report": (90, 100)
+            "agent2_network": (15, 30),
+            "agent3_pathway": (30, 45),
+            "agent4_validation": (45, 60),
+            "agent5_visualization": (60, 75),
+            "ml_prediction": (75, 88),  # Virtual stage within agent6
+            "agent6_report": (88, 100)
         }
 
         completed_agents = []
@@ -1324,15 +1468,45 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
 
         for agent_name in pipeline.AGENT_ORDER:
             try:
+                # Send ML prediction virtual stage before agent6_report
+                if agent_name == "agent6_report":
+                    ml_info = AGENT_INFO.get("ml_prediction", {})
+                    ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+
+                    # ML prediction start
+                    send_sse_message(job_id, {
+                        "type": "agent_start",
+                        "agent": "ml_prediction",
+                        "name": ml_info.get("name", "ML Prediction"),
+                        "progress": ml_start,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    status.current_step = ml_info.get("name", "ML Prediction")
+                    status.progress = ml_start
+
                 start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
                 agent_info = AGENT_INFO.get(agent_name, {})
+
+                # For agent6_report, ML prediction completes when it starts
+                if agent_name == "agent6_report":
+                    ml_info = AGENT_INFO.get("ml_prediction", {})
+                    ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+
+                    # ML prediction complete (runs within agent6_report)
+                    send_sse_message(job_id, {
+                        "type": "agent_complete",
+                        "agent": "ml_prediction",
+                        "name": ml_info.get("name", "ML Prediction"),
+                        "progress": ml_end,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    completed_agents.append("ml_prediction")
 
                 # Send agent start message
                 send_sse_message(job_id, {
                     "type": "agent_start",
                     "agent": agent_name,
                     "name": agent_info.get("name", agent_name),
-                    "description": agent_info.get("description", ""),
                     "progress": start_progress,
                     "timestamp": datetime.now().isoformat()
                 })
@@ -1436,20 +1610,22 @@ def _run_demo_pipeline(job_id: str):
 
     status = _analysis_jobs[job_id]
     agents = [
-        ("agent1_deg", "DEG Analysis", 15),
-        ("agent2_network", "Network Analysis", 35),
-        ("agent3_pathway", "Pathway Enrichment", 55),
-        ("agent4_validation", "DB Validation", 70),
-        ("agent5_visualization", "Visualization", 90),
-        ("agent6_report", "Report Generation", 100)
+        ("agent1_deg", "차등 발현 분석", 15),
+        ("agent2_network", "네트워크 분석", 30),
+        ("agent3_pathway", "경로 분석", 45),
+        ("agent4_validation", "데이터베이스 검증", 60),
+        ("agent5_visualization", "시각화", 75),
+        ("ml_prediction", "ML 예측", 88),
+        ("agent6_report", "리포트 생성", 100)
     ]
 
+    prev_progress = 0
     for agent_id, agent_name, progress in agents:
         send_sse_message(job_id, {
             "type": "agent_start",
             "agent": agent_id,
             "name": agent_name,
-            "progress": progress - 15,
+            "progress": prev_progress,
             "timestamp": datetime.now().isoformat()
         })
 
@@ -1465,6 +1641,7 @@ def _run_demo_pipeline(job_id: str):
         })
 
         status.progress = progress
+        prev_progress = progress
 
     status.status = "completed"
     status.completed_at = datetime.now().isoformat()

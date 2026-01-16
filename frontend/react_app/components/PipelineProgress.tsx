@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Activity, Share2, GitBranch, Database, BarChart2, FileText, CheckCircle2, Loader2, AlertCircle, ExternalLink, Download } from 'lucide-react';
+import { X, Activity, Share2, GitBranch, Database, BarChart2, FileText, CheckCircle2, Loader2, AlertCircle, ExternalLink, Download, Brain } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
-// Agent info matching backend
+// Agent info matching backend - simplified without tool descriptions
 const AGENTS = [
-  { id: 'agent1_deg', name: 'DEG Analysis', nameKo: 'DEG 분석', icon: Activity, description: 'DESeq2 차등 발현 분석', descriptionKo: 'DESeq2 차등 발현 유전자 분석' },
-  { id: 'agent2_network', name: 'Network Analysis', nameKo: '네트워크 분석', icon: Share2, description: 'Hub gene detection', descriptionKo: 'Hub gene 탐지' },
-  { id: 'agent3_pathway', name: 'Pathway Enrichment', nameKo: '경로 농축', icon: GitBranch, description: 'GO/KEGG enrichment', descriptionKo: 'GO/KEGG 경로 농축' },
-  { id: 'agent4_validation', name: 'DB Validation', nameKo: 'DB 검증', icon: Database, description: 'DisGeNET, OMIM, COSMIC', descriptionKo: 'DisGeNET, OMIM, COSMIC 검증' },
-  { id: 'agent5_visualization', name: 'Visualization', nameKo: '시각화', icon: BarChart2, description: 'Volcano, Heatmap, Network', descriptionKo: 'Volcano plot, Heatmap, Network' },
-  { id: 'agent6_report', name: 'Report Generation', nameKo: '리포트 생성', icon: FileText, description: 'HTML report', descriptionKo: 'HTML 보고서 생성' },
+  { id: 'agent1_deg', name: 'DEG Analysis', nameKo: '차등 발현 분석', icon: Activity },
+  { id: 'agent2_network', name: 'Network Analysis', nameKo: '네트워크 분석', icon: Share2 },
+  { id: 'agent3_pathway', name: 'Pathway Enrichment', nameKo: '경로 분석', icon: GitBranch },
+  { id: 'agent4_validation', name: 'Database Validation', nameKo: '데이터베이스 검증', icon: Database },
+  { id: 'agent5_visualization', name: 'Visualization', nameKo: '시각화', icon: BarChart2 },
+  { id: 'ml_prediction', name: 'ML Prediction', nameKo: 'ML 예측', icon: Brain },
+  { id: 'agent6_report', name: 'Report Generation', nameKo: '리포트 생성', icon: FileText },
 ];
 
 interface SSEMessage {
@@ -222,9 +223,9 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
                   }`}>
                     {language === 'ko' ? agent.nameKo : agent.name}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">
-                    {isActive ? t.processing : language === 'ko' ? agent.descriptionKo : agent.description}
-                  </p>
+                  {isActive && (
+                    <p className="text-xs text-gray-400">{t.processing}</p>
+                  )}
                   {summary && (
                     <p className="text-xs text-green-600 mt-0.5">
                       {Object.entries(summary).map(([k, v]) => `${k}: ${v}`).join(', ')}

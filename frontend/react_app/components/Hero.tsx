@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Search, FileText, Dna, ArrowRight, Loader2, Sparkles, Globe, Link2, Database, Flame } from 'lucide-react';
+import React, { useState, useRef, useCallback } from 'react';
+import { Search, FileText, Dna, ArrowRight, Loader2, Sparkles, Globe, Link2, Database, Flame, Upload, FileSpreadsheet } from 'lucide-react';
 import api, { ChatResponse, PrecisionSearchResult, SearchDiagnostics } from '../services/client';
 import { PubMedResults } from './PubMedResults';
 import { LocalDBResults } from './LocalDBResults';
@@ -76,6 +76,13 @@ export const Hero: React.FC<HeroProps> = ({
   // RNA-seq analysis modal state
   const [showRNAseqModal, setShowRNAseqModal] = useState(false);
   const [rnaseqJobId, setRnaseqJobId] = useState<string | null>(null);
+
+  // Drag and drop state for RNA-seq files
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [rnaseqFile, setRnaseqFile] = useState<File | null>(null);
+
+  // Reference for CSV/TSV file input
+  const rnaseqFileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-detect DOI in query
   const isDOI = (text: string): boolean => {
@@ -262,9 +269,103 @@ export const Hero: React.FC<HeroProps> = ({
     setPaperDetail(null);
   };
 
+  // Check if file is a potential RNA-seq count matrix (CSV/TSV)
+  const isRNAseqFile = (file: File): boolean => {
+    const name = file.name.toLowerCase();
+    return name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt');
+  };
+
+  // Handle drag events for RNA-seq file drop
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingFile(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if leaving the drop zone entirely
+    if (e.currentTarget.contains(e.relatedTarget as Node)) {
+      return;
+    }
+    setIsDraggingFile(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFile(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (isRNAseqFile(file)) {
+        // Open RNA-seq modal with the file pre-loaded
+        setRnaseqFile(file);
+        setShowRNAseqModal(true);
+      } else if (file.name.endsWith('.pdf')) {
+        // Handle PDF upload as before
+        if (fileInputRef.current) {
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          fileInputRef.current.files = dataTransfer.files;
+          handleFileUpload({ target: fileInputRef.current } as React.ChangeEvent<HTMLInputElement>);
+        }
+      }
+    }
+  }, []);
+
+  // Handle RNA-seq file selection from input
+  const handleRNAseqFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && isRNAseqFile(file)) {
+      setRnaseqFile(file);
+      setShowRNAseqModal(true);
+    }
+    // Reset input
+    if (rnaseqFileInputRef.current) {
+      rnaseqFileInputRef.current.value = '';
+    }
+  };
+
   return (
   <>
-    <section className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden line-b">
+    <section
+      className={`relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden line-b transition-all ${
+        isDraggingFile ? 'bg-purple-50/50' : ''
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay for RNA-seq files */}
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-purple-100/80 backdrop-blur-sm pointer-events-none">
+          <div className="flex flex-col items-center gap-4 p-8 rounded-3xl bg-white/90 shadow-2xl border-2 border-dashed border-purple-400">
+            <div className="p-4 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600">
+              <FileSpreadsheet className="w-12 h-12 text-white" />
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-gray-800">
+                {language === 'ko' ? 'RNA-seq 데이터 드롭' : 'Drop RNA-seq Data'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                {language === 'ko' ? 'CSV/TSV count matrix 파일' : 'CSV/TSV count matrix file'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Spline 3D DNA Background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <iframe
@@ -401,12 +502,19 @@ export const Hero: React.FC<HeroProps> = ({
               autoFocus
             />
 
-            {/* Hidden file input */}
+            {/* Hidden file inputs */}
             <input
               ref={fileInputRef}
               type="file"
               accept=".pdf"
               onChange={handleFileUpload}
+              className="hidden"
+            />
+            <input
+              ref={rnaseqFileInputRef}
+              type="file"
+              accept=".csv,.tsv,.txt"
+              onChange={handleRNAseqFileSelect}
               className="hidden"
             />
 
@@ -428,7 +536,7 @@ export const Hero: React.FC<HeroProps> = ({
                   className="flex items-center gap-1.5 px-3 py-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100/50 rounded-full transition-all text-sm font-medium"
                   title={t.uploadRnaseq}
                   disabled={isLoading}
-                  onClick={() => setShowRNAseqModal(true)}
+                  onClick={() => rnaseqFileInputRef.current?.click()}
                 >
                   <Dna className="w-4 h-4" />
                   <span className="hidden sm:inline">{t.uploadRnaseqShort}</span>
@@ -507,11 +615,16 @@ export const Hero: React.FC<HeroProps> = ({
     {/* RNA-seq Upload Modal */}
     <RNAseqUploadModal
       isOpen={showRNAseqModal}
-      onClose={() => setShowRNAseqModal(false)}
+      onClose={() => {
+        setShowRNAseqModal(false);
+        setRnaseqFile(null);
+      }}
       onAnalysisStart={(jobId) => {
         setRnaseqJobId(jobId);
         setShowRNAseqModal(false);
+        setRnaseqFile(null);
       }}
+      initialFile={rnaseqFile}
     />
 
     {/* Pipeline Progress Modal */}

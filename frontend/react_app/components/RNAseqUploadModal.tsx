@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Upload, FileSpreadsheet, Dna, ArrowRight, Loader2, AlertCircle, CheckCircle2, Info, Users, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -23,12 +23,14 @@ interface RNAseqUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAnalysisStart: (jobId: string) => void;
+  initialFile?: File | null;
 }
 
 export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
   isOpen,
   onClose,
-  onAnalysisStart
+  onAnalysisStart,
+  initialFile
 }) => {
   const { language } = useLanguage();
   const [countMatrixFile, setCountMatrixFile] = useState<File | null>(null);
@@ -51,6 +53,29 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
   const countInputRef = useRef<HTMLInputElement>(null);
   const metadataInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-load initial file when provided
+  useEffect(() => {
+    if (initialFile && isOpen) {
+      setCountMatrixFile(initialFile);
+      if (useAutoMetadata) {
+        previewSamples(initialFile);
+      }
+    }
+  }, [initialFile, isOpen]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setCountMatrixFile(null);
+      setMetadataFile(null);
+      setSamples([]);
+      setGeneCount(0);
+      setError(null);
+      setCancerType('unknown');
+      setStudyName('');
+    }
+  }, [isOpen]);
+
   // Preview samples from count matrix
   const previewSamples = async (file: File) => {
     // Check file size (max 50MB)
@@ -70,9 +95,9 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
       const formData = new FormData();
       formData.append('count_matrix', file);
 
-      // Use AbortController for timeout (60 seconds for large files)
+      // Use AbortController for timeout (180 seconds for large files)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
 
       const response = await fetch('http://localhost:8000/api/rnaseq/preview-samples', {
         method: 'POST',
@@ -99,6 +124,11 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
           setError(language === 'ko'
             ? '파일 처리 시간이 초과되었습니다. 더 작은 파일을 시도해주세요.'
             : 'File processing timed out. Please try a smaller file.'
+          );
+        } else if (err.message === 'Failed to fetch') {
+          setError(language === 'ko'
+            ? '서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요. (http://localhost:8000)'
+            : 'Cannot connect to server. Please check if backend is running. (http://localhost:8000)'
           );
         } else {
           setError(err.message);
