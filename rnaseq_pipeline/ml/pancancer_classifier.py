@@ -56,6 +56,81 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 혼동 가능 암종 쌍 및 조직 특이 마커 정의
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# 생물학적으로 유사하여 혼동되기 쉬운 암종 쌍
+CONFUSABLE_CANCER_PAIRS = {
+    # 편평상피암(SCC) 계열 - 같은 조직학적 기원
+    frozenset({"HNSC", "LUSC"}): "squamous_cell",      # 두경부 vs 폐편평
+    frozenset({"HNSC", "SKCM"}): "skin_mucosal",       # 두경부 vs 흑색종 (점막 흑색종)
+    frozenset({"LUSC", "BLCA"}): "squamous_cell",      # 폐편평 vs 방광 (일부 SCC)
+    frozenset({"SKCM", "HNSC"}): "skin_mucosal",       # 흑색종 vs 두경부
+    # 선암(Adenocarcinoma) 계열
+    frozenset({"LUAD", "PAAD"}): "adenocarcinoma",     # 폐선암 vs 췌장암
+    frozenset({"COAD", "STAD"}): "gi_adenocarcinoma",  # 대장 vs 위
+    # 부인과 암종
+    frozenset({"OV", "UCEC"}): "gynecologic",          # 난소 vs 자궁
+}
+
+# 조직 특이적 마커 유전자 (ENSEMBL ID → Symbol 매핑 포함)
+TISSUE_SPECIFIC_MARKERS = {
+    # 폐 특이 마커
+    "LUAD": {
+        "markers": ["NKX2-1", "NAPSA", "SFTPC", "SFTPB"],  # TTF-1, Napsin A, Surfactant
+        "description": "폐선암 특이 전사인자 및 계면활성제",
+    },
+    "LUSC": {
+        "markers": ["TP63", "SOX2", "KRT5", "KRT14"],  # p63, SOX2, 각질
+        "description": "폐편평상피암 각질화 마커",
+    },
+    # 두경부 특이 마커
+    "HNSC": {
+        "markers": ["TP63", "SOX2", "KRT5", "CDKN2A", "HPV16"],  # HPV 관련
+        "description": "두경부 편평상피암 마커",
+    },
+    # 흑색종 특이 마커
+    "SKCM": {
+        "markers": ["MLANA", "MITF", "TYR", "S100B", "PMEL"],  # Melan-A, MITF
+        "description": "멜라닌 생성 경로 마커",
+    },
+    # 췌장 특이 마커
+    "PAAD": {
+        "markers": ["PDX1", "KRAS", "SMAD4", "CDKN2A", "MUC1"],
+        "description": "췌장 분화 및 드라이버 마커",
+    },
+    # 대장 특이 마커
+    "COAD": {
+        "markers": ["CDX2", "MUC2", "SATB2", "CK20"],
+        "description": "대장 분화 마커",
+    },
+    # 위 특이 마커
+    "STAD": {
+        "markers": ["MUC5AC", "MUC6", "CDH1", "CLDN18"],
+        "description": "위 뮤신 및 접착 분자",
+    },
+    # 난소 특이 마커
+    "OV": {
+        "markers": ["PAX8", "WT1", "CA125", "HE4"],
+        "description": "난소암 전사인자 및 마커",
+    },
+    # 자궁 특이 마커
+    "UCEC": {
+        "markers": ["PAX8", "ER", "PR", "PTEN", "MSH6"],
+        "description": "자궁내막 호르몬 수용체",
+    },
+    # 방광 특이 마커
+    "BLCA": {
+        "markers": ["GATA3", "UPKB", "KRT20", "FGFR3"],
+        "description": "요로상피 마커",
+    },
+}
+
+# 신뢰도 갭 임계값 (Top1 - Top2 < 이 값이면 혼동 가능)
+CONFIDENCE_GAP_THRESHOLD = 0.15  # 15% 미만 차이면 불확실
+
+
 @dataclass
 class ClassificationResult:
     """분류 결과"""
@@ -68,6 +143,10 @@ class ClassificationResult:
     top_k_predictions: List[Dict[str, Any]]
     ensemble_agreement: float  # 앙상블 모델 간 일치도
     warnings: List[str]
+    # 2차 검증 결과 (v2 추가)
+    secondary_validation: Optional[Dict[str, Any]] = None
+    confidence_gap: float = 0.0  # Top1 - Top2 신뢰도 차이
+    is_confusable_pair: bool = False  # 혼동 가능 암종 쌍 여부
 
     def to_dict(self) -> Dict:
         return {
@@ -80,6 +159,9 @@ class ClassificationResult:
             'top_k_predictions': self.top_k_predictions,
             'ensemble_agreement': round(self.ensemble_agreement, 4),
             'warnings': self.warnings,
+            'secondary_validation': self.secondary_validation,
+            'confidence_gap': round(self.confidence_gap, 4),
+            'is_confusable_pair': self.is_confusable_pair,
         }
 
 
@@ -378,18 +460,44 @@ class PanCancerPreprocessor:
             logger.info(f"Found {transformed.index.duplicated().sum()} duplicate gene indices, averaging...")
             transformed = transformed.groupby(transformed.index).mean()
 
+        # ENSEMBL ID 버전 번호 제거하여 매칭 (ENSG00000186081.12 -> ENSG00000186081)
+        # 입력 데이터의 버전 제거
+        input_gene_map = {}  # base_id -> full_id
+        for gene_id in transformed.index:
+            if isinstance(gene_id, str) and gene_id.startswith('ENSG'):
+                base_id = gene_id.split('.')[0]
+                input_gene_map[base_id] = gene_id
+
+        # 모델 selected_genes의 버전 제거 매핑
+        model_gene_map = {}  # base_id -> versioned_id
+        for gene_id in self.selected_genes:
+            if isinstance(gene_id, str) and gene_id.startswith('ENSG'):
+                base_id = gene_id.split('.')[0]
+                model_gene_map[base_id] = gene_id
+
         # 선택된 유전자 추출 (없는 건 0으로)
         X = pd.DataFrame(0.0, index=counts.columns, columns=self.selected_genes)
         matched_genes = 0
         for gene in self.selected_genes:
+            # 1. 정확히 일치하는 경우
             if gene in transformed.index:
                 gene_values = transformed.loc[gene]
                 if isinstance(gene_values, pd.Series):
                     X[gene] = gene_values.values
                 else:
-                    # 여전히 중복이 있으면 첫 번째 사용
                     X[gene] = gene_values.iloc[0].values
                 matched_genes += 1
+            # 2. 버전 번호 제거 후 매칭 시도
+            elif isinstance(gene, str) and gene.startswith('ENSG'):
+                base_id = gene.split('.')[0]
+                if base_id in input_gene_map:
+                    input_gene = input_gene_map[base_id]
+                    gene_values = transformed.loc[input_gene]
+                    if isinstance(gene_values, pd.Series):
+                        X[gene] = gene_values.values
+                    else:
+                        X[gene] = gene_values.iloc[0].values
+                    matched_genes += 1
 
         logger.info(f"Feature matching: {matched_genes}/{len(self.selected_genes)} genes "
                    f"({matched_genes/len(self.selected_genes)*100:.1f}%)")
@@ -794,14 +902,16 @@ class PanCancerClassifier:
 
     def predict(self, counts: pd.DataFrame,
                 sample_ids: Optional[List[str]] = None,
-                top_k: int = 5) -> List[ClassificationResult]:
+                top_k: int = 5,
+                use_secondary_validation: bool = True) -> List[ClassificationResult]:
         """
-        암종 예측
+        암종 예측 (v2: 2차 검증 포함)
 
         Args:
             counts: Gene x Sample count matrix
             sample_ids: 샘플 ID 목록
             top_k: Top-k 예측 결과 포함
+            use_secondary_validation: 혼동 가능 암종에 대한 2차 검증 수행
 
         Returns:
             분류 결과 리스트
@@ -842,7 +952,47 @@ class PanCancerClassifier:
             best_idx = top_indices[0]
             best_cancer = self.ensemble.class_names[best_idx]
             best_proba = proba[best_idx]
-            cancer_info = self.cancer_info.get(best_cancer, {})
+            cancer_info_dict = self.cancer_info.get(best_cancer, {})
+
+            # Top2 확률 (신뢰도 갭 계산용)
+            second_best_proba = proba[top_indices[1]] if len(top_indices) > 1 else 0.0
+            confidence_gap = best_proba - second_best_proba
+            second_best_cancer = self.ensemble.class_names[top_indices[1]] if len(top_indices) > 1 else None
+
+            # 혼동 가능 암종 쌍 체크
+            is_confusable = False
+            confusable_type = None
+            if second_best_cancer:
+                pair = frozenset({best_cancer, second_best_cancer})
+                if pair in CONFUSABLE_CANCER_PAIRS:
+                    is_confusable = True
+                    confusable_type = CONFUSABLE_CANCER_PAIRS[pair]
+
+            # 2차 검증 수행 조건:
+            # 1. 신뢰도 갭이 작음 (15% 미만) 또는
+            # 2. 혼동 가능 암종 쌍이며 신뢰도가 낮음 (70% 미만)
+            secondary_validation = None
+            final_cancer = best_cancer
+
+            needs_secondary = (
+                use_secondary_validation and
+                (confidence_gap < CONFIDENCE_GAP_THRESHOLD or
+                 (is_confusable and best_proba < 0.70))
+            )
+
+            if needs_secondary and second_best_cancer:
+                secondary_validation = self._perform_secondary_validation(
+                    counts.iloc[:, i] if isinstance(counts.iloc[:, i], pd.Series) else counts[sample_id],
+                    best_cancer,
+                    second_best_cancer,
+                    best_proba,
+                    second_best_proba
+                )
+
+                # 2차 검증 결과로 예측 변경 여부 결정
+                if secondary_validation and secondary_validation.get('corrected_prediction'):
+                    final_cancer = secondary_validation['corrected_prediction']
+                    cancer_info_dict = self.cancer_info.get(final_cancer, {})
 
             # 신뢰도 레벨 및 Unknown 판정
             confidence_level, is_unknown = self.ensemble.get_confidence_level(
@@ -850,26 +1000,133 @@ class PanCancerClassifier:
             )
 
             # 경고 메시지
-            warnings = self._generate_warnings(best_proba, agreement, confidence_level, is_unknown)
+            warnings = self._generate_warnings(
+                best_proba, agreement, confidence_level, is_unknown,
+                confidence_gap, is_confusable, secondary_validation
+            )
 
             result = ClassificationResult(
                 sample_id=sample_id,
-                predicted_cancer=best_cancer if not is_unknown else "UNKNOWN",
-                predicted_cancer_korean=cancer_info.get('korean', best_cancer) if not is_unknown else "알 수 없음",
+                predicted_cancer=final_cancer if not is_unknown else "UNKNOWN",
+                predicted_cancer_korean=cancer_info_dict.get('korean', final_cancer) if not is_unknown else "알 수 없음",
                 confidence=best_proba,
                 confidence_level=confidence_level,
                 is_unknown=is_unknown,
                 top_k_predictions=top_k_preds,
                 ensemble_agreement=agreement,
                 warnings=warnings,
+                secondary_validation=secondary_validation,
+                confidence_gap=confidence_gap,
+                is_confusable_pair=is_confusable,
             )
             results.append(result)
 
         return results
 
+    def _perform_secondary_validation(self,
+                                      sample_expr: pd.Series,
+                                      cancer1: str,
+                                      cancer2: str,
+                                      prob1: float,
+                                      prob2: float) -> Dict[str, Any]:
+        """
+        2차 검증: 조직 특이 마커 발현으로 혼동 암종 구분
+
+        Args:
+            sample_expr: 샘플 발현 데이터 (gene_id -> expression)
+            cancer1: Top-1 예측 암종
+            cancer2: Top-2 예측 암종
+            prob1: Top-1 확률
+            prob2: Top-2 확률
+
+        Returns:
+            2차 검증 결과
+        """
+        validation = {
+            'cancer1': cancer1,
+            'cancer2': cancer2,
+            'prob1': prob1,
+            'prob2': prob2,
+            'marker_scores': {},
+            'corrected_prediction': None,
+            'correction_reason': None,
+        }
+
+        # 각 암종의 마커 점수 계산
+        for cancer in [cancer1, cancer2]:
+            if cancer in TISSUE_SPECIFIC_MARKERS:
+                markers = TISSUE_SPECIFIC_MARKERS[cancer]['markers']
+                score = self._calculate_marker_score(sample_expr, markers)
+                validation['marker_scores'][cancer] = score
+
+        # 마커 점수 비교하여 보정 여부 결정
+        if len(validation['marker_scores']) == 2:
+            score1 = validation['marker_scores'].get(cancer1, 0)
+            score2 = validation['marker_scores'].get(cancer2, 0)
+
+            # 조건:
+            # - prob 차이가 20% 미만이고
+            # - 마커 점수 차이가 2배 이상이면 보정
+            prob_diff = prob1 - prob2
+            if prob_diff < 0.20 and score2 > score1 * 2 and score2 > 0.3:
+                validation['corrected_prediction'] = cancer2
+                validation['correction_reason'] = (
+                    f"마커 점수 기반 보정: {cancer1}({score1:.2f}) → {cancer2}({score2:.2f})"
+                )
+                logger.info(f"Secondary validation: {cancer1} → {cancer2} "
+                           f"(marker scores: {score1:.2f} vs {score2:.2f})")
+
+        return validation
+
+    def _calculate_marker_score(self, sample_expr: pd.Series, markers: List[str]) -> float:
+        """
+        마커 유전자 발현 점수 계산
+
+        높은 발현 = 높은 점수 (정규화된 값 기준)
+        """
+        if sample_expr is None or len(sample_expr) == 0:
+            return 0.0
+
+        # Gene symbol → 발현값 매핑 (symbol이 index에 있는 경우)
+        # 현재 데이터는 ENSEMBL ID 기준이므로, symbol-to-ensembl 매핑 필요
+        found_expressions = []
+
+        for marker in markers:
+            # Symbol로 직접 찾기
+            if marker in sample_expr.index:
+                found_expressions.append(sample_expr[marker])
+            # ENSEMBL 매핑이 있으면 사용
+            elif hasattr(self.preprocessor, 'symbol_to_ensembl') and self.preprocessor.symbol_to_ensembl:
+                ensembl = self.preprocessor.symbol_to_ensembl.get(marker)
+                if ensembl and ensembl in sample_expr.index:
+                    found_expressions.append(sample_expr[ensembl])
+
+        if not found_expressions:
+            return 0.0
+
+        # 평균 발현량을 0-1 점수로 정규화
+        avg_expr = np.mean(found_expressions)
+        # Log2 CPM 기준 10 이상이면 높은 발현
+        score = min(1.0, avg_expr / 10.0) if avg_expr > 0 else 0.0
+
+        return score
+
     def _generate_warnings(self, confidence: float, agreement: float,
-                          confidence_level: str, is_unknown: bool) -> List[str]:
-        """경고 메시지 생성"""
+                          confidence_level: str, is_unknown: bool,
+                          confidence_gap: float = 1.0,
+                          is_confusable: bool = False,
+                          secondary_validation: Optional[Dict[str, Any]] = None) -> List[str]:
+        """경고 메시지 생성
+
+        Args:
+            confidence: 예측 신뢰도
+            agreement: 앙상블 일치도
+            confidence_level: 신뢰 수준 (high/medium/low)
+            is_unknown: Unknown 예측 여부
+            confidence_gap: 1위-2위 확률 차이
+            is_confusable: 혼동 가능 암종 쌍 여부
+            secondary_validation: 2차 검증 결과
+        """
         warnings = []
 
         if is_unknown:
@@ -880,6 +1137,22 @@ class PanCancerClassifier:
 
         if agreement < 0.7:
             warnings.append("⚠️ 앙상블 모델 간 일치도가 낮습니다. 여러 암종 가능성을 검토하세요.")
+
+        # 혼동 가능 암종 쌍에 대한 경고
+        if is_confusable and confidence_gap < CONFIDENCE_GAP_THRESHOLD:
+            warnings.append(f"⚠️ 1-2위 예측 확률 차이가 작습니다 ({confidence_gap:.1%}). "
+                          "유사한 조직학적 특성의 암종 간 혼동 가능성이 있습니다.")
+
+        # 2차 검증 결과에 따른 경고
+        if secondary_validation:
+            if secondary_validation.get('override_applied'):
+                original = secondary_validation.get('original_prediction')
+                final = secondary_validation.get('final_prediction')
+                warnings.append(f"ℹ️ 조직 특이적 마커 분석으로 예측이 {original}에서 {final}로 "
+                              "보정되었습니다. 병리 조직검사로 확인이 권장됩니다.")
+            elif secondary_validation.get('validation_status') == 'ambiguous':
+                warnings.append("⚠️ 마커 기반 2차 검증에서 명확한 결론을 얻지 못했습니다. "
+                              "추가 면역조직화학 검사가 권장됩니다.")
 
         warnings.append("⚠️ 이 예측은 참고용이며, 진단 목적으로 사용할 수 없습니다.")
 
