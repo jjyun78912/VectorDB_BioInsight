@@ -1,8 +1,8 @@
 """
 RNA-seq Pipeline Orchestrator
 
-Coordinates the execution of all 6 agents in sequence.
-Handles data flow between agents and provides checkpointing.
+Coordinates the execution of RNA-seq analysis pipelines.
+Automatically detects data type (bulk vs single-cell) and routes to appropriate pipeline.
 
 Usage:
     from rnaseq_pipeline import RNAseqPipeline
@@ -13,19 +13,28 @@ Usage:
         config={"cancer_type": "lung_cancer"}
     )
 
-    # Run full pipeline
+    # Run full pipeline (auto-detect bulk vs single-cell)
     results = pipeline.run()
 
-    # Or run specific agents
+    # Force specific pipeline type
+    pipeline = RNAseqPipeline(..., pipeline_type="bulk")  # or "singlecell"
+
+    # Or run specific agents (bulk only)
     pipeline.run_agent("agent1_deg")
     pipeline.run_from("agent3_pathway")  # Resume from agent 3
+
+Bulk RNA-seq (2-Step, 6 Agents):
+    DEG → Network → Pathway → Validation → Visualization → Report
+
+Single-cell RNA-seq (1-Step):
+    SingleCellAgent (QC → Clustering → Annotation → DEG → Report)
 """
 
 import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 import logging
 
 from .agents import (
@@ -34,14 +43,17 @@ from .agents import (
     PathwayAgent,
     ValidationAgent,
     VisualizationAgent,
-    ReportAgent
+    ReportAgent,
+    SingleCellAgent
 )
+from .utils.data_type_detector import DataTypeDetector, detect_data_type
 
 
 class RNAseqPipeline:
     """Orchestrator for the RNA-seq analysis pipeline."""
 
-    AGENT_ORDER = [
+    # Bulk RNA-seq pipeline (6 agents)
+    BULK_AGENT_ORDER = [
         "agent1_deg",
         "agent2_network",
         "agent3_pathway",
@@ -50,7 +62,7 @@ class RNAseqPipeline:
         "agent6_report"
     ]
 
-    AGENT_CLASSES = {
+    BULK_AGENT_CLASSES = {
         "agent1_deg": DEGAgent,
         "agent2_network": NetworkAgent,
         "agent3_pathway": PathwayAgent,
@@ -58,6 +70,14 @@ class RNAseqPipeline:
         "agent5_visualization": VisualizationAgent,
         "agent6_report": ReportAgent
     }
+
+    # Single-cell pipeline (1 agent)
+    SINGLECELL_AGENT_ORDER = ["singlecell"]
+    SINGLECELL_AGENT_CLASSES = {"singlecell": SingleCellAgent}
+
+    # Legacy compatibility
+    AGENT_ORDER = BULK_AGENT_ORDER
+    AGENT_CLASSES = BULK_AGENT_CLASSES
 
     # Define which outputs each agent needs from previous agents
     AGENT_DEPENDENCIES = {
@@ -70,26 +90,33 @@ class RNAseqPipeline:
             "hub_genes.csv", "network_edges.csv", "pathway_summary.csv",
             "integrated_gene_table.csv"
         ],
-        "agent6_report": ["*"]  # All outputs
+        "agent6_report": ["*"],  # All outputs
+        "singlecell": []  # Single-cell is self-contained
     }
 
     def __init__(
         self,
         input_dir: Path,
         output_dir: Path,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        pipeline_type: Optional[Literal["bulk", "singlecell", "auto"]] = "auto"
     ):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.config = config or {}
+        self.pipeline_type_override = pipeline_type
 
         # Create output directory with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_dir = self.output_dir / f"run_{timestamp}"
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Setup logging
+        # Setup logging first (needed by _determine_pipeline_type)
         self.logger = self._setup_logging()
+
+        # Detect data type (requires logger)
+        self.detection_result = None
+        self.pipeline_type = self._determine_pipeline_type()
 
         # Track execution state
         self.execution_state = {
@@ -126,8 +153,46 @@ class RNAseqPipeline:
 
         return logger
 
+    def _determine_pipeline_type(self) -> str:
+        """Determine pipeline type based on data or override."""
+        # If explicitly specified
+        if self.pipeline_type_override and self.pipeline_type_override != "auto":
+            self.logger.info(f"Pipeline type override: {self.pipeline_type_override}")
+            return self.pipeline_type_override
+
+        # Auto-detect
+        try:
+            self.detection_result = detect_data_type(self.input_dir)
+            detected_type = self.detection_result.get("data_type", "bulk")
+
+            self.logger.info(f"Auto-detected data type: {detected_type}")
+            self.logger.info(f"Detection confidence: {self.detection_result.get('confidence', 0):.2f}")
+            self.logger.info(f"Samples/Cells: {self.detection_result.get('n_samples', 0)}")
+
+            return detected_type
+        except Exception as e:
+            self.logger.warning(f"Detection failed, defaulting to bulk: {e}")
+            return "bulk"
+
+    def get_agent_order(self) -> List[str]:
+        """Get agent order based on pipeline type."""
+        if self.pipeline_type == "singlecell":
+            return self.SINGLECELL_AGENT_ORDER
+        return self.BULK_AGENT_ORDER
+
+    def get_agent_classes(self) -> Dict:
+        """Get agent classes based on pipeline type."""
+        if self.pipeline_type == "singlecell":
+            return self.SINGLECELL_AGENT_CLASSES
+        return self.BULK_AGENT_CLASSES
+
     def _get_agent_input_dir(self, agent_name: str) -> Path:
         """Determine input directory for an agent."""
+        # Single-cell agent uses input directly
+        if agent_name == "singlecell":
+            return self.input_dir
+
+        # Bulk: first agent uses input
         if agent_name == "agent1_deg":
             return self.input_dir
 
@@ -175,11 +240,13 @@ class RNAseqPipeline:
 
     def run_agent(self, agent_name: str, config_override: Optional[Dict] = None) -> Dict[str, Any]:
         """Run a single agent."""
-        if agent_name not in self.AGENT_CLASSES:
+        agent_classes = self.get_agent_classes()
+
+        if agent_name not in agent_classes:
             raise ValueError(f"Unknown agent: {agent_name}")
 
         self.logger.info(f"{'='*60}")
-        self.logger.info(f"Running {agent_name}")
+        self.logger.info(f"Running {agent_name} (pipeline: {self.pipeline_type})")
         self.logger.info(f"{'='*60}")
 
         # Merge configs
@@ -190,7 +257,7 @@ class RNAseqPipeline:
         output_dir = self.run_dir / agent_name
 
         # Instantiate and run
-        AgentClass = self.AGENT_CLASSES[agent_name]
+        AgentClass = agent_classes[agent_name]
         agent = AgentClass(
             input_dir=input_dir,
             output_dir=output_dir,
@@ -215,18 +282,27 @@ class RNAseqPipeline:
     def run(self, stop_after: Optional[str] = None) -> Dict[str, Any]:
         """Run the full pipeline or until a specific agent."""
         self.execution_state["start_time"] = datetime.now().isoformat()
+        self.execution_state["pipeline_type"] = self.pipeline_type
+        self.execution_state["detection_result"] = self.detection_result
+
         self.logger.info("Starting RNA-seq Pipeline")
+        self.logger.info(f"Pipeline type: {self.pipeline_type}")
         self.logger.info(f"Run directory: {self.run_dir}")
 
         # Copy initial inputs
         self._copy_initial_inputs()
 
+        # Get appropriate agent order
+        agent_order = self.get_agent_order()
+
         # Determine which agents to run
         if stop_after:
-            stop_idx = self.AGENT_ORDER.index(stop_after) + 1
-            agents_to_run = self.AGENT_ORDER[:stop_idx]
+            stop_idx = agent_order.index(stop_after) + 1
+            agents_to_run = agent_order[:stop_idx]
         else:
-            agents_to_run = self.AGENT_ORDER
+            agents_to_run = agent_order
+
+        self.logger.info(f"Agents to run: {agents_to_run}")
 
         # Run agents
         for agent_name in agents_to_run:
@@ -250,12 +326,14 @@ class RNAseqPipeline:
         return self.execution_state
 
     def run_from(self, agent_name: str) -> Dict[str, Any]:
-        """Resume pipeline from a specific agent."""
-        if agent_name not in self.AGENT_ORDER:
+        """Resume pipeline from a specific agent (bulk only)."""
+        agent_order = self.get_agent_order()
+
+        if agent_name not in agent_order:
             raise ValueError(f"Unknown agent: {agent_name}")
 
-        start_idx = self.AGENT_ORDER.index(agent_name)
-        agents_to_run = self.AGENT_ORDER[start_idx:]
+        start_idx = agent_order.index(agent_name)
+        agents_to_run = agent_order[start_idx:]
 
         self.logger.info(f"Resuming from {agent_name}")
 
@@ -268,6 +346,11 @@ class RNAseqPipeline:
 
         self._save_execution_state()
         return self.execution_state
+
+    def run_singlecell(self) -> Dict[str, Any]:
+        """Run single-cell pipeline explicitly."""
+        self.pipeline_type = "singlecell"
+        return self.run()
 
     def _save_execution_state(self) -> None:
         """Save execution state to JSON."""

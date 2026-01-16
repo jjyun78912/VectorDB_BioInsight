@@ -132,8 +132,8 @@ _analysis_jobs: dict[str, AnalysisStatus] = {}
 _analysis_results: dict[str, AnalysisResult] = {}
 _job_queues: dict[str, Queue] = {}  # For SSE streaming
 
-# Agent info for frontend display
-AGENT_INFO = {
+# Agent info for frontend display - Bulk RNA-seq (6 agents)
+BULK_AGENT_INFO = {
     "agent1_deg": {
         "name": "DEG Analysis",
         "description": "DESeq2로 차등 발현 유전자 분석",
@@ -178,6 +178,67 @@ AGENT_INFO = {
     }
 }
 
+# Agent info for Single-cell RNA-seq (1 unified agent)
+SINGLECELL_AGENT_INFO = {
+    "sc_qc": {
+        "name": "QC & Filtering",
+        "description": "품질 관리 및 세포 필터링",
+        "icon": "filter",
+        "order": 1
+    },
+    "sc_normalize": {
+        "name": "Normalization",
+        "description": "정규화 및 스케일링",
+        "icon": "sliders",
+        "order": 2
+    },
+    "sc_hvg": {
+        "name": "HVG Selection",
+        "description": "고변이 유전자 선별",
+        "icon": "trending-up",
+        "order": 3
+    },
+    "sc_dimred": {
+        "name": "Dimensionality Reduction",
+        "description": "PCA, UMAP 차원 축소",
+        "icon": "move",
+        "order": 4
+    },
+    "sc_clustering": {
+        "name": "Clustering",
+        "description": "Leiden 클러스터링",
+        "icon": "grid",
+        "order": 5
+    },
+    "sc_annotation": {
+        "name": "Cell Type Annotation",
+        "description": "세포 유형 주석",
+        "icon": "tag",
+        "order": 6
+    },
+    "sc_deg": {
+        "name": "Marker Genes",
+        "description": "클러스터별 마커 유전자 탐지",
+        "icon": "activity",
+        "order": 7
+    },
+    "sc_visualization": {
+        "name": "Visualization",
+        "description": "UMAP, Violin, Dot plot 생성",
+        "icon": "bar-chart-2",
+        "order": 8
+    },
+    "sc_report": {
+        "name": "Report Generation",
+        "description": "Single-cell 분석 리포트 생성",
+        "icon": "file-text",
+        "order": 9
+    }
+}
+
+# Default to bulk agent info for backward compatibility
+AGENT_INFO = BULK_AGENT_INFO
+
 
 # ═══════════════════════════════════════════════════════════════
 # API Endpoints
@@ -204,12 +265,22 @@ async def get_rnaseq_info():
 
 
 @router.get("/agents")
-async def get_agents_info():
-    """Get detailed information about pipeline agents."""
+async def get_agents_info(data_type: str = "bulk"):
+    """Get detailed information about pipeline agents.
+
+    Args:
+        data_type: "bulk" for bulk RNA-seq, "singlecell" for single-cell RNA-seq
+    """
+    if data_type == "singlecell":
+        agent_info = SINGLECELL_AGENT_INFO
+    else:
+        agent_info = BULK_AGENT_INFO
+
     return {
-        "agents": AGENT_INFO,
-        "total": len(AGENT_INFO),
-        "order": list(AGENT_INFO.keys())
+        "data_type": data_type,
+        "agents": agent_info,
+        "total": len(agent_info),
+        "order": list(agent_info.keys())
     }
 
 
@@ -223,6 +294,11 @@ class UploadResponse(BaseModel):
     message: str
     files_received: List[str]
     input_dir: str
+    data_type: Optional[str] = None  # "bulk" | "singlecell" | "unknown"
+    data_type_confidence: Optional[float] = None
+    n_genes: Optional[int] = None
+    n_samples: Optional[int] = None
+    recommended_pipeline: Optional[str] = None
 
 
 class SampleInfo(BaseModel):
@@ -239,6 +315,45 @@ class CountMatrixPreviewResponse(BaseModel):
     detected_conditions: Dict[str, List[str]]
     suggested_treatment: str
     suggested_control: str
+
+
+class DataTypeDetectionResult(BaseModel):
+    """Result of data type detection (bulk vs single-cell)."""
+    data_type: str  # "bulk" | "singlecell" | "unknown"
+    confidence: float  # 0-1
+    n_genes: int
+    n_samples: int
+    recommended_pipeline: str
+    evidence: Dict[str, Any] = {}
+
+
+@router.get("/detect-type/{job_id}", response_model=DataTypeDetectionResult)
+async def detect_data_type_endpoint(job_id: str):
+    """
+    Detect data type (bulk vs single-cell) for uploaded files.
+
+    Returns detection result with confidence score and recommended pipeline.
+    """
+    job_dir = UPLOAD_DIR / job_id
+
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    try:
+        from rnaseq_pipeline.utils.data_type_detector import detect_data_type
+        result = detect_data_type(job_dir)
+
+        return DataTypeDetectionResult(
+            data_type=result.get("data_type", "unknown"),
+            confidence=result.get("confidence", 0.0),
+            n_genes=result.get("n_genes", 0),
+            n_samples=result.get("n_samples", 0),
+            recommended_pipeline=result.get("recommended_pipeline", "Unknown"),
+            evidence=result.get("evidence", {})
+        )
+    except Exception as e:
+        logger.error(f"Data type detection failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 
 async def fetch_geo_metadata(gse_id: str) -> dict:
@@ -621,11 +736,39 @@ async def upload_rnaseq_files(
 
         logger.info(f"Files uploaded for job {job_id}: {count_matrix.filename}, {metadata.filename}")
 
+        # Detect data type (bulk vs single-cell)
+        data_type_info = {}
+        try:
+            from rnaseq_pipeline.utils.data_type_detector import detect_data_type
+            detection_result = detect_data_type(job_dir)
+            data_type_info = {
+                "data_type": detection_result.get("data_type", "unknown"),
+                "data_type_confidence": detection_result.get("confidence", 0.0),
+                "n_genes": detection_result.get("n_genes", 0),
+                "n_samples": detection_result.get("n_samples", 0),
+                "recommended_pipeline": detection_result.get("recommended_pipeline", "Unknown")
+            }
+            # Save detection result to config
+            config["data_type_detection"] = detection_result
+            with open(config_path, "w") as f:
+                json.dump(config, f, indent=2, default=str)
+            logger.info(f"Data type detected: {data_type_info['data_type']} (confidence: {data_type_info['data_type_confidence']:.2f})")
+        except Exception as e:
+            logger.warning(f"Data type detection failed: {e}")
+            data_type_info = {
+                "data_type": "unknown",
+                "data_type_confidence": 0.0,
+                "n_genes": 0,
+                "n_samples": 0,
+                "recommended_pipeline": "Unknown"
+            }
+
         return UploadResponse(
             job_id=job_id,
             message="Files uploaded successfully",
             files_received=[count_matrix.filename, metadata.filename],
-            input_dir=str(job_dir)
+            input_dir=str(job_dir),
+            **data_type_info
         )
 
     except Exception as e:
@@ -641,6 +784,7 @@ class StartAnalysisRequest(BaseModel):
     job_id: str = Field(..., description="Job ID from upload")
     cancer_type: Optional[str] = Field(None, description="Override cancer type")
     study_name: Optional[str] = Field(None, description="Override study name")
+    pipeline_type: Optional[str] = Field(None, description="Force pipeline type: 'bulk', 'singlecell', or 'auto'")
 
 
 @router.post("/start/{job_id}", response_model=AnalysisStatus)
@@ -648,13 +792,21 @@ async def start_analysis_from_upload(
     job_id: str,
     background_tasks: BackgroundTasks,
     cancer_type: Optional[str] = None,
-    study_name: Optional[str] = None
+    study_name: Optional[str] = None,
+    pipeline_type: Optional[str] = None
 ):
     """
     Start RNA-seq analysis for previously uploaded files.
 
     Use the job_id returned from /upload endpoint.
     Progress can be monitored via /stream/{job_id} SSE endpoint.
+
+    Args:
+        job_id: Job ID from upload
+        cancer_type: Override cancer type for analysis
+        study_name: Override study name
+        pipeline_type: Force pipeline type ('bulk', 'singlecell', 'auto')
+                      If not specified, auto-detects based on data characteristics
     """
     job_dir = UPLOAD_DIR / job_id
 
@@ -674,6 +826,8 @@ async def start_analysis_from_upload(
         config["cancer_type"] = cancer_type
     if study_name:
         config["study_name"] = study_name
+    if pipeline_type:
+        config["pipeline_type"] = pipeline_type
 
     # Create job status
     status = AnalysisStatus(
@@ -1415,6 +1569,7 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
     Run the RNA-seq pipeline with real-time SSE streaming.
 
     This runs in a background thread and sends progress updates via SSE.
+    Automatically detects bulk vs single-cell data and routes appropriately.
     """
     try:
         status = _analysis_jobs[job_id]
@@ -1444,102 +1599,141 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
         output_dir = PROJECT_ROOT / "rnaseq_test_results" / f"web_analysis_{job_id}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create pipeline
+        # Determine pipeline type from config or auto-detect
+        pipeline_type = config.get("pipeline_type", "auto")
+
+        # Create pipeline with auto-detection
         pipeline = RNAseqPipeline(
             input_dir=input_dir,
             output_dir=output_dir,
-            config=config
+            config=config,
+            pipeline_type=pipeline_type
         )
 
-        # Run agents one by one with progress updates
-        # ML prediction is virtual - runs within agent6_report
-        agent_progress = {
-            "agent1_deg": (0, 15),
-            "agent2_network": (15, 30),
-            "agent3_pathway": (30, 45),
-            "agent4_validation": (45, 60),
-            "agent5_visualization": (60, 75),
-            "ml_prediction": (75, 88),  # Virtual stage within agent6
-            "agent6_report": (88, 100)
-        }
+        # Send detection result
+        send_sse_message(job_id, {
+            "type": "data_type_detected",
+            "data_type": pipeline.pipeline_type,
+            "detection_result": pipeline.detection_result,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        # Select agent info and progress based on pipeline type
+        if pipeline.pipeline_type == "singlecell":
+            agent_info_dict = SINGLECELL_AGENT_INFO
+            # Single-cell progress mapping (9 virtual stages in 1 agent)
+            agent_progress = {
+                "sc_qc": (0, 10),
+                "sc_normalize": (10, 20),
+                "sc_hvg": (20, 30),
+                "sc_dimred": (30, 40),
+                "sc_clustering": (40, 55),
+                "sc_annotation": (55, 65),
+                "sc_deg": (65, 80),
+                "sc_visualization": (80, 90),
+                "sc_report": (90, 100)
+            }
+        else:
+            agent_info_dict = BULK_AGENT_INFO
+            # Bulk RNA-seq progress (6 agents + ML prediction virtual)
+            agent_progress = {
+                "agent1_deg": (0, 15),
+                "agent2_network": (15, 30),
+                "agent3_pathway": (30, 45),
+                "agent4_validation": (45, 60),
+                "agent5_visualization": (60, 75),
+                "ml_prediction": (75, 88),  # Virtual stage within agent6
+                "agent6_report": (88, 100)
+            }
 
         completed_agents = []
         failed_agents = []
 
-        for agent_name in pipeline.AGENT_ORDER:
-            try:
-                # Send ML prediction virtual stage before agent6_report
-                if agent_name == "agent6_report":
-                    ml_info = AGENT_INFO.get("ml_prediction", {})
-                    ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+        # Get agent order from pipeline
+        agent_order = pipeline.get_agent_order()
 
-                    # ML prediction start
+        # Handle single-cell pipeline differently (1 agent with virtual stages)
+        if pipeline.pipeline_type == "singlecell":
+            _run_singlecell_pipeline_with_streaming(
+                job_id, pipeline, agent_info_dict, agent_progress,
+                completed_agents, failed_agents, status
+            )
+        else:
+            # Bulk RNA-seq pipeline (6 agents)
+            for agent_name in agent_order:
+                try:
+                    # Send ML prediction virtual stage before agent6_report
+                    if agent_name == "agent6_report":
+                        ml_info = agent_info_dict.get("ml_prediction", {})
+                        ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+
+                        # ML prediction start
+                        send_sse_message(job_id, {
+                            "type": "agent_start",
+                            "agent": "ml_prediction",
+                            "name": ml_info.get("name", "ML Prediction"),
+                            "progress": ml_start,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        status.current_step = ml_info.get("name", "ML Prediction")
+                        status.progress = ml_start
+
+                    start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
+                    agent_info = agent_info_dict.get(agent_name, {})
+
+                    # For agent6_report, ML prediction completes when it starts
+                    if agent_name == "agent6_report":
+                        ml_info = agent_info_dict.get("ml_prediction", {})
+                        ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+
+                        # ML prediction complete (runs within agent6_report)
+                        send_sse_message(job_id, {
+                            "type": "agent_complete",
+                            "agent": "ml_prediction",
+                            "name": ml_info.get("name", "ML Prediction"),
+                            "progress": ml_end,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        completed_agents.append("ml_prediction")
+
+                    # Send agent start message
                     send_sse_message(job_id, {
                         "type": "agent_start",
-                        "agent": "ml_prediction",
-                        "name": ml_info.get("name", "ML Prediction"),
-                        "progress": ml_start,
+                        "agent": agent_name,
+                        "name": agent_info.get("name", agent_name),
+                        "progress": start_progress,
                         "timestamp": datetime.now().isoformat()
                     })
-                    status.current_step = ml_info.get("name", "ML Prediction")
-                    status.progress = ml_start
 
-                start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
-                agent_info = AGENT_INFO.get(agent_name, {})
+                    status.current_step = agent_info.get("name", agent_name)
+                    status.progress = start_progress
 
-                # For agent6_report, ML prediction completes when it starts
-                if agent_name == "agent6_report":
-                    ml_info = AGENT_INFO.get("ml_prediction", {})
-                    ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+                    # Run agent
+                    result = pipeline.run_agent(agent_name)
 
-                    # ML prediction complete (runs within agent6_report)
+                    # Send agent complete message
                     send_sse_message(job_id, {
                         "type": "agent_complete",
-                        "agent": "ml_prediction",
-                        "name": ml_info.get("name", "ML Prediction"),
-                        "progress": ml_end,
+                        "agent": agent_name,
+                        "name": agent_info.get("name", agent_name),
+                        "progress": end_progress,
+                        "result_summary": _get_agent_summary(agent_name, result),
                         "timestamp": datetime.now().isoformat()
                     })
-                    completed_agents.append("ml_prediction")
 
-                # Send agent start message
-                send_sse_message(job_id, {
-                    "type": "agent_start",
-                    "agent": agent_name,
-                    "name": agent_info.get("name", agent_name),
-                    "progress": start_progress,
-                    "timestamp": datetime.now().isoformat()
-                })
+                    status.progress = end_progress
+                    completed_agents.append(agent_name)
 
-                status.current_step = agent_info.get("name", agent_name)
-                status.progress = start_progress
-
-                # Run agent
-                result = pipeline.run_agent(agent_name)
-
-                # Send agent complete message
-                send_sse_message(job_id, {
-                    "type": "agent_complete",
-                    "agent": agent_name,
-                    "name": agent_info.get("name", agent_name),
-                    "progress": end_progress,
-                    "result_summary": _get_agent_summary(agent_name, result),
-                    "timestamp": datetime.now().isoformat()
-                })
-
-                status.progress = end_progress
-                completed_agents.append(agent_name)
-
-            except Exception as e:
-                logger.error(f"Agent {agent_name} failed: {e}")
-                send_sse_message(job_id, {
-                    "type": "agent_error",
-                    "agent": agent_name,
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat()
-                })
-                failed_agents.append(agent_name)
-                # Continue with next agent
+                except Exception as e:
+                    logger.error(f"Agent {agent_name} failed: {e}")
+                    send_sse_message(job_id, {
+                        "type": "agent_error",
+                        "agent": agent_name,
+                        "error": str(e),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    failed_agents.append(agent_name)
+                    # Continue with next agent
 
         # Pipeline complete
         if failed_agents:
@@ -1583,6 +1777,83 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
         send_sse_message(job_id, None)
 
 
+def _run_singlecell_pipeline_with_streaming(
+    job_id: str,
+    pipeline,
+    agent_info_dict: dict,
+    agent_progress: dict,
+    completed_agents: list,
+    failed_agents: list,
+    status
+):
+    """
+    Run single-cell pipeline with virtual stage progress updates.
+
+    The SingleCellAgent runs as one unit but we send progress updates
+    for each virtual stage to provide better UI feedback.
+    """
+    import time
+
+    # Virtual stages in order
+    virtual_stages = [
+        "sc_qc", "sc_normalize", "sc_hvg", "sc_dimred",
+        "sc_clustering", "sc_annotation", "sc_deg",
+        "sc_visualization", "sc_report"
+    ]
+
+    try:
+        # Send start messages for first virtual stage
+        first_stage = virtual_stages[0]
+        stage_info = agent_info_dict.get(first_stage, {})
+        start_progress, _ = agent_progress.get(first_stage, (0, 10))
+
+        send_sse_message(job_id, {
+            "type": "agent_start",
+            "agent": first_stage,
+            "name": stage_info.get("name", "QC & Filtering"),
+            "progress": start_progress,
+            "timestamp": datetime.now().isoformat()
+        })
+        status.current_step = stage_info.get("name", "QC & Filtering")
+        status.progress = start_progress
+
+        # Run the single-cell agent (runs all stages internally)
+        result = pipeline.run_agent("singlecell")
+
+        # Mark all virtual stages as complete
+        for stage_name in virtual_stages:
+            stage_info = agent_info_dict.get(stage_name, {})
+            _, end_progress = agent_progress.get(stage_name, (0, 100))
+
+            send_sse_message(job_id, {
+                "type": "agent_complete",
+                "agent": stage_name,
+                "name": stage_info.get("name", stage_name),
+                "progress": end_progress,
+                "timestamp": datetime.now().isoformat()
+            })
+            completed_agents.append(stage_name)
+            status.progress = end_progress
+            time.sleep(0.1)  # Small delay for UI
+
+        # Add final result summary
+        send_sse_message(job_id, {
+            "type": "singlecell_complete",
+            "result_summary": _get_agent_summary("singlecell", result),
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"Single-cell pipeline failed: {e}")
+        send_sse_message(job_id, {
+            "type": "agent_error",
+            "agent": "singlecell",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        })
+        failed_agents.append("singlecell")
+
+
 def _get_agent_summary(agent_name: str, result: dict) -> dict:
     """Extract summary from agent result."""
     summary = {}
@@ -1601,6 +1872,13 @@ def _get_agent_summary(agent_name: str, result: dict) -> dict:
         summary["figures"] = result.get("figures", [])
     elif agent_name == "agent6_report":
         summary["report_generated"] = result.get("report_generated", False)
+    elif agent_name == "singlecell":
+        # Single-cell pipeline summary
+        summary["n_cells"] = result.get("n_cells", 0)
+        summary["n_genes"] = result.get("n_genes", 0)
+        summary["n_clusters"] = result.get("n_clusters", 0)
+        summary["n_celltypes"] = result.get("n_celltypes", 0)
+        summary["n_markers"] = result.get("n_markers", 0)
     return summary
 
 
