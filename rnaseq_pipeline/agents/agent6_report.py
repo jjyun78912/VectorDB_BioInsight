@@ -1044,11 +1044,429 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _generate_study_overview_html(self, data: Dict) -> str:
+        """Generate Study Overview section."""
+        deg_df = data.get('deg_significant_df')
+        interpretation = data.get('interpretation_report', {})
+        cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'Unknown'))
+
+        # Get sample info from config
+        original_files = self.config.get('original_files', {})
+        dataset_id = original_files.get('count_matrix', 'Unknown Dataset')
+
+        # Get counts
+        total_deg = len(deg_df) if deg_df is not None else 0
+        up_count = len(deg_df[deg_df['log2FC'] > 0]) if deg_df is not None and 'log2FC' in deg_df.columns else 0
+        down_count = len(deg_df[deg_df['log2FC'] < 0]) if deg_df is not None and 'log2FC' in deg_df.columns else 0
+
+        contrast = self.config.get('contrast', ['tumor', 'normal'])
+
+        return f'''
+        <section class="study-overview-section" id="study-overview">
+            <h2>1. Study Overview</h2>
+
+            <div class="overview-grid">
+                <div class="overview-table">
+                    <table class="info-table">
+                        <tr><td><strong>Dataset ID</strong></td><td>{dataset_id}</td></tr>
+                        <tr><td><strong>Cancer Type</strong></td><td>{cancer_type}</td></tr>
+                        <tr><td><strong>Comparison</strong></td><td>{contrast[0]} vs {contrast[1]}</td></tr>
+                        <tr><td><strong>Analysis Pipeline</strong></td><td>BioInsight AI v2.0</td></tr>
+                        <tr><td><strong>Analysis Date</strong></td><td>{datetime.now().strftime("%Y-%m-%d")}</td></tr>
+                    </table>
+                </div>
+
+                <div class="deg-summary-box">
+                    <h4>DEG Summary</h4>
+                    <table class="info-table">
+                        <tr><td>Total DEGs</td><td><strong>{total_deg:,}</strong></td></tr>
+                        <tr><td>Upregulated</td><td class="up-text">{up_count:,}</td></tr>
+                        <tr><td>Downregulated</td><td class="down-text">{down_count:,}</td></tr>
+                        <tr><td>Cutoff (|log2FC|)</td><td>> 1.0</td></tr>
+                        <tr><td>Cutoff (padj)</td><td>< 0.05</td></tr>
+                    </table>
+                </div>
+            </div>
+        </section>
+        '''
+
+    def _generate_qc_section_html(self, data: Dict) -> str:
+        """Generate Data Quality Control section with PCA and correlation heatmap."""
+        figures = data.get('figures', {})
+        interactive_figures = data.get('interactive_figures', {})
+
+        # Look for PCA and correlation heatmap
+        pca_fig = figures.get('pca_plot', '')
+        heatmap_fig = figures.get('sample_correlation', figures.get('heatmap', ''))
+
+        pca_html = ''
+        if pca_fig:
+            pca_html = f'<img src="data:image/png;base64,{pca_fig}" alt="PCA Plot" class="figure-img">'
+        else:
+            pca_html = '<p class="no-data">PCA plot not available</p>'
+
+        heatmap_html = ''
+        if heatmap_fig:
+            heatmap_html = f'<img src="data:image/png;base64,{heatmap_fig}" alt="Sample Correlation" class="figure-img">'
+        else:
+            heatmap_html = '<p class="no-data">Sample correlation heatmap not available</p>'
+
+        return f'''
+        <section class="qc-section" id="qc">
+            <h2>2. Data Quality Control</h2>
+
+            <div class="qc-grid">
+                <div class="qc-panel">
+                    <h4>2.1 Sample Clustering (PCA)</h4>
+                    <div class="figure-container">
+                        {pca_html}
+                    </div>
+                    <p class="figure-caption">Principal Component Analysis showing sample clustering between conditions.</p>
+                </div>
+
+                <div class="qc-panel">
+                    <h4>2.2 Sample Correlation</h4>
+                    <div class="figure-container">
+                        {heatmap_html}
+                    </div>
+                    <p class="figure-caption">Correlation heatmap showing similarity between samples.</p>
+                </div>
+            </div>
+        </section>
+        '''
+
+    def _generate_deg_analysis_html(self, data: Dict) -> str:
+        """Generate Differential Expression Analysis section."""
+        deg_df = data.get('deg_significant_df')
+        figures = data.get('figures', {})
+
+        # Get figures
+        volcano_fig = figures.get('volcano_plot', '')
+        heatmap_fig = figures.get('top_genes_heatmap', figures.get('heatmap', ''))
+
+        volcano_html = f'<img src="data:image/png;base64,{volcano_fig}" alt="Volcano Plot" class="figure-img">' if volcano_fig else '<p class="no-data">Volcano plot not available</p>'
+        heatmap_html = f'<img src="data:image/png;base64,{heatmap_fig}" alt="Heatmap" class="figure-img">' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
+
+        # Top upregulated genes table
+        up_table = ''
+        down_table = ''
+
+        if deg_df is not None and len(deg_df) > 0:
+            # Sort by log2FC and get top 20 up/down
+            if 'log2FC' in deg_df.columns:
+                up_genes = deg_df[deg_df['log2FC'] > 0].nlargest(20, 'log2FC')
+                down_genes = deg_df[deg_df['log2FC'] < 0].nsmallest(20, 'log2FC')
+
+                # Build upregulated table
+                up_rows = ''
+                for _, row in up_genes.iterrows():
+                    gene_id = row.get('gene_id', row.get('gene_symbol', 'N/A'))
+                    log2fc = row.get('log2FC', 0)
+                    padj = row.get('padj', 1)
+                    up_rows += f'<tr><td>{gene_id}</td><td class="up-text">{log2fc:.2f}</td><td>{padj:.2e}</td></tr>'
+
+                up_table = f'''
+                <div class="deg-table-panel">
+                    <h4>Top 20 Upregulated Genes</h4>
+                    <table class="deg-table">
+                        <thead><tr><th>Gene</th><th>log2FC</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{up_rows}</tbody>
+                    </table>
+                </div>
+                '''
+
+                # Build downregulated table
+                down_rows = ''
+                for _, row in down_genes.iterrows():
+                    gene_id = row.get('gene_id', row.get('gene_symbol', 'N/A'))
+                    log2fc = row.get('log2FC', 0)
+                    padj = row.get('padj', 1)
+                    down_rows += f'<tr><td>{gene_id}</td><td class="down-text">{log2fc:.2f}</td><td>{padj:.2e}</td></tr>'
+
+                down_table = f'''
+                <div class="deg-table-panel">
+                    <h4>Top 20 Downregulated Genes</h4>
+                    <table class="deg-table">
+                        <thead><tr><th>Gene</th><th>log2FC</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{down_rows}</tbody>
+                    </table>
+                </div>
+                '''
+
+        return f'''
+        <section class="deg-section" id="deg-analysis">
+            <h2>3. Differential Expression Analysis</h2>
+
+            <div class="deg-figures-grid">
+                <div class="figure-panel">
+                    <h4>3.1 Volcano Plot</h4>
+                    <div class="figure-container">
+                        {volcano_html}
+                    </div>
+                    <p class="figure-caption">Volcano plot showing differentially expressed genes. Red: upregulated, Blue: downregulated.</p>
+                </div>
+
+                <div class="figure-panel">
+                    <h4>3.2 Top DEGs Heatmap</h4>
+                    <div class="figure-container">
+                        {heatmap_html}
+                    </div>
+                    <p class="figure-caption">Expression heatmap of top differentially expressed genes.</p>
+                </div>
+            </div>
+
+            <div class="deg-tables-grid">
+                {up_table}
+                {down_table}
+            </div>
+        </section>
+        '''
+
+    def _generate_pathway_section_html(self, data: Dict) -> str:
+        """Generate Pathway & Functional Analysis section with GO subcategories."""
+        pathway_df = data.get('pathway_summary_df')
+        figures = data.get('figures', {})
+
+        pathway_fig = figures.get('pathway_enrichment', figures.get('go_enrichment', ''))
+        pathway_html = f'<img src="data:image/png;base64,{pathway_fig}" alt="Pathway Enrichment" class="figure-img">' if pathway_fig else ''
+
+        # Separate pathways by category
+        go_bp_rows = ''
+        go_mf_rows = ''
+        go_cc_rows = ''
+        kegg_rows = ''
+
+        if pathway_df is not None and len(pathway_df) > 0:
+            for _, row in pathway_df.head(50).iterrows():
+                term = row.get('term', row.get('Term', 'N/A'))
+                gene_count = row.get('gene_count', row.get('Overlap', 'N/A'))
+                pval = row.get('pvalue', row.get('P-value', row.get('Adjusted P-value', 1)))
+                db = row.get('database', row.get('Gene_set', ''))
+
+                if isinstance(gene_count, str) and '/' in gene_count:
+                    gene_count = gene_count.split('/')[0]
+
+                row_html = f'<tr><td>{term[:60]}{"..." if len(str(term)) > 60 else ""}</td><td>{gene_count}</td><td>{pval:.2e}</td></tr>'
+
+                if 'Biological_Process' in str(db) or 'BP' in str(db):
+                    go_bp_rows += row_html
+                elif 'Molecular_Function' in str(db) or 'MF' in str(db):
+                    go_mf_rows += row_html
+                elif 'Cellular_Component' in str(db) or 'CC' in str(db):
+                    go_cc_rows += row_html
+                elif 'KEGG' in str(db):
+                    kegg_rows += row_html
+                else:
+                    go_bp_rows += row_html  # Default to BP
+
+        return f'''
+        <section class="pathway-section" id="pathway-analysis">
+            <h2>4. Pathway & Functional Analysis</h2>
+
+            <div class="pathway-figure">
+                {pathway_html}
+            </div>
+
+            <div class="pathway-subsections">
+                <div class="pathway-panel">
+                    <h4>4.1 GO Biological Process (BP)</h4>
+                    <table class="pathway-table">
+                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <tbody>{go_bp_rows if go_bp_rows else "<tr><td colspan='3'>No significant BP terms</td></tr>"}</tbody>
+                    </table>
+                </div>
+
+                <div class="pathway-panel">
+                    <h4>4.2 GO Molecular Function (MF)</h4>
+                    <table class="pathway-table">
+                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <tbody>{go_mf_rows if go_mf_rows else "<tr><td colspan='3'>No significant MF terms</td></tr>"}</tbody>
+                    </table>
+                </div>
+
+                <div class="pathway-panel">
+                    <h4>4.3 GO Cellular Component (CC)</h4>
+                    <table class="pathway-table">
+                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <tbody>{go_cc_rows if go_cc_rows else "<tr><td colspan='3'>No significant CC terms</td></tr>"}</tbody>
+                    </table>
+                </div>
+
+                <div class="pathway-panel">
+                    <h4>4.4 KEGG Pathway</h4>
+                    <table class="pathway-table">
+                        <thead><tr><th>Pathway</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <tbody>{kegg_rows if kegg_rows else "<tr><td colspan='3'>No significant KEGG pathways</td></tr>"}</tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        '''
+
+    def _generate_network_section_html(self, data: Dict) -> str:
+        """Generate Network Analysis section."""
+        hub_df = data.get('hub_genes_df')
+        figures = data.get('figures', {})
+        interactive_figures = data.get('interactive_figures', {})
+
+        network_fig = figures.get('network_plot', figures.get('network_2d', ''))
+        network_html = f'<img src="data:image/png;base64,{network_fig}" alt="Network" class="figure-img">' if network_fig else ''
+
+        # Hub genes table
+        hub_table = ''
+        if hub_df is not None and len(hub_df) > 0:
+            hub_rows = ''
+            for _, row in hub_df.head(20).iterrows():
+                gene = row.get('gene_id', row.get('gene', 'N/A'))
+                degree = row.get('degree', row.get('enhanced_score', 'N/A'))
+                betweenness = row.get('betweenness', row.get('betweenness_centrality', 'N/A'))
+                betweenness_str = f'{betweenness:.4f}' if isinstance(betweenness, (int, float)) else str(betweenness)
+                hub_rows += f'<tr><td>{gene}</td><td>{degree}</td><td>{betweenness_str}</td></tr>'
+
+            hub_table = f'''
+            <table class="hub-table">
+                <thead><tr><th>Gene</th><th>Degree/Score</th><th>Betweenness</th></tr></thead>
+                <tbody>{hub_rows}</tbody>
+            </table>
+            '''
+
+        return f'''
+        <section class="network-section" id="network-analysis">
+            <h2>6. Network Analysis</h2>
+
+            <div class="network-grid">
+                <div class="network-figure-panel">
+                    <h4>6.1 Co-expression Network</h4>
+                    <div class="figure-container">
+                        {network_html if network_html else '<p class="no-data">Network visualization not available</p>'}
+                    </div>
+                    <p class="figure-caption">Gene co-expression network constructed from DEGs.</p>
+                </div>
+
+                <div class="hub-genes-panel">
+                    <h4>6.2 Hub Genes</h4>
+                    {hub_table if hub_table else '<p class="no-data">No hub genes identified</p>'}
+                    <p class="panel-note">Hub genes are highly connected nodes in the network that may play key regulatory roles.</p>
+                </div>
+            </div>
+        </section>
+        '''
+
+    def _generate_clinical_implications_html(self, data: Dict) -> str:
+        """Generate Clinical Implications section."""
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        interpretation = data.get('interpretation_report', {})
+
+        # Biomarker potential
+        biomarkers = []
+        therapeutic_targets = []
+
+        for d in driver_known[:5]:
+            gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
+            evidence = d.get('evidence_summary', '')
+            biomarkers.append(f'<li><strong>{gene}</strong>: {evidence[:100]}...</li>')
+
+        for d in driver_novel[:5]:
+            gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
+            evidence = d.get('regulatory_evidence', d.get('evidence_summary', ''))
+            therapeutic_targets.append(f'<li><strong>{gene}</strong>: {evidence[:100] if evidence else "Candidate regulatory gene"}...</li>')
+
+        return f'''
+        <section class="clinical-section" id="clinical-implications">
+            <h2>8. Clinical Implications</h2>
+
+            <div class="clinical-grid">
+                <div class="clinical-panel">
+                    <h4>8.1 Biomarker Potential</h4>
+                    <ul class="clinical-list">
+                        {chr(10).join(biomarkers) if biomarkers else '<li>No established biomarkers identified</li>'}
+                    </ul>
+                    <p class="panel-note">These genes show potential as diagnostic or prognostic biomarkers based on database validation.</p>
+                </div>
+
+                <div class="clinical-panel">
+                    <h4>8.2 Therapeutic Targets</h4>
+                    <ul class="clinical-list">
+                        {chr(10).join(therapeutic_targets) if therapeutic_targets else '<li>No therapeutic targets identified</li>'}
+                    </ul>
+                    <p class="panel-note">Candidate regulatory genes that may serve as potential therapeutic targets pending validation.</p>
+                </div>
+            </div>
+
+            <div class="disclaimer-box">
+                <strong>⚠️ Important Note:</strong> All clinical implications are computational predictions and require
+                experimental and clinical validation before any diagnostic or therapeutic application.
+            </div>
+        </section>
+        '''
+
+    def _generate_followup_experiments_html(self, data: Dict) -> str:
+        """Generate Suggested Follow-up Experiments section."""
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        hub_df = data.get('hub_genes_df')
+
+        # Get top genes to validate
+        top_genes = []
+        if driver_known:
+            top_genes.extend([str(d.get('gene_symbol', d.get('gene', ''))) for d in driver_known[:3]])
+        if driver_novel:
+            top_genes.extend([str(d.get('gene_symbol', d.get('gene', ''))) for d in driver_novel[:3]])
+        if hub_df is not None and len(hub_df) > 0:
+            hub_genes = [str(g) for g in hub_df.head(3)['gene_id'].tolist()] if 'gene_id' in hub_df.columns else []
+            top_genes.extend(hub_genes)
+
+        top_genes = [str(g) for g in list(set(top_genes))[:5] if g]  # Unique top 5, ensure strings
+        genes_str = ', '.join(top_genes) if top_genes else 'identified candidate genes'
+
+        return f'''
+        <section class="followup-section" id="followup-experiments">
+            <h2>9. Suggested Follow-up Experiments</h2>
+
+            <div class="experiment-grid">
+                <div class="experiment-panel">
+                    <h4>9.1 Validation Experiments</h4>
+                    <ul>
+                        <li><strong>qRT-PCR</strong>: Validate expression of {genes_str}</li>
+                        <li><strong>Western Blot</strong>: Confirm protein-level changes</li>
+                        <li><strong>IHC</strong>: Verify tissue localization</li>
+                    </ul>
+                </div>
+
+                <div class="experiment-panel">
+                    <h4>9.2 Functional Studies</h4>
+                    <ul>
+                        <li><strong>siRNA/shRNA Knockdown</strong>: Assess phenotypic changes</li>
+                        <li><strong>CRISPR-Cas9 Knockout</strong>: Generate knockout models</li>
+                        <li><strong>Overexpression</strong>: Study gain-of-function effects</li>
+                        <li><strong>Proliferation Assay</strong>: MTT/CCK-8 assay</li>
+                        <li><strong>Migration/Invasion</strong>: Transwell assay</li>
+                    </ul>
+                </div>
+
+                <div class="experiment-panel">
+                    <h4>9.3 In Vivo Studies</h4>
+                    <ul>
+                        <li><strong>Xenograft Model</strong>: Tumor growth in mice</li>
+                        <li><strong>PDX Model</strong>: Patient-derived xenografts</li>
+                        <li><strong>Drug Treatment</strong>: Therapeutic efficacy testing</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="priority-note">
+                <h5>Recommended Priority</h5>
+                <p>Based on analysis results, we recommend prioritizing validation of: <strong>{genes_str}</strong></p>
+            </div>
+        </section>
+        '''
+
     def _generate_methods_html(self) -> str:
         """Generate Level 4: Methods & Appendix."""
         return '''
         <section class="methods-section" id="methods">
-            <h2>Methods & Parameters</h2>
+            <h2>10. Methods & Parameters</h2>
 
             <div class="methods-grid">
                 <div class="method-card">
@@ -2797,6 +3215,409 @@ class ReportAgent(BaseAgent):
                 color: #991b1b;
             }
 
+            /* ========== NEW TEMPLATE SECTIONS ========== */
+
+            /* Study Overview Section */
+            .study-overview-section {
+                background: var(--gray-50);
+                border-radius: 8px;
+                padding: var(--spacing-xl);
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .study-overview-section h2 {
+                margin-top: 0;
+            }
+
+            .overview-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--spacing-lg);
+            }
+
+            .overview-card {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-lg);
+            }
+
+            .overview-card h4 {
+                color: var(--npj-blue);
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: var(--spacing-md);
+                padding-bottom: var(--spacing-sm);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .overview-card table {
+                width: 100%;
+                font-size: 13px;
+            }
+
+            .overview-card td {
+                padding: 6px 0;
+                border-bottom: 1px solid var(--gray-100);
+            }
+
+            .overview-card td:first-child {
+                font-weight: 500;
+                color: var(--gray-600);
+                width: 40%;
+            }
+
+            .overview-card td:last-child {
+                color: var(--gray-900);
+            }
+
+            /* QC Section */
+            .qc-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .qc-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--spacing-lg);
+            }
+
+            .qc-panel {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-lg);
+            }
+
+            .qc-panel h4 {
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: var(--spacing-md);
+                color: var(--gray-800);
+            }
+
+            .qc-panel img {
+                width: 100%;
+                border-radius: 4px;
+            }
+
+            /* DEG Analysis Section */
+            .deg-analysis-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .deg-subsection {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .deg-subsection h3 {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--gray-800);
+                margin-bottom: var(--spacing-md);
+                padding-left: var(--spacing-md);
+                border-left: 3px solid var(--npj-blue);
+            }
+
+            .deg-figure-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--spacing-lg);
+                margin-bottom: var(--spacing-lg);
+            }
+
+            .deg-figure {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-md);
+            }
+
+            .deg-figure.full-width {
+                grid-column: 1 / -1;
+            }
+
+            .deg-figure img {
+                width: 100%;
+                border-radius: 4px;
+            }
+
+            .deg-tables-container {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--spacing-lg);
+            }
+
+            .deg-table-panel {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+
+            .deg-table-panel h4 {
+                font-size: 13px;
+                font-weight: 600;
+                padding: var(--spacing-md);
+                margin: 0;
+                background: var(--gray-50);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .deg-table-panel h4.up-regulated {
+                color: #c62828;
+                border-left: 3px solid #c62828;
+            }
+
+            .deg-table-panel h4.down-regulated {
+                color: var(--npj-blue);
+                border-left: 3px solid var(--npj-blue);
+            }
+
+            .deg-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+
+            .deg-table th {
+                background: var(--gray-50);
+                padding: 8px 12px;
+                text-align: left;
+                font-weight: 600;
+                color: var(--gray-700);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .deg-table td {
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--gray-100);
+            }
+
+            .deg-table tr:hover {
+                background: var(--npj-blue-light);
+            }
+
+            /* Pathway Section */
+            .pathway-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .pathway-category {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .pathway-category h3 {
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--gray-800);
+                margin-bottom: var(--spacing-md);
+                padding-left: var(--spacing-md);
+                border-left: 3px solid var(--success);
+            }
+
+            .pathway-table-container {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+
+            .pathway-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+
+            .pathway-table th {
+                background: var(--gray-50);
+                padding: 10px 12px;
+                text-align: left;
+                font-weight: 600;
+                color: var(--gray-700);
+                border-bottom: 2px solid var(--gray-300);
+            }
+
+            .pathway-table td {
+                padding: 10px 12px;
+                border-bottom: 1px solid var(--gray-100);
+            }
+
+            .pathway-table tr:hover {
+                background: var(--npj-blue-light);
+            }
+
+            .significance-bar {
+                height: 8px;
+                background: #e5e7eb;
+                border-radius: 4px;
+                overflow: hidden;
+            }
+
+            .significance-bar-fill {
+                height: 100%;
+                background: var(--success);
+                border-radius: 4px;
+            }
+
+            /* Network Section */
+            .network-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .network-figure-container {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-lg);
+                margin-bottom: var(--spacing-lg);
+            }
+
+            .hub-genes-table-container {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+
+            .hub-genes-table-container h4 {
+                font-size: 14px;
+                font-weight: 600;
+                padding: var(--spacing-md);
+                margin: 0;
+                background: var(--gray-50);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            /* Clinical Implications Section */
+            .clinical-implications-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .clinical-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: var(--spacing-lg);
+            }
+
+            .clinical-card {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-lg);
+            }
+
+            .clinical-card h4 {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--npj-blue);
+                margin-bottom: var(--spacing-md);
+                padding-bottom: var(--spacing-sm);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .clinical-card h4.biomarkers::before {
+                content: "🎯 ";
+            }
+
+            .clinical-card h4.therapeutic::before {
+                content: "💊 ";
+            }
+
+            .clinical-item {
+                display: flex;
+                gap: var(--spacing-md);
+                padding: var(--spacing-sm) 0;
+                border-bottom: 1px solid var(--gray-100);
+            }
+
+            .clinical-item:last-child {
+                border-bottom: none;
+            }
+
+            .clinical-gene {
+                font-weight: 600;
+                font-family: var(--font-mono);
+                color: var(--gray-900);
+                min-width: 80px;
+            }
+
+            .clinical-desc {
+                font-size: 13px;
+                color: var(--gray-600);
+                line-height: 1.5;
+            }
+
+            /* Follow-up Experiments Section */
+            .followup-section {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .followup-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: var(--spacing-lg);
+            }
+
+            .followup-card {
+                background: white;
+                border: 1px solid var(--gray-200);
+                border-radius: 6px;
+                padding: var(--spacing-lg);
+            }
+
+            .followup-card h4 {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--gray-800);
+                margin-bottom: var(--spacing-md);
+                padding-bottom: var(--spacing-sm);
+                border-bottom: 1px solid var(--gray-200);
+            }
+
+            .followup-card h4::before {
+                margin-right: 8px;
+            }
+
+            .followup-card.validation h4::before {
+                content: "🧪";
+            }
+
+            .followup-card.functional h4::before {
+                content: "🔬";
+            }
+
+            .followup-card.invivo h4::before {
+                content: "🐭";
+            }
+
+            .followup-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+
+            .followup-list li {
+                font-size: 13px;
+                color: var(--gray-700);
+                padding: 8px 0;
+                padding-left: 20px;
+                border-bottom: 1px solid var(--gray-100);
+                position: relative;
+            }
+
+            .followup-list li::before {
+                content: "•";
+                position: absolute;
+                left: 0;
+                color: var(--npj-blue);
+                font-weight: bold;
+            }
+
+            .followup-list li:last-child {
+                border-bottom: none;
+            }
+
             /* ========== RESPONSIVE ========== */
             @media (max-width: 768px) {
                 .cover-title { font-size: 24px; }
@@ -2812,6 +3633,12 @@ class ReportAgent(BaseAgent):
                 .driver-tracks { grid-template-columns: 1fr; }
                 .driver-summary-stats { flex-direction: column; }
                 .driver-evidence { grid-template-columns: 1fr; }
+                .overview-grid { grid-template-columns: 1fr; }
+                .qc-grid { grid-template-columns: 1fr; }
+                .deg-figure-grid { grid-template-columns: 1fr; }
+                .deg-tables-container { grid-template-columns: 1fr; }
+                .clinical-grid { grid-template-columns: 1fr; }
+                .followup-grid { grid-template-columns: 1fr; }
             }
 
             @media print {
@@ -3281,7 +4108,22 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         '''
 
     def _generate_html(self, data: Dict) -> str:
-        """Generate complete HTML report in Cell journal style."""
+        """Generate complete HTML report following the new template structure.
+
+        Sections:
+        1. Study Overview
+        2. Data Quality Control (QC)
+        3. Differential Expression Analysis
+        4. Pathway & Functional Analysis
+        5. Driver Gene Analysis
+        6. Network Analysis
+        7. (Survival Analysis - Optional, not implemented yet)
+        8. Clinical Implications
+        9. Suggested Follow-up Experiments
+        10. Methods Summary
+        11. References (via RAG)
+        12. Appendix (Supplementary Data)
+        """
         interpretation = data.get('interpretation_report', {})
         cancer_type = interpretation.get('cancer_type', self.config.get('cancer_type', 'Unknown'))
 
@@ -3304,46 +4146,54 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         <div class="nav-container">
             <span class="nav-brand">BioInsight Report</span>
             <div class="nav-links">
-                <a href="#abstract">Abstract</a>
-                <a href="#figures">Figures</a>
-                <a href="#driver-analysis">Driver Analysis</a>
-                <a href="#rag-summary">Literature</a>
-                <a href="#gene-cards">Key Genes</a>
+                <a href="#study-overview">Overview</a>
+                <a href="#qc-section">QC</a>
+                <a href="#deg-analysis">DEG</a>
+                <a href="#pathway-section">Pathway</a>
+                <a href="#driver-analysis">Driver</a>
+                <a href="#network-section">Network</a>
+                <a href="#clinical-implications">Clinical</a>
                 <a href="#methods">Methods</a>
             </div>
         </div>
     </nav>
 
     <main class="paper-content">
-        <!-- Abstract -->
-        {self._generate_abstract_html(data)}
+        <!-- 1. Study Overview -->
+        {self._generate_study_overview_html(data)}
 
-        <!-- Figures Section -->
-        <section class="figures-section" id="figures">
-            <h2>Figures</h2>
-            {self._generate_visual_dashboard_html(data)}
-        </section>
+        <!-- 2. Data Quality Control -->
+        {self._generate_qc_section_html(data)}
 
-        <!-- Driver Gene Analysis -->
+        <!-- 3. Differential Expression Analysis -->
+        {self._generate_deg_analysis_html(data)}
+
+        <!-- 4. Pathway & Functional Analysis -->
+        {self._generate_pathway_section_html(data)}
+
+        <!-- 5. Driver Gene Analysis -->
         {self._generate_driver_analysis_html(data)}
 
-        <!-- RAG Literature Analysis -->
+        <!-- 6. Network Analysis -->
+        {self._generate_network_section_html(data)}
+
+        <!-- 8. Clinical Implications -->
+        {self._generate_clinical_implications_html(data)}
+
+        <!-- 9. Suggested Follow-up Experiments -->
+        {self._generate_followup_experiments_html(data)}
+
+        <!-- 10. Methods Summary -->
+        {self._generate_methods_html() if self.config["include_methods"] else ""}
+
+        <!-- 11. References (Literature via RAG) -->
         {self._generate_rag_summary_html(data)}
 
-        <!-- Key Genes -->
-        <section class="genes-section" id="gene-cards">
-            <h2>Key Gene Analysis</h2>
-            {self._generate_gene_status_cards_html(data)}
-        </section>
-
-        <!-- Detailed Data Table -->
+        <!-- 12. Appendix / Supplementary Data -->
         <section class="data-section" id="detailed-table">
-            <h2>Supplementary Data</h2>
+            <h2>12. Appendix: Supplementary Data</h2>
             {self._generate_detailed_table_html(data)}
         </section>
-
-        <!-- Methods -->
-        {self._generate_methods_html() if self.config["include_methods"] else ""}
     </main>
 
     <footer class="paper-footer">
