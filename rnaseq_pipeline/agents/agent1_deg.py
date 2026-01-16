@@ -105,6 +105,16 @@ class DEGAgent(BaseAgent):
 
         self.logger.info("Initializing R environment...")
 
+        # Activate rpy2 converter context for multithreading support
+        # This fixes "Conversion rules for rpy2.robjects appear to be missing" error
+        from rpy2.robjects import conversion
+        try:
+            # Try to use the context-aware conversion (rpy2 >= 3.5)
+            pandas2ri.activate()
+            self.logger.info("Activated pandas2ri converter")
+        except Exception as e:
+            self.logger.warning(f"Could not activate pandas2ri: {e}")
+
         # Import R packages
         base = importr('base')
         deseq2 = importr('DESeq2')
@@ -261,28 +271,64 @@ class DEGAgent(BaseAgent):
             self.metadata[condition_col] == contrast[1]
         ].iloc[:, 0].tolist()
 
+        self.logger.info(f"Group 1 ({contrast[0]}): {len(group1_samples)} samples")
+        self.logger.info(f"Group 2 ({contrast[1]}): {len(group2_samples)} samples")
+
+        # Verify samples exist in count_df columns
+        g1_valid = [s for s in group1_samples if s in count_df.columns]
+        g2_valid = [s for s in group2_samples if s in count_df.columns]
+
+        if len(g1_valid) == 0 or len(g2_valid) == 0:
+            self.logger.error(f"Sample mismatch! g1_valid={len(g1_valid)}, g2_valid={len(g2_valid)}")
+            self.logger.error(f"Count matrix columns (first 5): {list(count_df.columns[:5])}")
+            self.logger.error(f"Group1 samples (first 5): {group1_samples[:5]}")
+            raise ValueError("No valid samples found for DEG analysis")
+
+        if len(g1_valid) != len(group1_samples) or len(g2_valid) != len(group2_samples):
+            self.logger.warning(f"Some samples missing from count matrix: g1={len(g1_valid)}/{len(group1_samples)}, g2={len(g2_valid)}/{len(group2_samples)}")
+            group1_samples = g1_valid
+            group2_samples = g2_valid
+
         # Calculate log2 fold change
         mean1 = count_df[group1_samples].mean(axis=1) + 1
         mean2 = count_df[group2_samples].mean(axis=1) + 1
         log2fc = np.log2(mean1 / mean2)
 
+        self.logger.info(f"Calculated log2FC for {len(log2fc)} genes")
+        self.logger.info(f"log2FC range: {log2fc.min():.2f} to {log2fc.max():.2f}")
+
         # Calculate p-values (t-test approximation)
         from scipy import stats
         pvalues = []
-        for gene in count_df.index:
-            g1 = count_df.loc[gene, group1_samples].values
-            g2 = count_df.loc[gene, group2_samples].values
+        for i, gene in enumerate(count_df.index):
+            g1 = count_df.loc[gene, group1_samples].values.astype(float)
+            g2 = count_df.loc[gene, group2_samples].values.astype(float)
             try:
                 _, pval = stats.ttest_ind(g1, g2)
+                if np.isnan(pval):
+                    pval = 1.0  # Replace NaN with non-significant
                 pvalues.append(pval)
-            except (ValueError, RuntimeWarning) as e:
+            except Exception:
                 pvalues.append(1.0)  # Assign non-significant p-value on error
 
+            if (i + 1) % 10000 == 0:
+                self.logger.info(f"Processed {i + 1}/{len(count_df)} genes for t-test...")
+
         pvalues = np.array(pvalues)
+
+        # Replace any remaining NaN with 1.0 BEFORE multipletests
+        nan_count = np.isnan(pvalues).sum()
+        if nan_count > 0:
+            self.logger.warning(f"Replacing {nan_count} NaN p-values with 1.0")
+            pvalues = np.where(np.isnan(pvalues), 1.0, pvalues)
+
+        self.logger.info(f"P-values < 0.05: {(pvalues < 0.05).sum()}")
 
         # Adjust p-values (Benjamini-Hochberg)
         from statsmodels.stats.multitest import multipletests
         _, padj, _, _ = multipletests(pvalues, method='fdr_bh')
+
+        self.logger.info(f"Adjusted p-values < 0.05: {(padj < 0.05).sum()}")
 
         # Create results DataFrame
         results_df = pd.DataFrame({
@@ -294,6 +340,8 @@ class DEGAgent(BaseAgent):
             'pvalue': pvalues,
             'padj': padj
         })
+
+        self.logger.info(f"Results DataFrame created: {len(results_df)} rows")
 
         # Normalized counts (simple CPM)
         total_counts = count_df.sum(axis=0)
@@ -320,8 +368,14 @@ class DEGAgent(BaseAgent):
             else:
                 raise
 
+        # Debug: Log results before dropna
+        self.logger.info(f"Results before dropna: {len(results_df)} rows")
+        na_count = results_df['padj'].isna().sum()
+        self.logger.info(f"NA padj values: {na_count}")
+
         # Remove NA padj values
         results_df = results_df.dropna(subset=['padj'])
+        self.logger.info(f"Results after dropna: {len(results_df)} rows")
 
         # Save all results
         self.save_csv(results_df, "deg_all_results.csv")

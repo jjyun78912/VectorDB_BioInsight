@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, Activity, Share2, GitBranch, Database, BarChart2, FileText, CheckCircle2, Loader2, AlertCircle, ExternalLink, Download, Brain } from 'lucide-react';
+import { X, Activity, Share2, GitBranch, Database, BarChart2, FileText, CheckCircle2, Loader2, AlertCircle, ExternalLink, Download, Brain, Microscope, Filter, Layers, Boxes, Users, Target, PieChart, Dna } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
-// Agent info matching backend - simplified without tool descriptions
-const AGENTS = [
+// Bulk RNA-seq Agent info (6-agent pipeline)
+const BULK_AGENTS = [
   { id: 'agent1_deg', name: 'DEG Analysis', nameKo: '차등 발현 분석', icon: Activity },
   { id: 'agent2_network', name: 'Network Analysis', nameKo: '네트워크 분석', icon: Share2 },
   { id: 'agent3_pathway', name: 'Pathway Enrichment', nameKo: '경로 분석', icon: GitBranch },
@@ -13,8 +13,21 @@ const AGENTS = [
   { id: 'agent6_report', name: 'Report Generation', nameKo: '리포트 생성', icon: FileText },
 ];
 
+// Single-cell RNA-seq Agent info (9 virtual stages in 1 agent)
+const SINGLECELL_AGENTS = [
+  { id: 'sc_qc', name: 'QC & Filtering', nameKo: 'QC & 필터링', icon: Filter },
+  { id: 'sc_normalize', name: 'Normalization', nameKo: '정규화', icon: Layers },
+  { id: 'sc_hvg', name: 'HVG Selection', nameKo: 'HVG 선택', icon: Target },
+  { id: 'sc_dimred', name: 'Dim. Reduction', nameKo: '차원 축소', icon: Boxes },
+  { id: 'sc_clustering', name: 'Clustering', nameKo: '클러스터링', icon: PieChart },
+  { id: 'sc_annotation', name: 'Cell Annotation', nameKo: '세포 유형 주석', icon: Users },
+  { id: 'sc_deg', name: 'Marker Genes', nameKo: '마커 유전자', icon: Dna },
+  { id: 'sc_visualization', name: 'Visualization', nameKo: '시각화', icon: BarChart2 },
+  { id: 'sc_report', name: 'Report', nameKo: '리포트', icon: FileText },
+];
+
 interface SSEMessage {
-  type: 'pipeline_start' | 'agent_start' | 'agent_progress' | 'agent_complete' | 'agent_error' | 'pipeline_complete' | 'pipeline_error' | 'complete' | 'final';
+  type: 'pipeline_start' | 'data_type_detected' | 'agent_start' | 'agent_progress' | 'agent_complete' | 'agent_error' | 'pipeline_complete' | 'pipeline_error' | 'singlecell_complete' | 'complete' | 'final';
   agent?: string;
   name?: string;
   description?: string;
@@ -27,6 +40,14 @@ interface SSEMessage {
   report_path?: string;
   run_dir?: string;
   timestamp?: string;
+  // Data type detection
+  data_type?: 'bulk' | 'singlecell';
+  detection_result?: {
+    confidence: number;
+    n_genes: number;
+    n_samples: number;
+    recommended_pipeline: string;
+  };
 }
 
 type AgentStatus = 'pending' | 'running' | 'completed' | 'error';
@@ -43,6 +64,8 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
   onViewReport
 }) => {
   const { language } = useLanguage();
+  const [dataType, setDataType] = useState<'bulk' | 'singlecell'>('bulk');
+  const [detectionInfo, setDetectionInfo] = useState<{confidence: number; n_genes: number; n_samples: number} | null>(null);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
   const [currentAgent, setCurrentAgent] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -50,6 +73,9 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resultSummaries, setResultSummaries] = useState<Record<string, any>>({});
   const [reportPath, setReportPath] = useState<string | null>(null);
+
+  // Select agents based on data type
+  const AGENTS = dataType === 'singlecell' ? SINGLECELL_AGENTS : BULK_AGENTS;
 
   // Connect to SSE stream
   useEffect(() => {
@@ -61,10 +87,29 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
 
         switch (data.type) {
           case 'pipeline_start':
-            // Initialize all agents as pending
+            // Initialize all agents as pending (will be updated when data_type_detected arrives)
             const initialStatuses: Record<string, AgentStatus> = {};
-            AGENTS.forEach(a => { initialStatuses[a.id] = 'pending'; });
+            BULK_AGENTS.forEach(a => { initialStatuses[a.id] = 'pending'; });
             setAgentStatuses(initialStatuses);
+            break;
+
+          case 'data_type_detected':
+            // Update data type and reinitialize agent statuses
+            if (data.data_type) {
+              setDataType(data.data_type);
+              const agents = data.data_type === 'singlecell' ? SINGLECELL_AGENTS : BULK_AGENTS;
+              const newStatuses: Record<string, AgentStatus> = {};
+              agents.forEach(a => { newStatuses[a.id] = 'pending'; });
+              setAgentStatuses(newStatuses);
+
+              if (data.detection_result) {
+                setDetectionInfo({
+                  confidence: data.detection_result.confidence,
+                  n_genes: data.detection_result.n_genes,
+                  n_samples: data.detection_result.n_samples
+                });
+              }
+            }
             break;
 
           case 'agent_start':
@@ -97,6 +142,13 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
             setProgress(100);
             setCurrentAgent(null);
             if (data.report_path) setReportPath(data.report_path);
+            break;
+
+          case 'singlecell_complete':
+            // Single-cell pipeline complete - store result summary
+            if (data.result_summary) {
+              setResultSummaries(prev => ({ ...prev, singlecell: data.result_summary }));
+            }
             break;
 
           case 'pipeline_error':
@@ -141,6 +193,11 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
     downloadReport: language === 'ko' ? '리포트 다운로드' : 'Download Report',
     close: language === 'ko' ? '닫기' : 'Close',
     processing: language === 'ko' ? '처리 중...' : 'Processing...',
+    bulk: language === 'ko' ? 'Bulk RNA-seq' : 'Bulk RNA-seq',
+    singlecell: language === 'ko' ? 'Single-cell' : 'Single-cell',
+    genes: language === 'ko' ? '유전자' : 'genes',
+    samples: language === 'ko' ? '샘플' : 'samples',
+    cells: language === 'ko' ? '세포' : 'cells',
   };
 
   const getAgentIcon = (agentId: string, status: AgentStatus) => {
@@ -177,10 +234,26 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
 
         {/* Header */}
         <div className="p-6 pb-4">
-          <h2 className="text-xl font-bold text-gray-800">
-            {pipelineStatus === 'completed' ? t.completed : pipelineStatus === 'error' ? t.error : t.title}
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">Job ID: {jobId}</p>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-xl font-bold text-gray-800">
+              {pipelineStatus === 'completed' ? t.completed : pipelineStatus === 'error' ? t.error : t.title}
+            </h2>
+            {/* Data type badge */}
+            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+              dataType === 'singlecell'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              {dataType === 'singlecell' ? t.singlecell : t.bulk}
+            </span>
+          </div>
+          <p className="text-sm text-gray-500">Job ID: {jobId}</p>
+          {/* Detection info */}
+          {detectionInfo && (
+            <p className="text-xs text-gray-400 mt-1">
+              {detectionInfo.n_genes.toLocaleString()} {t.genes} × {detectionInfo.n_samples.toLocaleString()} {dataType === 'singlecell' ? t.cells : t.samples}
+            </p>
+          )}
         </div>
 
         {/* Progress Bar */}

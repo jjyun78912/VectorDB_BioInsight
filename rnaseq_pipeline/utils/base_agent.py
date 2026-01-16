@@ -71,7 +71,7 @@ class BaseAgent(ABC):
         return logger
 
     def load_csv(self, filename: str, required: bool = True) -> Optional[pd.DataFrame]:
-        """Load CSV file from input directory."""
+        """Load CSV file from input directory with auto delimiter detection."""
         filepath = self.input_dir / filename
 
         if not filepath.exists():
@@ -81,7 +81,33 @@ class BaseAgent(ABC):
             return None
 
         self.logger.info(f"Loading {filename}...")
-        df = pd.read_csv(filepath)
+
+        # Auto-detect delimiter by reading first few lines
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
+
+            # Detect delimiter
+            if '\t' in first_line:
+                delimiter = '\t'
+                self.logger.info(f"  -> Detected TSV format (tab-delimited)")
+            elif ',' in first_line:
+                delimiter = ','
+            else:
+                # Try Python's sniffer for other cases
+                import csv
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    sample = f.read(4096)
+                    sniffer = csv.Sniffer()
+                    dialect = sniffer.sniff(sample)
+                    delimiter = dialect.delimiter
+                    self.logger.info(f"  -> Detected delimiter: {repr(delimiter)}")
+
+            df = pd.read_csv(filepath, sep=delimiter)
+        except Exception as e:
+            self.logger.warning(f"Auto-detection failed, trying comma: {e}")
+            df = pd.read_csv(filepath)
+
         self.logger.info(f"  -> {len(df)} rows, {len(df.columns)} columns")
         return df
 

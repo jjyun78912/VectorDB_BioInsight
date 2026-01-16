@@ -189,8 +189,13 @@ class DataTypeDetector:
 
         if count_file.exists():
             try:
+                # Detect delimiter first
+                with open(count_file, 'r', encoding='utf-8') as f:
+                    first_line = f.readline()
+                delimiter = '\t' if '\t' in first_line else ','
+
                 # Read header only first
-                df_head = pd.read_csv(count_file, nrows=5)
+                df_head = pd.read_csv(count_file, nrows=5, sep=delimiter)
                 n_samples = len(df_head.columns) - 1  # Exclude gene_id column
 
                 # Count rows for genes
@@ -241,7 +246,12 @@ class DataTypeDetector:
             return scores, ["No metadata.csv found"]
 
         try:
-            meta_df = pd.read_csv(meta_file)
+            # Detect delimiter
+            with open(meta_file, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
+            delimiter = '\t' if '\t' in first_line else ','
+
+            meta_df = pd.read_csv(meta_file, sep=delimiter)
             columns = [c.lower() for c in meta_df.columns]
 
             # Check for single-cell hints
@@ -270,8 +280,13 @@ class DataTypeDetector:
             return scores, "No matrix to analyze"
 
         try:
+            # Detect delimiter
+            with open(count_file, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
+            delimiter = '\t' if '\t' in first_line else ','
+
             # Sample a portion of the matrix
-            df_sample = pd.read_csv(count_file, nrows=1000)
+            df_sample = pd.read_csv(count_file, nrows=1000, sep=delimiter)
 
             # Get numeric columns only
             numeric_cols = df_sample.select_dtypes(include=[np.number]).columns

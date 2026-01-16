@@ -46,6 +46,484 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ═══════════════════════════════════════════════════════════════
+# File Format Detection and Conversion Helpers
+# ═══════════════════════════════════════════════════════════════
+
+import pandas as pd
+import re
+
+
+def detect_file_format(content: bytes, filename: str) -> str:
+    """
+    Detect file format from content and filename.
+
+    Returns one of:
+    - 'csv': Comma-separated values
+    - 'tsv': Tab-separated values
+    - 'geo_series_matrix': GEO series matrix format
+    - 'unknown': Unknown format
+    """
+    try:
+        text = content.decode('utf-8', errors='ignore')
+        first_lines = text.split('\n')[:20]
+
+        # Check for GEO series_matrix format (starts with !)
+        if any(line.startswith('!') for line in first_lines):
+            return 'geo_series_matrix'
+
+        # Check first data line for delimiter
+        first_data_line = next((line for line in first_lines if line.strip() and not line.startswith('#')), '')
+
+        if '\t' in first_data_line:
+            return 'tsv'
+        elif ',' in first_data_line:
+            return 'csv'
+        else:
+            # Check filename extension
+            if filename.lower().endswith('.tsv') or filename.lower().endswith('.txt'):
+                return 'tsv'
+            elif filename.lower().endswith('.csv'):
+                return 'csv'
+
+    except Exception as e:
+        logger.warning(f"Error detecting file format: {e}")
+
+    return 'unknown'
+
+
+def convert_tsv_to_csv(content: bytes) -> bytes:
+    """Convert TSV content to CSV format."""
+    try:
+        text = content.decode('utf-8', errors='ignore')
+        # Replace tabs with commas
+        csv_text = text.replace('\t', ',')
+        return csv_text.encode('utf-8')
+    except Exception as e:
+        logger.warning(f"TSV to CSV conversion failed: {e}")
+        return content
+
+
+def generate_metadata_from_count_matrix(count_content: bytes) -> tuple:
+    """
+    Generate metadata.csv from count_matrix column names.
+
+    Extracts sample IDs from count_matrix columns and determines condition
+    based on T/N suffix pattern (common in GEO datasets like GSE81089).
+
+    Pattern examples:
+    - L400T → tumor (T suffix)
+    - L511N → normal (N suffix)
+    - GSM2142443 → unknown (no clear suffix)
+
+    Returns:
+        tuple: (metadata_csv_bytes, sample_condition_mapping)
+    """
+    try:
+        text = count_content.decode('utf-8', errors='ignore')
+        first_line = text.split('\n')[0].strip()
+
+        # Detect delimiter
+        delimiter = '\t' if '\t' in first_line else ','
+
+        # Get column names (first row)
+        columns = [c.strip().strip('"') for c in first_line.split(delimiter)]
+
+        # First column is usually gene_id, rest are sample columns
+        sample_ids = columns[1:]
+
+        if not sample_ids:
+            logger.warning("No sample columns found in count matrix")
+            return None, {}
+
+        # Determine conditions from sample IDs
+        conditions = []
+        for sid in sample_ids:
+            # Check T/N suffix pattern (most common in GEO cancer datasets)
+            # Patterns: L400T, sample_1T, TCGA-XX-XXXX-01T
+            sid_upper = sid.upper()
+
+            # Check for explicit T (tumor) or N (normal) suffix
+            if sid_upper.endswith('T') or '_T' in sid_upper or '-T' in sid_upper:
+                # Check it's not a number like "L400T1"
+                if len(sid) >= 2 and sid[-2:-1].isalpha():
+                    # Second to last is also a letter, might be part of name
+                    pass
+                if re.search(r'[A-Za-z]T$', sid) or re.search(r'_T\d*$', sid_upper):
+                    conditions.append('tumor')
+                    continue
+
+            if sid_upper.endswith('N') or '_N' in sid_upper or '-N' in sid_upper:
+                if re.search(r'[A-Za-z]N$', sid) or re.search(r'_N\d*$', sid_upper):
+                    conditions.append('normal')
+                    continue
+
+            # Check for tumor keywords
+            if any(kw in sid_upper for kw in ['TUMOR', 'CANCER', 'CARCINOMA', 'MALIGNANT']):
+                conditions.append('tumor')
+                continue
+
+            # Check for normal keywords
+            if any(kw in sid_upper for kw in ['NORMAL', 'CTRL', 'CONTROL', 'HEALTHY', 'ADJACENT']):
+                conditions.append('normal')
+                continue
+
+            # Default: try to guess from the last character (simple T/N)
+            if sid.endswith('T') or sid.endswith('t'):
+                conditions.append('tumor')
+            elif sid.endswith('N') or sid.endswith('n'):
+                conditions.append('normal')
+            else:
+                conditions.append('unknown')
+
+        # Create CSV content
+        csv_lines = ['sample_id,condition']
+        for sid, cond in zip(sample_ids, conditions):
+            csv_lines.append(f'{sid},{cond}')
+
+        csv_content = '\n'.join(csv_lines).encode('utf-8')
+
+        # Create mapping for reference
+        sample_mapping = dict(zip(sample_ids, conditions))
+
+        # Log summary
+        from collections import Counter
+        cond_counts = Counter(conditions)
+        logger.info(f"Generated metadata from count_matrix: {len(sample_ids)} samples, conditions: {dict(cond_counts)}")
+
+        return csv_content, sample_mapping
+
+    except Exception as e:
+        logger.error(f"Failed to generate metadata from count_matrix: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, {}
+
+
+def parse_geo_series_matrix(content: bytes, count_matrix_content: bytes = None) -> tuple:
+    """
+    Parse GEO series_matrix.txt format and extract metadata.
+
+    IMPORTANT: If count_matrix_content is provided, we use the sample IDs from
+    count_matrix columns instead of GSM IDs to ensure consistency.
+
+    GEO series_matrix format:
+    - Lines starting with ! are metadata headers
+    - !Sample_geo_accession contains sample IDs (GSM numbers)
+    - !Sample_characteristics contains sample annotations
+
+    Returns:
+        tuple: (metadata_csv_bytes, sample_condition_mapping)
+    """
+    try:
+        # If count_matrix is provided, generate metadata from it directly
+        # This ensures sample IDs match between files
+        if count_matrix_content:
+            cm_text = count_matrix_content.decode('utf-8', errors='ignore')
+            first_line = cm_text.split('\n')[0].strip()
+            delimiter = '\t' if '\t' in first_line else ','
+            cm_columns = [c.strip().strip('"') for c in first_line.split(delimiter)]
+            cm_sample_ids = cm_columns[1:]  # Skip gene_id column
+
+            # Check if these are GSM IDs or actual sample names
+            has_gsm_ids = any(sid.startswith('GSM') for sid in cm_sample_ids)
+
+            if not has_gsm_ids and cm_sample_ids:
+                # count_matrix has actual sample names (e.g., L400T), generate metadata from it
+                logger.info("Count matrix has non-GSM sample IDs, generating metadata from column names")
+                return generate_metadata_from_count_matrix(count_matrix_content)
+
+        # Continue with GEO series_matrix parsing if count_matrix uses GSM IDs
+        text = content.decode('utf-8', errors='ignore')
+        lines = text.split('\n')
+
+        sample_ids = []
+        characteristics = {}
+        condition_guesses = {}
+        sample_labels = {}  # For patterns like "L400T" (T=tumor, N=normal)
+
+        for line in lines:
+            line = line.strip()
+
+            # Extract sample IDs
+            if line.startswith('!Sample_geo_accession'):
+                parts = line.split('\t')
+                sample_ids = [p.strip().strip('"') for p in parts[1:] if p.strip()]
+
+            # Extract characteristics (may have multiple rows)
+            elif line.startswith('!Sample_characteristics_ch'):
+                parts = line.split('\t')
+                # Extract key:value pairs like "tissue: tumor" or "tumor (t) or normal (n): L400T"
+                for i, p in enumerate(parts[1:], start=0):
+                    p = p.strip().strip('"')
+                    if ':' in p:
+                        key, val = p.split(':', 1)
+                        key = key.strip().lower().replace(' ', '_')
+                        val = val.strip()
+
+                        # Special handling for "tumor (t) or normal (n)" pattern
+                        if 'tumor' in key and 'normal' in key and i < len(sample_ids):
+                            # Value like "L400T" - T suffix means tumor, N suffix means normal
+                            if val.endswith('T') or val.endswith('t'):
+                                sample_labels[sample_ids[i]] = 'tumor'
+                            elif val.endswith('N') or val.endswith('n'):
+                                sample_labels[sample_ids[i]] = 'normal'
+
+                        if key not in characteristics:
+                            characteristics[key] = [None] * len(sample_ids)
+                        if i < len(characteristics[key]):
+                            characteristics[key][i] = val
+
+            # Try to detect condition from title or source
+            elif line.startswith('!Sample_title') or line.startswith('!Sample_source_name'):
+                parts = line.split('\t')
+                for i, p in enumerate(parts[1:]):
+                    p_orig = p.strip().strip('"')
+                    p_lower = p_orig.lower()
+                    if i < len(sample_ids):
+                        sid = sample_ids[i]
+                        # Check for explicit keywords
+                        if any(term in p_lower for term in ['nsclc', 'tumor', 'cancer', 'tumour', 'malignant', 'carcinoma']):
+                            condition_guesses[sid] = 'tumor'
+                        elif any(term in p_lower for term in ['non-malignant', 'normal', 'healthy', 'control', 'adjacent']):
+                            condition_guesses[sid] = 'normal'
+                        # Check for "matched sample_L511N" pattern (N = normal)
+                        elif 'matched' in p_lower and p_orig.endswith('N'):
+                            sample_labels[sid] = 'normal'
+
+        # If no sample IDs found, try to extract from count matrix
+        if not sample_ids and count_matrix_content:
+            try:
+                cm_text = count_matrix_content.decode('utf-8', errors='ignore')
+                first_line = cm_text.split('\n')[0]
+                delimiter = '\t' if '\t' in first_line else ','
+                parts = first_line.split(delimiter)
+                sample_ids = [p.strip().strip('"') for p in parts[1:] if p.strip() and p.strip().startswith('GSM')]
+            except:
+                pass
+
+        if not sample_ids:
+            logger.warning("No sample IDs found in GEO series_matrix")
+            return None, {}
+
+        # Determine conditions - priority: sample_labels > condition_guesses > characteristics
+        conditions = []
+        for sid in sample_ids:
+            if sid in sample_labels:
+                conditions.append(sample_labels[sid])
+            elif sid in condition_guesses:
+                conditions.append(condition_guesses[sid])
+            else:
+                # Try characteristics columns
+                found_cond = None
+                for key in ['tissue', 'tissue_type', 'disease', 'disease_state', 'cell_type', 'condition', 'group']:
+                    if key in characteristics:
+                        idx = sample_ids.index(sid)
+                        if idx < len(characteristics[key]) and characteristics[key][idx]:
+                            found_cond = characteristics[key][idx]
+                            break
+                conditions.append(found_cond if found_cond else 'unknown')
+
+        # Normalize condition values
+        normalized_conditions = []
+        for cond in conditions:
+            if cond is None or cond == 'unknown':
+                normalized_conditions.append('unknown')
+            elif any(term in str(cond).lower() for term in ['tumor', 'cancer', 'tumour', 'malignant', 'carcinoma', 'primary', 'nsclc']):
+                normalized_conditions.append('tumor')
+            elif any(term in str(cond).lower() for term in ['normal', 'healthy', 'control', 'adjacent', 'matched', 'non-malignant']):
+                normalized_conditions.append('normal')
+            else:
+                normalized_conditions.append(str(cond).lower().replace(' ', '_'))
+
+        # Create CSV content
+        csv_lines = ['sample_id,condition']
+        for sid, cond in zip(sample_ids, normalized_conditions):
+            csv_lines.append(f'{sid},{cond}')
+
+        csv_content = '\n'.join(csv_lines).encode('utf-8')
+
+        # Create mapping for reference
+        sample_mapping = dict(zip(sample_ids, normalized_conditions))
+
+        # Log summary
+        from collections import Counter
+        cond_counts = Counter(normalized_conditions)
+        logger.info(f"Parsed GEO series_matrix: {len(sample_ids)} samples, conditions: {dict(cond_counts)}")
+
+        return csv_content, sample_mapping
+
+    except Exception as e:
+        logger.error(f"Failed to parse GEO series_matrix: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None, {}
+
+
+def fix_split_header(content: bytes) -> tuple:
+    """
+    Fix count_matrix files where the header row is split across multiple lines.
+
+    Some tools/exporters create files where the header is artificially split,
+    with continuation lines starting with a comma. This function detects and fixes that.
+
+    Example of broken format:
+        Line 1: gene_id,sample1,sample2
+        Line 2: ,sample3,sample4,sample5  <- continuation (starts with comma)
+        Line 3: GENE1,1,2,3,4,5           <- actual data
+
+    Returns:
+        tuple: (fixed_content_bytes, was_fixed)
+    """
+    try:
+        text = content.decode('utf-8', errors='ignore')
+        lines = text.split('\n')
+
+        if len(lines) < 2:
+            return content, False
+
+        # Check if line 2 starts with comma (indicates split header)
+        if lines[1].startswith(','):
+            logger.info("Detected split header in count_matrix - fixing...")
+
+            # Find where the actual data starts (line that doesn't start with comma and has gene ID)
+            header_parts = [lines[0].strip()]
+            data_start_idx = 1
+
+            for i in range(1, min(10, len(lines))):  # Check up to 10 lines
+                if lines[i].startswith(','):
+                    header_parts.append(lines[i].strip())
+                    data_start_idx = i + 1
+                else:
+                    break
+
+            # Combine all header parts
+            combined_header = ''.join(header_parts)
+
+            # Reconstruct file
+            fixed_lines = [combined_header] + [l for l in lines[data_start_idx:] if l.strip()]
+            fixed_content = '\n'.join(fixed_lines).encode('utf-8')
+
+            header_cols = len(combined_header.split(','))
+            logger.info(f"Fixed split header: combined {len(header_parts)} lines into {header_cols} columns")
+
+            return fixed_content, True
+
+        return content, False
+
+    except Exception as e:
+        logger.warning(f"Error checking for split header: {e}")
+        return content, False
+
+
+def preprocess_uploaded_files(count_content: bytes, count_filename: str,
+                               meta_content: bytes, meta_filename: str) -> tuple:
+    """
+    Preprocess uploaded files to ensure correct format and sample ID consistency.
+
+    Key features:
+    1. Fixes split headers (header spanning multiple lines)
+    2. Converts TSV to CSV if needed
+    3. Parses GEO series_matrix format
+    4. IMPORTANTLY: Validates sample IDs match between count_matrix and metadata
+       - If mismatch detected, regenerates metadata from count_matrix column names
+
+    Returns:
+        tuple: (processed_count_bytes, processed_meta_bytes, warnings_list)
+    """
+    warnings = []
+
+    # First, fix split headers (common issue with some export tools)
+    count_content, header_was_fixed = fix_split_header(count_content)
+    if header_was_fixed:
+        warnings.append("Fixed split header in count_matrix (header was across multiple lines)")
+
+    # Detect count matrix format
+    count_format = detect_file_format(count_content, count_filename)
+    logger.info(f"Count matrix format detected: {count_format} ({count_filename})")
+
+    if count_format == 'tsv':
+        count_content = convert_tsv_to_csv(count_content)
+        warnings.append(f"Converted count matrix from TSV to CSV format")
+    elif count_format == 'geo_series_matrix':
+        warnings.append("Count matrix appears to be GEO series_matrix format - this may cause issues")
+
+    # Detect metadata format
+    meta_format = detect_file_format(meta_content, meta_filename)
+    logger.info(f"Metadata format detected: {meta_format} ({meta_filename})")
+
+    if meta_format == 'geo_series_matrix':
+        # Parse GEO format and convert to standard metadata
+        # This will automatically use count_matrix column names if they don't start with GSM
+        parsed_meta, _ = parse_geo_series_matrix(meta_content, count_content)
+        if parsed_meta:
+            meta_content = parsed_meta
+            warnings.append(f"Converted GEO series_matrix to standard metadata format")
+        else:
+            warnings.append("Failed to parse GEO series_matrix - manual metadata may be required")
+    elif meta_format == 'tsv':
+        meta_content = convert_tsv_to_csv(meta_content)
+        warnings.append(f"Converted metadata from TSV to CSV format")
+
+    # CRITICAL: Validate sample IDs match between count_matrix and metadata
+    # This catches cases where metadata uses GSM IDs but count_matrix uses sample names
+    try:
+        # Get count_matrix sample IDs (column names)
+        cm_text = count_content.decode('utf-8', errors='ignore')
+        cm_first_line = cm_text.split('\n')[0].strip()
+        cm_delimiter = '\t' if '\t' in cm_first_line else ','
+        cm_columns = [c.strip().strip('"') for c in cm_first_line.split(cm_delimiter)]
+        cm_sample_ids = set(cm_columns[1:])  # Skip gene_id column
+
+        # Get metadata sample IDs
+        meta_text = meta_content.decode('utf-8', errors='ignore')
+        meta_lines = meta_text.strip().split('\n')
+        meta_delimiter = '\t' if '\t' in meta_lines[0] else ','
+
+        # Find sample_id column index
+        meta_header = [c.strip().strip('"').lower() for c in meta_lines[0].split(meta_delimiter)]
+        sample_id_col = 0  # Default to first column
+        for i, col in enumerate(meta_header):
+            if col in ['sample_id', 'sampleid', 'sample', 'id', 'name']:
+                sample_id_col = i
+                break
+
+        meta_sample_ids = set()
+        for line in meta_lines[1:]:
+            if line.strip():
+                parts = line.split(meta_delimiter)
+                if len(parts) > sample_id_col:
+                    meta_sample_ids.add(parts[sample_id_col].strip().strip('"'))
+
+        # Check overlap
+        matching = cm_sample_ids & meta_sample_ids
+        only_in_count = cm_sample_ids - meta_sample_ids
+        only_in_meta = meta_sample_ids - cm_sample_ids
+
+        logger.info(f"Sample ID validation: {len(matching)} matching, {len(only_in_count)} only in count_matrix, {len(only_in_meta)} only in metadata")
+
+        # If very low overlap, metadata is probably wrong - regenerate from count_matrix
+        overlap_ratio = len(matching) / len(cm_sample_ids) if cm_sample_ids else 0
+
+        if overlap_ratio < 0.5 and len(cm_sample_ids) > 0:
+            logger.warning(f"Sample ID mismatch detected! Only {overlap_ratio*100:.1f}% overlap. Regenerating metadata from count_matrix columns.")
+            warnings.append(f"Sample ID mismatch detected ({overlap_ratio*100:.1f}% overlap) - regenerating metadata from count_matrix")
+
+            # Generate metadata from count_matrix column names
+            generated_meta, _ = generate_metadata_from_count_matrix(count_content)
+            if generated_meta:
+                meta_content = generated_meta
+                warnings.append(f"Metadata regenerated from count_matrix column names with T/N suffix detection")
+            else:
+                warnings.append("Failed to generate metadata from count_matrix - analysis may fail")
+
+    except Exception as e:
+        logger.warning(f"Sample ID validation failed: {e}")
+        # Continue without validation
+
+    return count_content, meta_content, warnings
+
+
+# ═══════════════════════════════════════════════════════════════
 # Request/Response Models
 # ═══════════════════════════════════════════════════════════════
 
@@ -710,17 +1188,25 @@ async def upload_rnaseq_files(
     job_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # Save count matrix
+        # Read file contents
+        count_content = await count_matrix.read()
+        meta_content = await metadata.read()
+
+        # Preprocess files (detect format and convert if needed)
+        processed_count, processed_meta, format_warnings = preprocess_uploaded_files(
+            count_content, count_matrix.filename,
+            meta_content, metadata.filename
+        )
+
+        # Save processed count matrix
         count_path = job_dir / "count_matrix.csv"
         with open(count_path, "wb") as f:
-            content = await count_matrix.read()
-            f.write(content)
+            f.write(processed_count)
 
-        # Save metadata
+        # Save processed metadata
         meta_path = job_dir / "metadata.csv"
         with open(meta_path, "wb") as f:
-            content = await metadata.read()
-            f.write(content)
+            f.write(processed_meta)
 
         # Save config
         config = {
@@ -728,13 +1214,20 @@ async def upload_rnaseq_files(
             "study_name": study_name or f"RNA-seq Analysis {job_id}",
             "condition_column": condition_column,
             "contrast": [treatment_label, control_label],
-            "uploaded_at": datetime.now().isoformat()
+            "uploaded_at": datetime.now().isoformat(),
+            "original_files": {
+                "count_matrix": count_matrix.filename,
+                "metadata": metadata.filename
+            },
+            "format_conversions": format_warnings
         }
         config_path = job_dir / "config.json"
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
 
         logger.info(f"Files uploaded for job {job_id}: {count_matrix.filename}, {metadata.filename}")
+        if format_warnings:
+            logger.info(f"Format conversions applied: {format_warnings}")
 
         # Detect data type (bulk vs single-cell)
         data_type_info = {}
