@@ -378,7 +378,22 @@ class NetworkAgent(BaseAgent):
 
         # Hub genes (top hubs with DEG info)
         hub_genes = nodes_df[nodes_df['is_hub'] == True].copy()
-        hub_columns = ['gene_id', 'degree', 'betweenness', 'eigenvector',
+
+        # Add gene_symbol from deg_significant if available
+        if self.deg_significant is not None and 'gene_symbol' in self.deg_significant.columns:
+            gene_id_to_symbol = dict(zip(
+                self.deg_significant['gene_id'].astype(str),
+                self.deg_significant['gene_symbol']
+            ))
+            hub_genes['gene_symbol'] = hub_genes['gene_id'].astype(str).map(
+                lambda x: gene_id_to_symbol.get(x, x)
+            )
+            self.logger.info(f"Added gene_symbol to hub_genes from deg_significant")
+        else:
+            hub_genes['gene_symbol'] = hub_genes['gene_id'].astype(str)
+            self.logger.info("gene_symbol not found in deg_significant, using gene_id")
+
+        hub_columns = ['gene_id', 'gene_symbol', 'degree', 'betweenness', 'eigenvector',
                        'hub_score', 'enhanced_hub_score', 'regulatory_targets',
                        'regulatory_strength', 'log2FC', 'padj', 'direction']
         hub_columns = [c for c in hub_columns if c in hub_genes.columns]

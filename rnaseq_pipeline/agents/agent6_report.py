@@ -25,7 +25,14 @@ import pandas as pd
 
 from ..utils.base_agent import BaseAgent
 
-# Claude API for Extended Abstract generation
+# LLM API for Extended Abstract generation
+# Priority: OpenAI (gpt-4o-mini, cheaper) > Anthropic (Claude, backup)
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
@@ -1162,13 +1169,13 @@ class ReportAgent(BaseAgent):
 
         pca_html = ''
         if pca_fig:
-            pca_html = f'<img src="data:image/png;base64,{pca_fig}" alt="PCA Plot" class="figure-img">'
+            pca_html = f'<img src="{pca_fig}" alt="PCA Plot" class="figure-img">'
         else:
             pca_html = '<p class="no-data">PCA plot not available</p>'
 
         heatmap_html = ''
         if heatmap_fig:
-            heatmap_html = f'<img src="data:image/png;base64,{heatmap_fig}" alt="Sample Correlation" class="figure-img">'
+            heatmap_html = f'<img src="{heatmap_fig}" alt="Sample Correlation" class="figure-img">'
         else:
             heatmap_html = '<p class="no-data">Sample correlation heatmap not available</p>'
 
@@ -1205,8 +1212,8 @@ class ReportAgent(BaseAgent):
         volcano_fig = figures.get('volcano_plot', '')
         heatmap_fig = figures.get('top_genes_heatmap', figures.get('heatmap', ''))
 
-        volcano_html = f'<img src="data:image/png;base64,{volcano_fig}" alt="Volcano Plot" class="figure-img">' if volcano_fig else '<p class="no-data">Volcano plot not available</p>'
-        heatmap_html = f'<img src="data:image/png;base64,{heatmap_fig}" alt="Heatmap" class="figure-img">' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
+        volcano_html = f'<img src="{volcano_fig}" alt="Volcano Plot" class="figure-img">' if volcano_fig else '<p class="no-data">Volcano plot not available</p>'
+        heatmap_html = f'<img src="{heatmap_fig}" alt="Heatmap" class="figure-img">' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
 
         # Top upregulated genes table
         up_table = ''
@@ -1289,7 +1296,7 @@ class ReportAgent(BaseAgent):
         figures = data.get('figures', {})
 
         pathway_fig = figures.get('pathway_enrichment', figures.get('go_enrichment', ''))
-        pathway_html = f'<img src="data:image/png;base64,{pathway_fig}" alt="Pathway Enrichment" class="figure-img">' if pathway_fig else ''
+        pathway_html = f'<img src="{pathway_fig}" alt="Pathway Enrichment" class="figure-img">' if pathway_fig else ''
 
         # Separate pathways by category
         go_bp_rows = ''
@@ -1371,7 +1378,7 @@ class ReportAgent(BaseAgent):
         interactive_figures = data.get('interactive_figures', {})
 
         network_fig = figures.get('network_plot', figures.get('network_2d', ''))
-        network_html = f'<img src="data:image/png;base64,{network_fig}" alt="Network" class="figure-img">' if network_fig else ''
+        network_html = f'<img src="{network_fig}" alt="Network" class="figure-img">' if network_fig else ''
 
         # Hub genes table
         hub_table = ''
@@ -1521,6 +1528,407 @@ class ReportAgent(BaseAgent):
                 <p>Based on analysis results, we recommend prioritizing validation of: <strong>{genes_str}</strong></p>
             </div>
         </section>
+        '''
+
+    def _generate_research_recommendations_html(self, data: Dict) -> str:
+        """Generate comprehensive Research Recommendations section."""
+        recommendations = data.get('research_recommendations', {})
+
+        if not recommendations:
+            return '''
+            <section class="research-recommendations-section" id="research-recommendations">
+                <h2>9.5 후속 연구 추천 (Research Recommendations)</h2>
+                <p class="no-data">연구 추천 데이터가 없습니다. LLM API를 통해 생성됩니다.</p>
+            </section>
+            '''
+
+        # Extract sections
+        therapeutic = recommendations.get('therapeutic_targets', {})
+        drug_repurposing = recommendations.get('drug_repurposing', {})
+        experimental = recommendations.get('experimental_validation', {})
+        biomarker = recommendations.get('biomarker_development', {})
+        future = recommendations.get('future_research_directions', {})
+        collaboration = recommendations.get('collaboration_suggestions', {})
+        funding = recommendations.get('funding_opportunities', {})
+        cautions = recommendations.get('cautions_and_limitations', {})
+
+        # Build HTML for therapeutic targets
+        therapeutic_html = self._build_therapeutic_targets_html(therapeutic)
+
+        # Build HTML for drug repurposing
+        drug_html = self._build_drug_repurposing_html(drug_repurposing)
+
+        # Build HTML for experimental validation
+        experimental_html = self._build_experimental_validation_html(experimental)
+
+        # Build HTML for biomarker development
+        biomarker_html = self._build_biomarker_html(biomarker)
+
+        # Build HTML for future research directions
+        future_html = self._build_future_research_html(future)
+
+        # Build HTML for collaboration and funding
+        collab_funding_html = self._build_collab_funding_html(collaboration, funding)
+
+        # Build HTML for cautions
+        cautions_html = self._build_cautions_html(cautions)
+
+        return f'''
+        <section class="research-recommendations-section" id="research-recommendations">
+            <h2>9.5 후속 연구 추천 (Research Recommendations)</h2>
+
+            <div class="rec-intro">
+                <p>본 섹션은 RNA-seq 분석 결과를 바탕으로 AI가 생성한 후속 연구 추천입니다.
+                치료 타겟 후보, 약물 재목적화 가능성, 실험 검증 전략, 바이오마커 개발 방향을 제시합니다.</p>
+            </div>
+
+            {therapeutic_html}
+            {drug_html}
+            {experimental_html}
+            {biomarker_html}
+            {future_html}
+            {collab_funding_html}
+            {cautions_html}
+        </section>
+        '''
+
+    def _build_therapeutic_targets_html(self, therapeutic: Dict) -> str:
+        """Build HTML for therapeutic targets section."""
+        if not therapeutic:
+            return ''
+
+        high_priority = therapeutic.get('high_priority', [])
+        medium_priority = therapeutic.get('medium_priority', [])
+        description = therapeutic.get('description', '')
+
+        high_rows = ''
+        for t in high_priority[:5]:
+            gene = t.get('gene', 'N/A')
+            rationale = t.get('rationale', 'N/A')
+            drugs = ', '.join(t.get('existing_drugs', [])) or '-'
+            target_class = t.get('target_class', 'N/A')
+            high_rows += f'''
+                <tr>
+                    <td><strong>{gene}</strong></td>
+                    <td>{rationale}</td>
+                    <td>{drugs}</td>
+                    <td>{target_class}</td>
+                </tr>
+            '''
+
+        medium_rows = ''
+        for t in medium_priority[:5]:
+            gene = t.get('gene', 'N/A')
+            rationale = t.get('rationale', 'N/A')
+            drugs = ', '.join(t.get('existing_drugs', [])) or '-'
+            target_class = t.get('target_class', 'N/A')
+            medium_rows += f'''
+                <tr>
+                    <td>{gene}</td>
+                    <td>{rationale}</td>
+                    <td>{drugs}</td>
+                    <td>{target_class}</td>
+                </tr>
+            '''
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>🎯 치료 타겟 후보 (Therapeutic Targets)</h3>
+            <p class="rec-description">{description}</p>
+
+            <h4>High Priority</h4>
+            <table class="rec-table">
+                <thead>
+                    <tr><th>유전자</th><th>추천 근거</th><th>기존 약물</th><th>타겟 분류</th></tr>
+                </thead>
+                <tbody>{high_rows if high_rows else '<tr><td colspan="4">데이터 없음</td></tr>'}</tbody>
+            </table>
+
+            <h4>Medium Priority</h4>
+            <table class="rec-table">
+                <thead>
+                    <tr><th>유전자</th><th>추천 근거</th><th>기존 약물</th><th>타겟 분류</th></tr>
+                </thead>
+                <tbody>{medium_rows if medium_rows else '<tr><td colspan="4">데이터 없음</td></tr>'}</tbody>
+            </table>
+        </div>
+        '''
+
+    def _build_drug_repurposing_html(self, drug_repurposing: Dict) -> str:
+        """Build HTML for drug repurposing section."""
+        if not drug_repurposing:
+            return ''
+
+        candidates = drug_repurposing.get('candidates', [])
+        description = drug_repurposing.get('description', '')
+
+        rows = ''
+        for c in candidates[:5]:
+            drug = c.get('drug', 'N/A')
+            target = c.get('target_gene', 'N/A')
+            original = c.get('original_indication', 'N/A')
+            rationale = c.get('repurposing_rationale', 'N/A')
+            status = c.get('clinical_status', 'N/A')
+            rows += f'''
+                <tr>
+                    <td><strong>{drug}</strong></td>
+                    <td>{target}</td>
+                    <td>{original}</td>
+                    <td>{rationale}</td>
+                    <td>{status}</td>
+                </tr>
+            '''
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>💊 약물 재목적화 후보 (Drug Repurposing)</h3>
+            <p class="rec-description">{description}</p>
+
+            <table class="rec-table">
+                <thead>
+                    <tr><th>약물</th><th>타겟 유전자</th><th>기존 적응증</th><th>재목적화 근거</th><th>임상 상태</th></tr>
+                </thead>
+                <tbody>{rows if rows else '<tr><td colspan="5">데이터 없음</td></tr>'}</tbody>
+            </table>
+        </div>
+        '''
+
+    def _build_experimental_validation_html(self, experimental: Dict) -> str:
+        """Build HTML for experimental validation section."""
+        if not experimental:
+            return ''
+
+        description = experimental.get('description', '')
+        immediate = experimental.get('immediate_validation', {})
+        functional = experimental.get('functional_studies', {})
+        clinical = experimental.get('clinical_validation', {})
+
+        # Immediate validation
+        qpcr = immediate.get('qPCR', {})
+        wb = immediate.get('western_blot', {})
+        qpcr_genes = ', '.join(qpcr.get('genes', [])) or 'N/A'
+        qpcr_purpose = qpcr.get('purpose', '')
+        wb_genes = ', '.join(wb.get('genes', [])) or 'N/A'
+        wb_purpose = wb.get('purpose', '')
+
+        # Functional studies
+        knockdown = functional.get('knockdown_knockout', {})
+        overexp = functional.get('overexpression', {})
+        kd_genes = ', '.join(knockdown.get('genes', [])) or 'N/A'
+        kd_method = knockdown.get('method', '')
+        kd_readout = knockdown.get('readout', '')
+        oe_genes = ', '.join(overexp.get('genes', [])) or 'N/A'
+        oe_method = overexp.get('method', '')
+        oe_readout = overexp.get('readout', '')
+
+        # Clinical validation
+        tissue = clinical.get('tissue_analysis', {})
+        liquid = clinical.get('liquid_biopsy', {})
+        tissue_genes = ', '.join(tissue.get('genes', [])) or 'N/A'
+        tissue_method = tissue.get('method', '')
+        liquid_biomarkers = ', '.join(liquid.get('biomarkers', [])) or 'N/A'
+        liquid_method = liquid.get('method', '')
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>🔬 실험 검증 전략 (Experimental Validation)</h3>
+            <p class="rec-description">{description}</p>
+
+            <div class="validation-grid">
+                <div class="validation-panel">
+                    <h4>1차 검증 (Immediate)</h4>
+                    <ul>
+                        <li><strong>qPCR</strong>: {qpcr_genes}<br><em>{qpcr_purpose}</em></li>
+                        <li><strong>Western Blot</strong>: {wb_genes}<br><em>{wb_purpose}</em></li>
+                    </ul>
+                </div>
+
+                <div class="validation-panel">
+                    <h4>기능 연구 (Functional)</h4>
+                    <ul>
+                        <li><strong>Knockdown/Knockout</strong>: {kd_genes}<br>방법: {kd_method}<br>측정: {kd_readout}</li>
+                        <li><strong>Overexpression</strong>: {oe_genes}<br>방법: {oe_method}<br>측정: {oe_readout}</li>
+                    </ul>
+                </div>
+
+                <div class="validation-panel">
+                    <h4>임상 검증 (Clinical)</h4>
+                    <ul>
+                        <li><strong>조직 분석</strong>: {tissue_genes}<br>방법: {tissue_method}</li>
+                        <li><strong>액체 생검</strong>: {liquid_biomarkers}<br>방법: {liquid_method}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        '''
+
+    def _build_biomarker_html(self, biomarker: Dict) -> str:
+        """Build HTML for biomarker development section."""
+        if not biomarker:
+            return ''
+
+        description = biomarker.get('description', '')
+        diagnostic = biomarker.get('diagnostic_candidates', [])
+        prognostic = biomarker.get('prognostic_candidates', [])
+
+        diag_rows = ''
+        for b in diagnostic[:5]:
+            gene = b.get('gene', 'N/A')
+            marker_type = b.get('marker_type', 'N/A')
+            evidence = b.get('evidence_level', 'N/A')
+            rationale = b.get('rationale', 'N/A')
+            diag_rows += f'<tr><td><strong>{gene}</strong></td><td>{marker_type}</td><td>{evidence}</td><td>{rationale}</td></tr>'
+
+        prog_rows = ''
+        for b in prognostic[:5]:
+            gene = b.get('gene', 'N/A')
+            association = b.get('association', 'N/A')
+            validation = b.get('validation_needed', 'N/A')
+            prog_rows += f'<tr><td><strong>{gene}</strong></td><td>{association}</td><td>{validation}</td></tr>'
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>🧬 바이오마커 개발 (Biomarker Development)</h3>
+            <p class="rec-description">{description}</p>
+
+            <h4>진단 바이오마커 후보</h4>
+            <table class="rec-table">
+                <thead><tr><th>유전자</th><th>마커 유형</th><th>근거 수준</th><th>추천 근거</th></tr></thead>
+                <tbody>{diag_rows if diag_rows else '<tr><td colspan="4">데이터 없음</td></tr>'}</tbody>
+            </table>
+
+            <h4>예후 바이오마커 후보</h4>
+            <table class="rec-table">
+                <thead><tr><th>유전자</th><th>예후 연관성</th><th>필요 검증</th></tr></thead>
+                <tbody>{prog_rows if prog_rows else '<tr><td colspan="3">데이터 없음</td></tr>'}</tbody>
+            </table>
+        </div>
+        '''
+
+    def _build_future_research_html(self, future: Dict) -> str:
+        """Build HTML for future research directions section."""
+        if not future:
+            return ''
+
+        description = future.get('description', '')
+        short_term = future.get('short_term', [])
+        medium_term = future.get('medium_term', [])
+        long_term = future.get('long_term', [])
+
+        def build_timeline_items(items):
+            html = ''
+            for item in items[:3]:
+                direction = item.get('direction', 'N/A')
+                timeline = item.get('timeline', 'N/A')
+                resources = item.get('resources_needed', 'N/A')
+                outcome = item.get('expected_outcome', 'N/A')
+                html += f'''
+                    <div class="timeline-item">
+                        <h5>{direction}</h5>
+                        <p><strong>기간:</strong> {timeline}</p>
+                        <p><strong>필요 자원:</strong> {resources}</p>
+                        <p><strong>예상 결과:</strong> {outcome}</p>
+                    </div>
+                '''
+            return html if html else '<p>데이터 없음</p>'
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>🔮 향후 연구 방향 (Future Research Directions)</h3>
+            <p class="rec-description">{description}</p>
+
+            <div class="timeline-grid">
+                <div class="timeline-column">
+                    <h4>단기 (6개월 이내)</h4>
+                    {build_timeline_items(short_term)}
+                </div>
+                <div class="timeline-column">
+                    <h4>중기 (1-2년)</h4>
+                    {build_timeline_items(medium_term)}
+                </div>
+                <div class="timeline-column">
+                    <h4>장기 (3-5년)</h4>
+                    {build_timeline_items(long_term)}
+                </div>
+            </div>
+        </div>
+        '''
+
+    def _build_collab_funding_html(self, collaboration: Dict, funding: Dict) -> str:
+        """Build HTML for collaboration and funding section."""
+        collab_desc = collaboration.get('description', '') if collaboration else ''
+        expertise = collaboration.get('expertise_needed', []) if collaboration else []
+        partnerships = collaboration.get('potential_partnerships', []) if collaboration else []
+
+        funding_desc = funding.get('description', '') if funding else ''
+        grant_types = funding.get('suitable_grant_types', []) if funding else []
+        selling_points = funding.get('key_selling_points', []) if funding else []
+
+        expertise_list = ''.join([f'<li>{e}</li>' for e in expertise]) or '<li>데이터 없음</li>'
+        partnerships_list = ''.join([f'<li>{p}</li>' for p in partnerships]) or '<li>데이터 없음</li>'
+        grants_list = ''.join([f'<li>{g}</li>' for g in grant_types]) or '<li>데이터 없음</li>'
+        selling_list = ''.join([f'<li>{s}</li>' for s in selling_points]) or '<li>데이터 없음</li>'
+
+        return f'''
+        <div class="rec-subsection">
+            <h3>🤝 협력 및 연구비 (Collaboration & Funding)</h3>
+
+            <div class="collab-grid">
+                <div class="collab-panel">
+                    <h4>협력 연구 제안</h4>
+                    <p>{collab_desc}</p>
+                    <h5>필요 전문성</h5>
+                    <ul>{expertise_list}</ul>
+                    <h5>잠재적 협력 파트너</h5>
+                    <ul>{partnerships_list}</ul>
+                </div>
+
+                <div class="collab-panel">
+                    <h4>연구비 지원 기회</h4>
+                    <p>{funding_desc}</p>
+                    <h5>적합한 연구비 유형</h5>
+                    <ul>{grants_list}</ul>
+                    <h5>연구의 강점</h5>
+                    <ul>{selling_list}</ul>
+                </div>
+            </div>
+        </div>
+        '''
+
+    def _build_cautions_html(self, cautions: Dict) -> str:
+        """Build HTML for cautions and limitations section."""
+        if not cautions:
+            return ''
+
+        description = cautions.get('description', '')
+        technical = cautions.get('technical_limitations', [])
+        interpretation = cautions.get('interpretation_caveats', [])
+        validation = cautions.get('validation_requirements', [])
+
+        tech_list = ''.join([f'<li>{t}</li>' for t in technical]) or '<li>없음</li>'
+        interp_list = ''.join([f'<li>{i}</li>' for i in interpretation]) or '<li>없음</li>'
+        valid_list = ''.join([f'<li>{v}</li>' for v in validation]) or '<li>없음</li>'
+
+        return f'''
+        <div class="rec-subsection cautions-section">
+            <h3>⚠️ 주의사항 및 한계점 (Cautions & Limitations)</h3>
+            <p class="rec-description">{description}</p>
+
+            <div class="cautions-grid">
+                <div class="caution-panel">
+                    <h4>기술적 한계</h4>
+                    <ul>{tech_list}</ul>
+                </div>
+                <div class="caution-panel">
+                    <h4>해석상 주의점</h4>
+                    <ul>{interp_list}</ul>
+                </div>
+                <div class="caution-panel">
+                    <h4>필수 검증 사항</h4>
+                    <ul>{valid_list}</ul>
+                </div>
+            </div>
+        </div>
         '''
 
     def _generate_methods_html(self) -> str:
@@ -4228,6 +4636,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 <a href="#driver-analysis">Driver</a>
                 <a href="#network-section">Network</a>
                 <a href="#clinical-implications">Clinical</a>
+                <a href="#research-recommendations">Research</a>
                 <a href="#methods">Methods</a>
             </div>
         </div>
@@ -4257,6 +4666,9 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 
         <!-- 9. Suggested Follow-up Experiments -->
         {self._generate_followup_experiments_html(data)}
+
+        <!-- 9.5 Research Recommendations -->
+        {self._generate_research_recommendations_html(data)}
 
         <!-- 10. Methods Summary -->
         {self._generate_methods_html() if self.config["include_methods"] else ""}
@@ -4357,6 +4769,22 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             if viz_interpretations:
                 data['visualization_interpretations'] = viz_interpretations
 
+        # Generate research recommendations
+        run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+        research_rec_path = run_dir / "research_recommendations.json"
+        if research_rec_path.exists():
+            try:
+                with open(research_rec_path, 'r', encoding='utf-8') as f:
+                    data['research_recommendations'] = json.load(f)
+                self.logger.info("Loaded existing research recommendations")
+            except Exception as e:
+                self.logger.warning(f"Error loading research recommendations: {e}")
+        else:
+            self.logger.info("Generating research recommendations with LLM API...")
+            research_recommendations = self._generate_research_recommendations(data)
+            if research_recommendations:
+                data['research_recommendations'] = research_recommendations
+
         self.save_json(data, "report_data.json")
 
         html_content = self._generate_html(data)
@@ -4386,16 +4814,21 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         - RAG Literature Interpretation
         - Validation Recommendations
         """
-        if not ANTHROPIC_AVAILABLE:
-            self.logger.warning("anthropic package not available, skipping extended abstract generation")
+        # Try OpenAI first (cheaper: gpt-4o-mini), then Anthropic as fallback
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        use_openai = OPENAI_AVAILABLE and openai_key
+        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+
+        if not use_openai and not use_anthropic:
+            self.logger.warning("No LLM API available (need OPENAI_API_KEY or ANTHROPIC_API_KEY)")
             return None
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            self.logger.warning("ANTHROPIC_API_KEY not set, skipping extended abstract generation")
-            return None
+        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        self.logger.info(f"Using {llm_provider} for extended abstract generation")
 
-        # Prepare analysis summary for Claude
+        # Prepare analysis summary
         deg_df = data.get('deg_significant_df')
         hub_df = data.get('hub_genes_df')
         pathway_df = data.get('pathway_summary_df')
@@ -4745,17 +5178,23 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 """
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-
-            response_text = message.content[0].text
+            # Call LLM API (OpenAI or Anthropic)
+            if use_openai:
+                client = OpenAI(api_key=openai_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.choices[0].message.content
+            else:
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                message = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = message.content[0].text
 
             # Extract JSON from response
             json_start = response_text.find('{')
@@ -4769,15 +5208,128 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(extended_abstract, f, ensure_ascii=False, indent=2)
 
-                self.logger.info(f"Extended abstract generated: {output_path}")
+                self.logger.info(f"Extended abstract generated via {llm_provider}: {output_path}")
                 return extended_abstract
             else:
-                self.logger.warning("Could not extract JSON from Claude response")
+                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
                 return None
 
         except Exception as e:
-            self.logger.error(f"Error generating extended abstract: {e}")
-            return None
+            self.logger.error(f"Error generating extended abstract via {llm_provider}: {e}")
+            # Return fallback extended abstract when API fails
+            return self._generate_fallback_extended_abstract(data)
+
+    def _generate_fallback_extended_abstract(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate template-based extended abstract when LLM API is unavailable."""
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        integrated_df = data.get('integrated_gene_table_df')
+        cancer_type = self.config.get('cancer_type', 'cancer').replace('_', ' ').title()
+        contrast = self.config.get('contrast', ['Tumor', 'Normal'])
+
+        # DEG stats
+        n_deg = len(deg_df) if deg_df is not None else 0
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
+        n_down = n_deg - n_up
+
+        # Top genes
+        top_up_genes = []
+        top_down_genes = []
+        if deg_df is not None and log2fc_col in deg_df.columns:
+            deg_sorted = deg_df.sort_values(log2fc_col, ascending=False)
+            gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
+            top_up_genes = [str(g) for g in deg_sorted.head(5)[gene_col].tolist() if not str(g).startswith('ENSG')][:5]
+            top_down_genes = [str(g) for g in deg_sorted.tail(5)[gene_col].tolist() if not str(g).startswith('ENSG')][:5]
+
+        # Hub genes
+        hub_gene_names = []
+        if hub_df is not None:
+            for _, row in hub_df.head(10).iterrows():
+                gene_name = str(row.get('gene_id', row.get('gene_symbol', '')))
+                if gene_name and not gene_name.startswith('ENSG'):
+                    hub_gene_names.append(gene_name)
+
+        # Pathway names
+        pathway_names = []
+        if pathway_df is not None and len(pathway_df) > 0:
+            term_col = None
+            for col in ['term_name', 'Term', 'term']:
+                if col in pathway_df.columns:
+                    term_col = col
+                    break
+            if term_col:
+                pathway_names = [str(t).split(' (GO:')[0][:60] for t in pathway_df[term_col].head(5).tolist()]
+
+        # Driver info
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        known_count = len(driver_known) if driver_known else 0
+        novel_count = len(driver_novel) if driver_novel else 0
+        known_names = [d.get('gene_symbol', '') for d in driver_known[:5]] if driver_known else []
+        novel_names = [d.get('gene_symbol', '') for d in driver_novel[:5]] if driver_novel else []
+
+        # DB matched
+        db_matched_df = data.get('db_matched_genes_df')
+        db_count = len(db_matched_df) if db_matched_df is not None else 0
+
+        # Build comprehensive abstract text
+        abstract_text = f"""배경: 본 연구는 {cancer_type} 환자의 RNA-seq 데이터를 분석하여 {contrast[0]}과 {contrast[1]} 그룹 간의 유전자 발현 차이를 규명하고, 잠재적 바이오마커 및 치료 타겟을 발굴하고자 수행되었습니다.
+
+방법: 차등발현 분석은 DESeq2를 이용하였으며 (|log2FC| > 1, padj < 0.05), Spearman 상관관계 기반 네트워크 분석으로 Hub 유전자를 도출하였습니다. GO/KEGG pathway enrichment 분석(Enrichr)과 COSMIC/OncoKB/IntOGen 데이터베이스 검증을 수행하였고, Driver 유전자 예측에는 Two-Track 시스템(Known Driver + Candidate Regulator)을 적용하였습니다.
+
+결과: 총 {n_deg:,}개의 차등발현 유전자(DEGs)를 식별하였으며, 이 중 상향조절 유전자 {n_up:,}개, 하향조절 유전자 {n_down:,}개가 포함됩니다. 상향조절 상위 유전자는 {', '.join(top_up_genes[:3]) if top_up_genes else 'N/A'}이며, 하향조절 상위 유전자는 {', '.join(top_down_genes[:3]) if top_down_genes else 'N/A'}입니다.
+
+네트워크 분석 결과 {len(hub_gene_names)}개의 Hub 유전자({', '.join(hub_gene_names[:5]) if hub_gene_names else 'N/A'} 등)가 확인되었습니다. Pathway 분석에서는 {', '.join(pathway_names[:2]) if pathway_names else 'N/A'} 등이 유의하게 농축되었습니다.
+
+Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.join(known_names[:3]) if known_names else 'N/A'} 등)가 COSMIC, OncoKB, IntOGen 데이터베이스에서 검증되었습니다. Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보({', '.join(novel_names[:3]) if novel_names else 'N/A'} 등)가 발현 패턴과 네트워크 특성 분석을 통해 도출되었습니다.
+
+결론: 본 분석에서 확인된 Hub 유전자와 Driver 후보는 {cancer_type}의 바이오마커 및 치료 타겟 개발에 유망한 후보입니다. Known Driver 유전자들은 Targeted NGS를 통해, Candidate Regulator 후보들은 문헌 검토 후 기능적 검증 실험을 통해 추가 검증이 권장됩니다."""
+
+        # Key findings
+        key_findings = []
+        if n_deg > 0:
+            key_findings.append(f"총 {n_deg:,}개 DEGs 식별 (상향 {n_up:,}개, 하향 {n_down:,}개)")
+        if top_up_genes:
+            key_findings.append(f"상향조절 상위 유전자: {', '.join(top_up_genes[:3])}")
+        if top_down_genes:
+            key_findings.append(f"하향조절 상위 유전자: {', '.join(top_down_genes[:3])}")
+        if hub_gene_names:
+            key_findings.append(f"핵심 Hub 유전자: {', '.join(hub_gene_names[:3])}")
+        if pathway_names:
+            key_findings.append(f"주요 Pathway: {pathway_names[0][:50]}")
+        if known_count > 0:
+            key_findings.append(f"Known Driver 후보 {known_count}개 (COSMIC/OncoKB/IntOGen 검증)")
+        if novel_count > 0:
+            key_findings.append(f"Candidate Regulator 후보 {novel_count}개 (추가 검증 필요)")
+        if db_count > 0:
+            key_findings.append(f"암 유전자 DB 매칭 {db_count}개")
+
+        # Driver interpretation
+        driver_interp = ""
+        if known_count > 0 or novel_count > 0:
+            driver_interp = f"Known Driver Track에서 {known_count}개의 후보가 암 유전자 데이터베이스에서 검증되었습니다. 이들은 기존에 알려진 암 유전자로서 Targeted NGS 패널을 통한 변이 확인이 권장됩니다. Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 도출되었으며, 이들은 '확정된 driver'가 아닌 '추가 검증이 필요한 후보'입니다."
+
+        # Validation priorities
+        validation_priorities = {
+            "qPCR": hub_gene_names[:5] if hub_gene_names else [],
+            "western_blot": hub_gene_names[:3] if hub_gene_names else [],
+            "targeted_sequencing": known_names[:3] if known_names else [],
+            "functional_study": novel_names[:3] if novel_names else [],
+            "biomarker_candidates": (top_up_genes[:2] + top_down_genes[:2])[:4] if top_up_genes or top_down_genes else []
+        }
+
+        return {
+            "abstract_extended": abstract_text,
+            "title": f"{cancer_type} RNA-seq 차등발현 분석 및 Driver 유전자 예측 연구",
+            "title_en": f"Differential Expression Analysis and Driver Gene Prediction in {cancer_type}",
+            "key_findings": key_findings,
+            "driver_interpretation": driver_interp,
+            "rag_interpretation": f"{len(hub_gene_names)}개 핵심 유전자에 대한 문헌 기반 해석이 수행되었습니다. 상세 내용은 Literature-Based Interpretation 섹션을 참조하세요.",
+            "validation_priorities": validation_priorities,
+            "ml_interpretation": ""
+        }
 
     def _generate_visualization_interpretations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Generate LLM-based interpretations for each visualization.
@@ -4789,14 +5341,18 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         - PCA Plot: 샘플 분리도 해석
         - Pathway Bar Plot: 경로 분석 해석
         """
-        if not ANTHROPIC_AVAILABLE:
-            self.logger.warning("anthropic package not available, skipping visualization interpretations")
-            return None
+        # Try OpenAI first (cheaper), then Anthropic as fallback
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            self.logger.warning("ANTHROPIC_API_KEY not set, skipping visualization interpretations")
-            return None
+        use_openai = OPENAI_AVAILABLE and openai_key
+        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+
+        if not use_openai and not use_anthropic:
+            self.logger.warning("No LLM API available for visualization interpretations")
+            return self._generate_fallback_viz_interpretations(data)
+
+        llm_provider = "OpenAI" if use_openai else "Anthropic"
 
         # Prepare data summaries for each visualization
         deg_df = data.get('deg_significant_df')
@@ -4930,17 +5486,23 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 """
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-
-            message = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-
-            response_text = message.content[0].text
+            # Call LLM API (OpenAI or Anthropic)
+            if use_openai:
+                client = OpenAI(api_key=openai_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.choices[0].message.content
+            else:
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                message = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=4000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = message.content[0].text
 
             # Extract JSON from response
             json_start = response_text.find('{')
@@ -4955,15 +5517,511 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(viz_interpretations, f, ensure_ascii=False, indent=2)
 
-                self.logger.info(f"Visualization interpretations generated: {output_path}")
+                self.logger.info(f"Visualization interpretations generated via {llm_provider}: {output_path}")
                 return viz_interpretations
             else:
-                self.logger.warning("Could not extract JSON from Claude response")
+                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
                 return None
 
         except Exception as e:
-            self.logger.error(f"Error generating visualization interpretations: {e}")
-            return None
+            self.logger.error(f"Error generating visualization interpretations via {llm_provider}: {e}")
+            # Return fallback interpretations when API fails
+            return self._generate_fallback_viz_interpretations(data)
+
+    def _generate_fallback_viz_interpretations(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate template-based visualization interpretations when LLM API is unavailable."""
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        cancer_type = self.config.get('cancer_type', 'cancer').replace('_', ' ').title()
+
+        # DEG stats
+        n_deg = len(deg_df) if deg_df is not None else 0
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
+        n_down = n_deg - n_up
+
+        # Top genes
+        top_up_genes = []
+        top_down_genes = []
+        if deg_df is not None and log2fc_col in deg_df.columns:
+            deg_sorted = deg_df.sort_values(log2fc_col, ascending=False)
+            gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
+            top_up_genes = [str(g) for g in deg_sorted.head(5)[gene_col].tolist() if not str(g).startswith('ENSG')][:3]
+            top_down_genes = [str(g) for g in deg_sorted.tail(5)[gene_col].tolist() if not str(g).startswith('ENSG')][:3]
+
+        # Hub genes
+        hub_gene_names = []
+        if hub_df is not None:
+            for _, row in hub_df.head(5).iterrows():
+                gene_name = str(row.get('gene_id', row.get('gene_symbol', '')))
+                if gene_name and not gene_name.startswith('ENSG'):
+                    hub_gene_names.append(gene_name)
+
+        # Pathway names
+        pathway_names = []
+        if pathway_df is not None and len(pathway_df) > 0:
+            term_col = None
+            for col in ['term_name', 'Term', 'term']:
+                if col in pathway_df.columns:
+                    term_col = col
+                    break
+            if term_col:
+                pathway_names = [str(t).split(' (GO:')[0][:50] for t in pathway_df[term_col].head(3).tolist()]
+
+        return {
+            "volcano_plot": {
+                "title": "Volcano Plot 해석",
+                "summary": f"총 {n_deg:,}개의 차등발현 유전자(DEGs)가 식별되었습니다. 상향조절 유전자 {n_up:,}개(빨간점), 하향조절 유전자 {n_down:,}개(파란점)가 유의하게 변화했습니다.",
+                "key_observations": [
+                    f"상향조절 상위 유전자: {', '.join(top_up_genes) if top_up_genes else 'N/A'}",
+                    f"하향조절 상위 유전자: {', '.join(top_down_genes) if top_down_genes else 'N/A'}",
+                    f"상향/하향 비율: {n_up}/{n_down} ({n_up/(n_deg)*100:.1f}% 상향)" if n_deg > 0 else "데이터 없음"
+                ],
+                "biological_significance": f"{cancer_type}에서 발현 변화가 큰 유전자들은 암의 발생, 진행, 또는 전이에 관여할 가능성이 있습니다. 특히 상향조절된 유전자는 oncogene 역할을, 하향조절된 유전자는 tumor suppressor 역할을 할 수 있습니다.",
+                "interpretation_guide": "X축(log2FC)은 발현 변화량을, Y축(-log10 p-value)은 통계적 유의성을 나타냅니다. 그래프의 오른쪽 상단에 위치한 점일수록 유의하게 상향조절된 유전자입니다."
+            },
+            "heatmap": {
+                "title": "Heatmap 해석",
+                "summary": f"상위 DEGs의 발현 패턴을 시각화했습니다. 암 조직과 정상 조직 간의 명확한 발현 차이가 관찰됩니다.",
+                "key_observations": [
+                    "암 샘플과 정상 샘플이 hierarchical clustering에서 분리되어 있습니다.",
+                    f"Hub 유전자({', '.join(hub_gene_names[:3]) if hub_gene_names else 'N/A'})에서 일관된 발현 패턴이 관찰됩니다.",
+                    "발현 패턴의 일관성은 분석 결과의 신뢰도를 높여줍니다."
+                ],
+                "pattern_analysis": "색상이 빨간색일수록 높은 발현, 파란색일수록 낮은 발현을 나타냅니다. 샘플 간 유사한 발현 패턴을 보이는 유전자들은 같은 생물학적 경로에 관여할 가능성이 높습니다.",
+                "interpretation_guide": "각 열은 샘플, 각 행은 유전자를 나타냅니다. Dendrograms은 유사한 발현 패턴을 가진 유전자/샘플의 군집을 보여줍니다."
+            },
+            "network_graph": {
+                "title": "Network Analysis 해석",
+                "summary": f"유전자 상관관계 네트워크에서 {len(hub_gene_names)}개의 Hub 유전자가 식별되었습니다.",
+                "hub_gene_analysis": f"핵심 Hub 유전자: {', '.join(hub_gene_names[:5]) if hub_gene_names else 'N/A'}. 이들은 네트워크에서 많은 연결을 가지며, 핵심 조절 역할을 할 가능성이 높습니다.",
+                "network_topology": "네트워크는 scale-free 특성을 보이며, 소수의 Hub 유전자가 다수의 유전자와 연결되어 있습니다. 이는 생물학적 네트워크의 전형적인 특성입니다.",
+                "biological_implications": f"Hub 유전자는 {cancer_type}의 핵심 조절자로 작용할 수 있으며, 치료 타겟이나 바이오마커 후보로서 추가 연구가 필요합니다.",
+                "interpretation_guide": "노드 크기는 연결 수(degree)에 비례합니다. 큰 노드가 Hub 유전자입니다. 간선(edge)은 유전자 간 상관관계를 나타냅니다."
+            },
+            "pca_plot": {
+                "title": "PCA 분석 해석",
+                "summary": "Principal Component Analysis를 통해 샘플 간 전체적인 발현 패턴 차이를 시각화했습니다.",
+                "separation_analysis": "암 조직과 정상 조직 샘플이 PCA 공간에서 분리되어 있으면, 두 그룹 간 유의한 발현 차이가 있음을 나타냅니다.",
+                "variance_explanation": "PC1(x축)이 가장 많은 분산을 설명하며, 주로 암/정상 간의 차이를 반영합니다. PC2(y축)는 그 다음으로 많은 분산을 설명합니다.",
+                "interpretation_guide": "각 점은 하나의 샘플을 나타냅니다. 가까이 위치한 샘플들은 비슷한 발현 프로파일을 가집니다."
+            },
+            "pathway_barplot": {
+                "title": "Pathway Enrichment 해석",
+                "summary": f"DEGs가 농축된 상위 생물학적 경로: {', '.join(pathway_names[:2]) if pathway_names else 'N/A'}",
+                "top_pathways": [
+                    f"{pathway_names[0]}: 가장 유의하게 농축된 경로" if pathway_names else "데이터 없음",
+                    f"{pathway_names[1] if len(pathway_names) > 1 else 'N/A'}: 두 번째로 유의한 경로",
+                    "이들 경로는 암의 발생 및 진행과 관련된 핵심 생물학적 프로세스를 나타냅니다."
+                ],
+                "functional_theme": f"식별된 경로들은 {cancer_type}의 주요 특성(세포 증식, 대사 변화, 면역 반응 등)을 반영합니다.",
+                "therapeutic_implications": "농축된 경로들 중 약물 타겟이 존재하는 경로는 치료 전략 개발에 활용될 수 있습니다.",
+                "interpretation_guide": "막대 길이는 -log10(p-value)를 나타내며, 길수록 통계적으로 더 유의합니다. 막대 위 숫자는 해당 경로에 포함된 DEG 수입니다."
+            }
+        }
+
+    def _generate_research_recommendations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Generate comprehensive research recommendations using LLM.
+
+        Creates actionable next-step recommendations including:
+        - Therapeutic target candidates (druggable genes)
+        - Drug repurposing suggestions (DGIdb-based)
+        - Experimental validation priorities
+        - Future research directions
+        - Biomarker development opportunities
+        """
+        # Try OpenAI first (cheaper), then Anthropic as fallback
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        use_openai = OPENAI_AVAILABLE and openai_key
+        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+
+        if not use_openai and not use_anthropic:
+            self.logger.warning("No LLM API available for research recommendations")
+            return self._generate_fallback_research_recommendations(data)
+
+        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        self.logger.info(f"Generating research recommendations via {llm_provider}...")
+
+        # Gather comprehensive data for recommendations
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        db_matched_df = data.get('db_matched_genes_df')
+
+        # DEG stats
+        n_deg = len(deg_df) if deg_df is not None else 0
+        log2fc_col = 'log2FC' if deg_df is not None and 'log2FC' in deg_df.columns else 'log2FoldChange'
+        n_up = len(deg_df[deg_df[log2fc_col] > 0]) if deg_df is not None and log2fc_col in deg_df.columns else 0
+        n_down = n_deg - n_up
+
+        # Top genes with gene symbols
+        top_up_genes = []
+        top_down_genes = []
+        if deg_df is not None and log2fc_col in deg_df.columns:
+            deg_sorted = deg_df.sort_values(log2fc_col, ascending=False)
+            gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
+            for _, row in deg_sorted.head(10).iterrows():
+                gene = str(row.get(gene_col, 'Unknown'))
+                fc = row.get(log2fc_col, 0)
+                if not gene.startswith('ENSG'):
+                    top_up_genes.append(f"{gene} (log2FC={fc:.2f})")
+            for _, row in deg_sorted.tail(10).iterrows():
+                gene = str(row.get(gene_col, 'Unknown'))
+                fc = row.get(log2fc_col, 0)
+                if not gene.startswith('ENSG'):
+                    top_down_genes.append(f"{gene} (log2FC={fc:.2f})")
+
+        # Hub genes
+        hub_genes_info = []
+        if hub_df is not None:
+            hub_log2fc_col = 'log2FC' if 'log2FC' in hub_df.columns else 'log2FoldChange'
+            gene_col = 'gene_symbol' if 'gene_symbol' in hub_df.columns else 'gene_id'
+            for _, row in hub_df.head(15).iterrows():
+                gene = str(row.get(gene_col, row.get('gene_id', 'Unknown')))
+                degree = row.get('degree', 0)
+                fc = row.get(hub_log2fc_col, 0)
+                if not gene.startswith('ENSG'):
+                    hub_genes_info.append(f"{gene} (degree={degree}, log2FC={fc:.2f})")
+
+        # Pathway info
+        pathway_info = []
+        if pathway_df is not None:
+            for _, row in pathway_df.head(15).iterrows():
+                term = row.get('Term', row.get('term', 'Unknown'))
+                pval = row.get('P-value', row.get('pvalue', 0))
+                genes = row.get('Genes', row.get('genes', ''))[:100]
+                pathway_info.append(f"- {term} (p={pval:.2e}): {genes}")
+
+        # Known drivers
+        known_driver_info = []
+        for d in driver_known[:10]:
+            gene = d.get('gene_symbol', '')
+            tier = d.get('cosmic_tier', '')
+            role = d.get('cosmic_role', '')
+            direction = d.get('direction', '')
+            known_driver_info.append(f"{gene} ({tier}, {role}, {direction})")
+
+        # Candidate regulators
+        candidate_info = []
+        for d in driver_novel[:10]:
+            gene = d.get('gene_symbol', '')
+            hub_score = d.get('hub_score', 0)
+            direction = d.get('direction', '')
+            candidate_info.append(f"{gene} (hub={hub_score:.2f}, {direction})")
+
+        # DB matched genes
+        db_info = []
+        if db_matched_df is not None:
+            for _, row in db_matched_df.head(10).iterrows():
+                gene = row.get('gene_symbol', '')
+                sources = row.get('db_sources', '')
+                db_info.append(f"{gene} ({sources})")
+
+        # Study info
+        cancer_type = self.config.get('cancer_type', 'cancer').replace('_', ' ')
+        contrast = self.config.get('contrast', ['Tumor', 'Normal'])
+
+        prompt = f"""당신은 암 연구 전문가이자 바이오인포매틱스 컨설턴트입니다. 아래 RNA-seq 분석 결과를 바탕으로 구체적이고 실행 가능한 후속 연구 추천을 제공해주세요.
+
+## 분석 개요
+- 암종: {cancer_type}
+- 비교 그룹: {contrast[0]} vs {contrast[1]}
+- 총 DEG: {n_deg:,}개 (상향 {n_up:,}개, 하향 {n_down:,}개)
+
+## 상향조절 상위 유전자
+{chr(10).join(top_up_genes[:10]) if top_up_genes else '없음'}
+
+## 하향조절 상위 유전자
+{chr(10).join(top_down_genes[:10]) if top_down_genes else '없음'}
+
+## Hub 유전자 (네트워크 핵심 조절자)
+{chr(10).join(hub_genes_info[:10]) if hub_genes_info else '없음'}
+
+## Pathway Enrichment 결과
+{chr(10).join(pathway_info[:10]) if pathway_info else '없음'}
+
+## Known Driver 후보 (COSMIC/OncoKB 검증됨)
+{chr(10).join(known_driver_info[:10]) if known_driver_info else '없음'}
+
+## Candidate Regulator 후보 (신규 발견)
+{chr(10).join(candidate_info[:10]) if candidate_info else '없음'}
+
+## 암 DB 매칭 유전자
+{chr(10).join(db_info[:10]) if db_info else '없음'}
+
+아래 JSON 형식으로 종합적인 후속 연구 추천을 제공해주세요:
+
+```json
+{{
+  "therapeutic_targets": {{
+    "description": "치료 타겟 후보 설명 (2-3문장)",
+    "high_priority": [
+      {{"gene": "유전자명", "rationale": "추천 이유 (druggability, 발현 변화, 기능 등)", "existing_drugs": ["관련 약물 1", "약물 2"], "target_class": "kinase/receptor/transcription factor 등"}}
+    ],
+    "medium_priority": [
+      {{"gene": "유전자명", "rationale": "추천 이유", "existing_drugs": [], "target_class": "분류"}}
+    ]
+  }},
+  "drug_repurposing": {{
+    "description": "약물 재목적화 가능성 설명 (2-3문장)",
+    "candidates": [
+      {{"drug": "약물명", "target_gene": "타겟 유전자", "original_indication": "기존 적응증", "repurposing_rationale": "재목적화 근거", "clinical_status": "FDA 승인/임상시험 단계"}}
+    ]
+  }},
+  "experimental_validation": {{
+    "description": "실험 검증 전략 설명 (2-3문장)",
+    "immediate_validation": {{
+      "qPCR": {{"genes": ["유전자1", "유전자2"], "purpose": "발현 검증 목적"}},
+      "western_blot": {{"genes": ["유전자1"], "purpose": "단백질 발현 검증"}}
+    }},
+    "functional_studies": {{
+      "knockdown_knockout": {{"genes": ["유전자1"], "method": "siRNA/CRISPR", "readout": "측정 지표"}},
+      "overexpression": {{"genes": ["유전자1"], "method": "plasmid/viral", "readout": "측정 지표"}}
+    }},
+    "clinical_validation": {{
+      "tissue_analysis": {{"method": "IHC/IF", "genes": ["유전자1"], "sample_type": "FFPE/fresh frozen"}},
+      "liquid_biopsy": {{"biomarkers": ["바이오마커1"], "method": "ctDNA/CTC"}}
+    }}
+  }},
+  "biomarker_development": {{
+    "description": "바이오마커 개발 가능성 (2-3문장)",
+    "diagnostic_candidates": [
+      {{"gene": "유전자명", "marker_type": "진단/예후/예측", "evidence_level": "high/medium/low", "rationale": "추천 근거"}}
+    ],
+    "prognostic_candidates": [
+      {{"gene": "유전자명", "association": "좋은/나쁜 예후", "validation_needed": "필요한 검증"}}
+    ]
+  }},
+  "future_research_directions": {{
+    "description": "향후 연구 방향 요약 (2-3문장)",
+    "short_term": [
+      {{"direction": "연구 방향 1", "timeline": "6개월 이내", "resources_needed": "필요 자원", "expected_outcome": "예상 결과"}}
+    ],
+    "medium_term": [
+      {{"direction": "연구 방향 2", "timeline": "1-2년", "resources_needed": "필요 자원", "expected_outcome": "예상 결과"}}
+    ],
+    "long_term": [
+      {{"direction": "연구 방향 3", "timeline": "3-5년", "resources_needed": "필요 자원", "expected_outcome": "예상 결과"}}
+    ]
+  }},
+  "collaboration_suggestions": {{
+    "description": "협력 연구 제안",
+    "expertise_needed": ["필요 전문성 1", "필요 전문성 2"],
+    "potential_partnerships": ["잠재적 협력 기관/연구실 유형"]
+  }},
+  "funding_opportunities": {{
+    "description": "연구비 지원 가능성",
+    "suitable_grant_types": ["적합한 연구비 유형 1", "유형 2"],
+    "key_selling_points": ["연구의 강점 1", "강점 2"]
+  }},
+  "cautions_and_limitations": {{
+    "description": "주의사항 및 한계점",
+    "technical_limitations": ["기술적 한계 1"],
+    "interpretation_caveats": ["해석상 주의점 1"],
+    "validation_requirements": ["필수 검증 사항 1"]
+  }}
+}}
+```
+
+중요 지침:
+1. 한국어로 작성 (유전자명, 약물명, 기술 용어는 영어 유지)
+2. 구체적이고 실행 가능한 추천 제공
+3. 분석 결과에 기반한 맞춤형 추천 (일반적인 내용 지양)
+4. 실제 유전자명과 관련 약물 정보 포함
+5. 우선순위와 근거를 명확히 제시
+6. 현실적인 timeline과 resource 제안
+7. therapeutic_targets의 high_priority는 3-5개, medium_priority는 3-5개
+8. drug_repurposing candidates는 3-5개
+9. 각 섹션에 최소 2개 이상의 구체적 항목 포함
+"""
+
+        try:
+            # Call LLM API
+            if use_openai:
+                client = OpenAI(api_key=openai_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    max_tokens=6000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.choices[0].message.content
+            else:
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                message = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=6000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = message.content[0].text
+
+            # Extract JSON from response
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                recommendations = json.loads(json_str)
+
+                # Save to file
+                run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+                output_path = run_dir / "research_recommendations.json"
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump(recommendations, f, ensure_ascii=False, indent=2)
+
+                self.logger.info(f"Research recommendations generated via {llm_provider}: {output_path}")
+                return recommendations
+            else:
+                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
+                return self._generate_fallback_research_recommendations(data)
+
+        except Exception as e:
+            self.logger.error(f"Error generating research recommendations via {llm_provider}: {e}")
+            return self._generate_fallback_research_recommendations(data)
+
+    def _generate_fallback_research_recommendations(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate template-based research recommendations when LLM API is unavailable."""
+        deg_df = data.get('deg_significant_df')
+        hub_df = data.get('hub_genes_df')
+        pathway_df = data.get('pathway_summary_df')
+        driver_known = data.get('driver_known', [])
+        driver_novel = data.get('driver_novel', [])
+        cancer_type = self.config.get('cancer_type', 'cancer').replace('_', ' ').title()
+
+        # Extract gene names
+        hub_gene_names = []
+        if hub_df is not None:
+            gene_col = 'gene_symbol' if 'gene_symbol' in hub_df.columns else 'gene_id'
+            for _, row in hub_df.head(10).iterrows():
+                gene = str(row.get(gene_col, row.get('gene_id', '')))
+                if gene and not gene.startswith('ENSG'):
+                    hub_gene_names.append(gene)
+
+        # Top DEGs
+        top_up = []
+        top_down = []
+        if deg_df is not None:
+            log2fc_col = 'log2FC' if 'log2FC' in deg_df.columns else 'log2FoldChange'
+            gene_col = 'gene_symbol' if 'gene_symbol' in deg_df.columns else 'gene_id'
+            if log2fc_col in deg_df.columns:
+                sorted_df = deg_df.sort_values(log2fc_col, ascending=False)
+                for _, row in sorted_df.head(5).iterrows():
+                    gene = str(row.get(gene_col, ''))
+                    if gene and not gene.startswith('ENSG'):
+                        top_up.append(gene)
+                for _, row in sorted_df.tail(5).iterrows():
+                    gene = str(row.get(gene_col, ''))
+                    if gene and not gene.startswith('ENSG'):
+                        top_down.append(gene)
+
+        # Known and novel drivers
+        known_names = [d.get('gene_symbol', '') for d in driver_known[:5] if d.get('gene_symbol')]
+        novel_names = [d.get('gene_symbol', '') for d in driver_novel[:5] if d.get('gene_symbol')]
+
+        # Pathway names
+        pathway_names = []
+        if pathway_df is not None and len(pathway_df) > 0:
+            term_col = None
+            for col in ['term_name', 'Term', 'term']:
+                if col in pathway_df.columns:
+                    term_col = col
+                    break
+            if term_col:
+                pathway_names = [str(t).split(' (GO:')[0][:60] for t in pathway_df[term_col].head(5).tolist()]
+
+        return {
+            "therapeutic_targets": {
+                "description": f"{cancer_type}에서 식별된 Hub 유전자와 Driver 후보를 기반으로 치료 타겟을 제안합니다. 상향조절된 유전자는 억제제, 하향조절된 유전자는 활성화제 개발 대상입니다.",
+                "high_priority": [
+                    {"gene": gene, "rationale": "Hub 유전자로서 네트워크 중심성이 높음", "existing_drugs": [], "target_class": "추가 분석 필요"}
+                    for gene in hub_gene_names[:3]
+                ] if hub_gene_names else [],
+                "medium_priority": [
+                    {"gene": gene, "rationale": "Driver 후보로 식별됨", "existing_drugs": [], "target_class": "추가 분석 필요"}
+                    for gene in known_names[:3]
+                ] if known_names else []
+            },
+            "drug_repurposing": {
+                "description": "Hub 유전자와 Driver 후보에 대한 기존 약물 재목적화 가능성을 검토하세요. DGIdb (dgidb.org)에서 약물-유전자 상호작용을 조회할 수 있습니다.",
+                "candidates": [
+                    {"drug": "DGIdb 조회 필요", "target_gene": gene, "original_indication": "조회 필요", "repurposing_rationale": f"{cancer_type}에서 유의한 발현 변화", "clinical_status": "확인 필요"}
+                    for gene in hub_gene_names[:3]
+                ] if hub_gene_names else []
+            },
+            "experimental_validation": {
+                "description": "분석 결과를 실험적으로 검증하기 위한 단계별 전략입니다. 1차 검증(qPCR), 2차 검증(Western blot), 기능 연구 순으로 진행하세요.",
+                "immediate_validation": {
+                    "qPCR": {"genes": hub_gene_names[:5] if hub_gene_names else top_up[:3], "purpose": "mRNA 발현 변화 검증"},
+                    "western_blot": {"genes": hub_gene_names[:3] if hub_gene_names else top_up[:2], "purpose": "단백질 수준 발현 확인"}
+                },
+                "functional_studies": {
+                    "knockdown_knockout": {"genes": top_up[:2] if top_up else [], "method": "siRNA 또는 CRISPR-Cas9", "readout": "세포 증식, 이동, 침윤 능력"},
+                    "overexpression": {"genes": top_down[:2] if top_down else [], "method": "발현 벡터 transfection", "readout": "종양 억제 효과"}
+                },
+                "clinical_validation": {
+                    "tissue_analysis": {"method": "면역조직화학(IHC)", "genes": hub_gene_names[:3] if hub_gene_names else [], "sample_type": "FFPE 조직"},
+                    "liquid_biopsy": {"biomarkers": hub_gene_names[:2] if hub_gene_names else [], "method": "ctDNA 또는 CTC 분석"}
+                }
+            },
+            "biomarker_development": {
+                "description": f"Hub 유전자와 일관된 발현 변화를 보이는 유전자는 {cancer_type}의 진단 또는 예후 바이오마커 후보입니다.",
+                "diagnostic_candidates": [
+                    {"gene": gene, "marker_type": "진단", "evidence_level": "medium", "rationale": "유의한 발현 변화와 네트워크 중심성"}
+                    for gene in hub_gene_names[:3]
+                ] if hub_gene_names else [],
+                "prognostic_candidates": [
+                    {"gene": gene, "association": "추가 분석 필요", "validation_needed": "생존 분석 (TCGA 또는 GEO 데이터)"}
+                    for gene in hub_gene_names[:3]
+                ] if hub_gene_names else []
+            },
+            "future_research_directions": {
+                "description": f"{cancer_type} 연구를 위한 단기, 중기, 장기 연구 방향을 제안합니다.",
+                "short_term": [
+                    {"direction": "Hub 유전자 발현 검증 (qPCR, Western blot)", "timeline": "3-6개월", "resources_needed": "분자생물학 실험 장비, 항체", "expected_outcome": "발현 변화 확인"},
+                    {"direction": "독립 코호트에서 발현 검증", "timeline": "3-6개월", "resources_needed": "GEO/TCGA 데이터", "expected_outcome": "결과 재현성 확인"}
+                ],
+                "medium_term": [
+                    {"direction": "기능 연구 (knockdown/overexpression)", "timeline": "1-2년", "resources_needed": "세포주, transfection 시약, CRISPR 시스템", "expected_outcome": "인과관계 규명"},
+                    {"direction": "약물 스크리닝", "timeline": "1-2년", "resources_needed": "약물 라이브러리, HTS 시스템", "expected_outcome": "후보 약물 발굴"}
+                ],
+                "long_term": [
+                    {"direction": "전임상 동물 모델 연구", "timeline": "2-4년", "resources_needed": "동물 시설, PDX 모델", "expected_outcome": "치료 효과 검증"},
+                    {"direction": "임상시험 설계", "timeline": "3-5년", "resources_needed": "IRB 승인, 임상 협력 네트워크", "expected_outcome": "임상 적용 가능성 평가"}
+                ]
+            },
+            "collaboration_suggestions": {
+                "description": "본 연구의 심화를 위해 다학제 협력이 권장됩니다.",
+                "expertise_needed": ["약물화학 (drug design)", "임상종양학", "생물정보학", "분자생물학"],
+                "potential_partnerships": ["암 센터", "제약회사 R&D", "생물정보학 코어 시설"]
+            },
+            "funding_opportunities": {
+                "description": "연구 확장을 위한 연구비 지원 기회를 제안합니다.",
+                "suitable_grant_types": ["기초연구사업 (한국연구재단)", "바이오의료기술개발사업", "암정복추진연구개발사업"],
+                "key_selling_points": [
+                    f"{cancer_type}에서 신규 치료 타겟 후보 발굴",
+                    "빅데이터 기반 바이오마커 개발",
+                    "약물 재목적화를 통한 빠른 임상 적용 가능성"
+                ]
+            },
+            "cautions_and_limitations": {
+                "description": "분석 결과 해석 및 후속 연구 수행 시 주의사항입니다.",
+                "technical_limitations": [
+                    "RNA 수준 변화가 단백질 수준을 반영하지 않을 수 있음",
+                    "배치 효과 및 샘플 heterogeneity 가능성"
+                ],
+                "interpretation_caveats": [
+                    "Hub 유전자 ≠ Driver 유전자 (발현 변화 vs 인과관계)",
+                    "Pathway 농축이 기능적 중요성을 보장하지 않음"
+                ],
+                "validation_requirements": [
+                    "독립 코호트에서 결과 재현 필수",
+                    "기능 실험을 통한 인과관계 검증 필요"
+                ]
+            }
+        }
 
     def validate_outputs(self) -> bool:
         """Validate report outputs."""

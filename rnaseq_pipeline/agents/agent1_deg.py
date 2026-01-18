@@ -32,6 +32,13 @@ try:
 except ImportError:
     HAS_RPY2 = False
 
+# mygene for Entrez ID → Gene Symbol mapping
+try:
+    import mygene
+    HAS_MYGENE = True
+except ImportError:
+    HAS_MYGENE = False
+
 
 class DEGAgent(BaseAgent):
     """Agent for DESeq2-based differential expression analysis."""
@@ -97,6 +104,65 @@ class DEGAgent(BaseAgent):
         self.logger.info(f"Conditions: {conditions}")
 
         return True
+
+    def _add_gene_symbols(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add gene_symbol column by converting Entrez IDs via mygene API."""
+        if 'gene_id' not in df.columns:
+            df['gene_symbol'] = ''
+            return df
+
+        gene_ids = df['gene_id'].astype(str).tolist()
+
+        # Check if already gene symbols (letters, not just numbers)
+        sample_ids = gene_ids[:10]
+        is_symbol = any(not str(gid).replace('.', '').isdigit() for gid in sample_ids)
+
+        if is_symbol:
+            # Already gene symbols
+            df['gene_symbol'] = df['gene_id']
+            self.logger.info("Gene IDs appear to be symbols already")
+            return df
+
+        # Convert Entrez IDs to Gene Symbols
+        if not HAS_MYGENE:
+            self.logger.warning("mygene not installed. Using Entrez IDs as gene_symbol.")
+            df['gene_symbol'] = df['gene_id'].astype(str)
+            return df
+
+        try:
+            mg = mygene.MyGeneInfo()
+            self.logger.info(f"Converting {len(gene_ids)} Entrez IDs to Gene Symbols...")
+
+            # Query in batches to avoid API limits
+            batch_size = 1000
+            entrez_to_symbol = {}
+
+            for i in range(0, len(gene_ids), batch_size):
+                batch = gene_ids[i:i + batch_size]
+                results = mg.querymany(
+                    batch,
+                    scopes='entrezgene',
+                    fields='symbol',
+                    species='human',
+                    verbose=False
+                )
+                for r in results:
+                    if 'symbol' in r:
+                        entrez_to_symbol[str(r['query'])] = r['symbol']
+
+            # Map gene symbols
+            df['gene_symbol'] = df['gene_id'].astype(str).map(
+                lambda x: entrez_to_symbol.get(x, x)
+            )
+
+            converted = sum(1 for s in df['gene_symbol'] if not s.isdigit())
+            self.logger.info(f"Converted {converted}/{len(df)} Entrez IDs to Gene Symbols")
+
+        except Exception as e:
+            self.logger.warning(f"mygene conversion failed: {e}. Using Entrez IDs.")
+            df['gene_symbol'] = df['gene_id'].astype(str)
+
+        return df
 
     def _run_deseq2(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """Run DESeq2 analysis via rpy2."""
@@ -395,7 +461,10 @@ class DEGAgent(BaseAgent):
         # Sort by padj
         significant = significant.sort_values('padj')
 
-        self.save_csv(significant[['gene_id', 'log2FC', 'padj', 'direction']], "deg_significant.csv")
+        # Add gene_symbol column via mygene (Entrez ID → Symbol)
+        significant = self._add_gene_symbols(significant)
+
+        self.save_csv(significant[['gene_id', 'gene_symbol', 'log2FC', 'padj', 'direction']], "deg_significant.csv")
 
         # Save normalized counts
         self.save_csv(norm_counts_df, "normalized_counts.csv")

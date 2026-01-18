@@ -87,15 +87,48 @@ class GeneRAGInterpreter:
         self.model = model
         self.logger = logging.getLogger("gene_interpreter")
 
-        # Map cancer types to disease domains
+        # Map cancer types to disease domains (ChromaDB collection names)
+        # Includes TCGA codes, full names, and collection prefixes
         self.domain_map = {
+            # TCGA codes → ChromaDB collection domains
+            "LUAD": "lung_cancer",
+            "LUSC": "lung_cancer",
+            "BRCA": "breast_cancer",
+            "COAD": "colorectal_cancer",
+            "READ": "colorectal_cancer",
+            "PAAD": "pancreatic_cancer",
+            "LIHC": "liver_cancer",
+            "GBM": "glioblastoma",
+            "LGG": "low_grade_glioma",
+            "KIRC": "kidney_cancer",
+            "KIRP": "kidney_cancer",
+            "KICH": "kidney_cancer",
+            "BLCA": "bladder_cancer",
+            "HNSC": "head_neck_cancer",
+            "THCA": "thyroid_cancer",
+            "PRAD": "prostate_cancer",
+            "STAD": "stomach_cancer",
+            "SKCM": "melanoma",
+            "OV": "ovarian_cancer",
+            "UCEC": "uterine_cancer",
+            # Full names
             "breast_cancer": "breast_cancer",
             "lung_cancer": "lung_cancer",
             "pancreatic_cancer": "pancreatic_cancer",
             "colorectal_cancer": "colorectal_cancer",
             "liver_cancer": "liver_cancer",
             "glioblastoma": "glioblastoma",
-            "blood_cancer": "blood_cancer"
+            "blood_cancer": "blood_cancer",
+            "kidney_cancer": "kidney_cancer",
+            "bladder_cancer": "bladder_cancer",
+            "head_neck_cancer": "head_neck_cancer",
+            "thyroid_cancer": "thyroid_cancer",
+            "prostate_cancer": "prostate_cancer",
+            "stomach_cancer": "stomach_cancer",
+            "melanoma": "melanoma",
+            "ovarian_cancer": "ovarian_cancer",
+            "uterine_cancer": "uterine_cancer",
+            "low_grade_glioma": "low_grade_glioma",
         }
 
         # Initialize vector store

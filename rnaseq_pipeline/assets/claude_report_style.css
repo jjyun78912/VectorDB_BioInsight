@@ -1777,3 +1777,289 @@ body {
     font-size: 14px;
     font-style: italic;
 }
+
+/* ============================================================
+   RESEARCH RECOMMENDATIONS SECTION
+   ============================================================ */
+.research-recommendations-section {
+    background: var(--claude-surface);
+    padding: var(--space-10);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--claude-border);
+    margin-top: var(--space-10);
+}
+
+.research-recommendations-section h2 {
+    color: var(--claude-purple);
+    border-bottom: 2px solid var(--claude-purple);
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.rec-intro {
+    background: var(--claude-purple-light);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-8);
+}
+
+.rec-intro p {
+    color: var(--claude-text-secondary);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.rec-subsection {
+    margin-bottom: var(--space-10);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--claude-border);
+}
+
+.rec-subsection:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.rec-subsection h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--claude-text);
+    margin-bottom: var(--space-4);
+}
+
+.rec-subsection h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--claude-text-secondary);
+    margin-top: var(--space-5);
+    margin-bottom: var(--space-3);
+}
+
+.rec-description {
+    color: var(--claude-text-secondary);
+    font-size: 14px;
+    margin-bottom: var(--space-5);
+    line-height: 1.6;
+}
+
+/* Recommendation Tables */
+.rec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: var(--space-4);
+}
+
+.rec-table thead {
+    background: var(--claude-bg);
+}
+
+.rec-table th {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-weight: 600;
+    color: var(--claude-text-secondary);
+    border-bottom: 2px solid var(--claude-border);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rec-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--claude-border);
+    vertical-align: top;
+}
+
+.rec-table tbody tr:hover {
+    background: var(--claude-bg);
+}
+
+/* Validation Grid */
+.validation-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+}
+
+.validation-panel {
+    background: var(--claude-bg);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--claude-border);
+}
+
+.validation-panel h4 {
+    font-size: 14px;
+    color: var(--claude-blue);
+    margin-top: 0;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--claude-border);
+}
+
+.validation-panel ul {
+    list-style: none;
+    padding: 0;
+}
+
+.validation-panel li {
+    font-size: 13px;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px dashed var(--claude-border);
+}
+
+.validation-panel li:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.validation-panel em {
+    color: var(--claude-text-muted);
+    font-size: 12px;
+}
+
+/* Timeline Grid */
+.timeline-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+}
+
+.timeline-column {
+    background: var(--claude-bg);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--claude-border);
+}
+
+.timeline-column h4 {
+    text-align: center;
+    color: var(--claude-accent);
+    font-size: 14px;
+    margin-top: 0;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 2px solid var(--claude-accent-light);
+}
+
+.timeline-item {
+    background: var(--claude-surface);
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-4);
+    border-left: 3px solid var(--claude-accent);
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-item h5 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--claude-text);
+    margin-bottom: var(--space-2);
+}
+
+.timeline-item p {
+    font-size: 12px;
+    color: var(--claude-text-secondary);
+    margin-bottom: var(--space-1);
+}
+
+/* Collaboration Grid */
+.collab-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-5);
+}
+
+.collab-panel {
+    background: var(--claude-bg);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--claude-border);
+}
+
+.collab-panel h4 {
+    font-size: 15px;
+    color: var(--claude-green);
+    margin-top: 0;
+    margin-bottom: var(--space-3);
+}
+
+.collab-panel h5 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--claude-text-secondary);
+    margin-top: var(--space-4);
+    margin-bottom: var(--space-2);
+}
+
+.collab-panel ul {
+    list-style: disc;
+    padding-left: var(--space-5);
+    font-size: 13px;
+}
+
+.collab-panel li {
+    margin-bottom: var(--space-2);
+}
+
+/* Cautions Section */
+.cautions-section {
+    background: var(--claude-red-light);
+    border: 1px solid #fca5a5;
+}
+
+.cautions-section h3 {
+    color: var(--claude-red);
+}
+
+.cautions-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-5);
+}
+
+.caution-panel {
+    background: var(--claude-surface);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid #fca5a5;
+}
+
+.caution-panel h4 {
+    font-size: 14px;
+    color: var(--claude-red);
+    margin-top: 0;
+    margin-bottom: var(--space-3);
+}
+
+.caution-panel ul {
+    list-style: disc;
+    padding-left: var(--space-5);
+    font-size: 13px;
+}
+
+.caution-panel li {
+    margin-bottom: var(--space-2);
+    color: var(--claude-text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .validation-grid,
+    .timeline-grid,
+    .cautions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .collab-grid {
+        grid-template-columns: 1fr;
+    }
+}
