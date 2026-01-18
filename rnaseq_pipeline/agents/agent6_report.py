@@ -1162,10 +1162,10 @@ class ReportAgent(BaseAgent):
         """Generate Data Quality Control section with PCA and correlation heatmap."""
         figures = data.get('figures', {})
         interactive_figures = data.get('interactive_figures', {})
+        viz_interpretations = data.get('visualization_interpretations', {})
 
-        # Look for PCA and correlation heatmap
+        # Look for PCA only (Sample correlation is not generated separately)
         pca_fig = figures.get('pca_plot', '')
-        heatmap_fig = figures.get('sample_correlation', figures.get('heatmap', ''))
 
         pca_html = ''
         if pca_fig:
@@ -1173,47 +1173,83 @@ class ReportAgent(BaseAgent):
         else:
             pca_html = '<p class="no-data">PCA plot not available</p>'
 
-        heatmap_html = ''
-        if heatmap_fig:
-            heatmap_html = f'<img src="{heatmap_fig}" alt="Sample Correlation" class="figure-img">'
-        else:
-            heatmap_html = '<p class="no-data">Sample correlation heatmap not available</p>'
+        # Get PCA interpretation from LLM
+        pca_interp = viz_interpretations.get('pca_plot', {})
+        pca_ai_section = ''
+        if pca_interp:
+            pca_ai_section = f'''
+            <div class="ai-box">
+                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-content">
+                    <p>{pca_interp.get('summary', '')}</p>
+                    <p><strong>Sample separation:</strong> {pca_interp.get('separation_analysis', '')}</p>
+                    <p><strong>Variance explained:</strong> {pca_interp.get('variance_explanation', '')}</p>
+                </div>
+            </div>
+            '''
 
         return f'''
         <section class="qc-section" id="qc">
             <h2>2. Data Quality Control</h2>
-
-            <div class="qc-grid">
-                <div class="qc-panel">
-                    <h4>2.1 Sample Clustering (PCA)</h4>
-                    <div class="figure-container">
-                        {pca_html}
-                    </div>
-                    <p class="figure-caption">Principal Component Analysis showing sample clustering between conditions.</p>
-                </div>
-
-                <div class="qc-panel">
-                    <h4>2.2 Sample Correlation</h4>
-                    <div class="figure-container">
-                        {heatmap_html}
-                    </div>
-                    <p class="figure-caption">Correlation heatmap showing similarity between samples.</p>
-                </div>
+            <div class="figure-panel">
+                <div class="figure-header">Principal Component Analysis</div>
+                <div class="figure-container">{pca_html}</div>
+                <div class="figure-caption">PCA showing sample clustering between conditions (Tumor vs Normal)</div>
+                {pca_ai_section}
             </div>
         </section>
         '''
 
     def _generate_deg_analysis_html(self, data: Dict) -> str:
         """Generate Differential Expression Analysis section."""
-        deg_df = data.get('deg_significant_df')
+        # Prefer integrated_gene_table (has gene_symbol) over deg_significant (only has gene_id/Entrez)
+        deg_df = data.get('integrated_gene_table_df')
+        if deg_df is None or len(deg_df) == 0:
+            deg_df = data.get('deg_significant_df')
+
         figures = data.get('figures', {})
+        viz_interpretations = data.get('visualization_interpretations', {})
 
         # Get figures
         volcano_fig = figures.get('volcano_plot', '')
-        heatmap_fig = figures.get('top_genes_heatmap', figures.get('heatmap', ''))
+        heatmap_fig = figures.get('heatmap_top50', figures.get('heatmap_key_genes', figures.get('top_genes_heatmap', '')))
 
         volcano_html = f'<img src="{volcano_fig}" alt="Volcano Plot" class="figure-img">' if volcano_fig else '<p class="no-data">Volcano plot not available</p>'
         heatmap_html = f'<img src="{heatmap_fig}" alt="Heatmap" class="figure-img">' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
+
+        # AI interpretation for volcano plot
+        volcano_interp = viz_interpretations.get('volcano_plot', {})
+        volcano_ai_section = ''
+        if volcano_interp:
+            observations = volcano_interp.get('key_observations', [])
+            obs_text = ' '.join(observations[:2]) if observations else ''
+            volcano_ai_section = f'''
+            <div class="ai-box">
+                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-content">
+                    <p>{volcano_interp.get('summary', '')}</p>
+                    {f'<p>{obs_text}</p>' if obs_text else ''}
+                    <p><strong>Biological significance:</strong> {volcano_interp.get('biological_significance', '')}</p>
+                </div>
+            </div>
+            '''
+
+        # AI interpretation for heatmap
+        heatmap_interp = viz_interpretations.get('heatmap', {})
+        heatmap_ai_section = ''
+        if heatmap_interp:
+            observations = heatmap_interp.get('key_observations', [])
+            obs_text = ' '.join(observations[:2]) if observations else ''
+            heatmap_ai_section = f'''
+            <div class="ai-box">
+                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-content">
+                    <p>{heatmap_interp.get('summary', '')}</p>
+                    {f'<p>{obs_text}</p>' if obs_text else ''}
+                    <p><strong>Expression pattern:</strong> {heatmap_interp.get('pattern_analysis', '')}</p>
+                </div>
+            </div>
+            '''
 
         # Top upregulated genes table
         up_table = ''
@@ -1225,19 +1261,24 @@ class ReportAgent(BaseAgent):
                 up_genes = deg_df[deg_df['log2FC'] > 0].nlargest(20, 'log2FC')
                 down_genes = deg_df[deg_df['log2FC'] < 0].nsmallest(20, 'log2FC')
 
-                # Build upregulated table
+                # Build upregulated table - prefer gene_symbol over gene_id
                 up_rows = ''
                 for _, row in up_genes.iterrows():
-                    gene_id = row.get('gene_id', row.get('gene_symbol', 'N/A'))
+                    gene_symbol = row.get('gene_symbol', '')
+                    gene_id = row.get('gene_id', 'N/A')
+                    display_name = gene_symbol if gene_symbol and str(gene_symbol) != 'nan' else str(gene_id)
                     log2fc = row.get('log2FC', 0)
                     padj = row.get('padj', 1)
-                    up_rows += f'<tr><td>{gene_id}</td><td class="up-text">{log2fc:.2f}</td><td>{padj:.2e}</td></tr>'
+                    fold_change = 2 ** abs(log2fc)
+                    up_rows += f'<tr><td><strong>{display_name}</strong></td><td class="up-text">+{log2fc:.2f}</td><td>{fold_change:.1f}x</td><td>{padj:.2e}</td></tr>'
 
                 up_table = f'''
-                <div class="deg-table-panel">
-                    <h4>Top 20 Upregulated Genes</h4>
-                    <table class="deg-table">
-                        <thead><tr><th>Gene</th><th>log2FC</th><th>adj.p-value</th></tr></thead>
+                <div class="table-wrapper">
+                    <div class="table-header">
+                        <span class="table-title">Top 20 Upregulated (암에서 증가)</span>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
                         <tbody>{up_rows}</tbody>
                     </table>
                 </div>
@@ -1246,40 +1287,62 @@ class ReportAgent(BaseAgent):
                 # Build downregulated table
                 down_rows = ''
                 for _, row in down_genes.iterrows():
-                    gene_id = row.get('gene_id', row.get('gene_symbol', 'N/A'))
+                    gene_symbol = row.get('gene_symbol', '')
+                    gene_id = row.get('gene_id', 'N/A')
+                    display_name = gene_symbol if gene_symbol and str(gene_symbol) != 'nan' else str(gene_id)
                     log2fc = row.get('log2FC', 0)
                     padj = row.get('padj', 1)
-                    down_rows += f'<tr><td>{gene_id}</td><td class="down-text">{log2fc:.2f}</td><td>{padj:.2e}</td></tr>'
+                    fold_change = 2 ** abs(log2fc)
+                    down_rows += f'<tr><td><strong>{display_name}</strong></td><td class="down-text">{log2fc:.2f}</td><td>{fold_change:.1f}x</td><td>{padj:.2e}</td></tr>'
 
                 down_table = f'''
-                <div class="deg-table-panel">
-                    <h4>Top 20 Downregulated Genes</h4>
-                    <table class="deg-table">
-                        <thead><tr><th>Gene</th><th>log2FC</th><th>adj.p-value</th></tr></thead>
+                <div class="table-wrapper">
+                    <div class="table-header">
+                        <span class="table-title">Top 20 Downregulated (암에서 감소)</span>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
                         <tbody>{down_rows}</tbody>
                     </table>
                 </div>
                 '''
 
+        # Calculate summary stats
+        n_total = len(deg_df) if deg_df is not None else 0
+        n_up = len(deg_df[deg_df['log2FC'] > 0]) if deg_df is not None and 'log2FC' in deg_df.columns else 0
+        n_down = n_total - n_up
+
         return f'''
         <section class="deg-section" id="deg-analysis">
             <h2>3. Differential Expression Analysis</h2>
 
-            <div class="deg-figures-grid">
-                <div class="figure-panel">
-                    <h4>3.1 Volcano Plot</h4>
-                    <div class="figure-container">
-                        {volcano_html}
-                    </div>
-                    <p class="figure-caption">Volcano plot showing differentially expressed genes. Red: upregulated, Blue: downregulated.</p>
+            <div class="metrics-row">
+                <div class="metric-box primary">
+                    <div class="metric-value">{n_total:,}</div>
+                    <div class="metric-label">Total DEGs</div>
                 </div>
+                <div class="metric-box">
+                    <div class="metric-value up">{n_up:,}</div>
+                    <div class="metric-label">Upregulated</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value down">{n_down:,}</div>
+                    <div class="metric-label">Downregulated</div>
+                </div>
+            </div>
 
+            <div class="figure-grid">
                 <div class="figure-panel">
-                    <h4>3.2 Top DEGs Heatmap</h4>
-                    <div class="figure-container">
-                        {heatmap_html}
-                    </div>
-                    <p class="figure-caption">Expression heatmap of top differentially expressed genes.</p>
+                    <div class="figure-header">Volcano Plot</div>
+                    <div class="figure-container">{volcano_html}</div>
+                    <div class="figure-caption">X축: log2FC | Y축: -log10(padj) | <span style="color:#dc2626;">●</span> 상향 | <span style="color:#2563eb;">●</span> 하향</div>
+                    {volcano_ai_section}
+                </div>
+                <div class="figure-panel">
+                    <div class="figure-header">Expression Heatmap</div>
+                    <div class="figure-container">{heatmap_html}</div>
+                    <div class="figure-caption">상위 DEG 발현 패턴. Red=High, Blue=Low</div>
+                    {heatmap_ai_section}
                 </div>
             </div>
 
@@ -1294,9 +1357,28 @@ class ReportAgent(BaseAgent):
         """Generate Pathway & Functional Analysis section with GO subcategories."""
         pathway_df = data.get('pathway_summary_df')
         figures = data.get('figures', {})
+        viz_interpretations = data.get('visualization_interpretations', {})
 
-        pathway_fig = figures.get('pathway_enrichment', figures.get('go_enrichment', ''))
+        pathway_fig = figures.get('pathway_barplot', figures.get('pathway_enrichment', figures.get('go_enrichment', '')))
         pathway_html = f'<img src="{pathway_fig}" alt="Pathway Enrichment" class="figure-img">' if pathway_fig else ''
+
+        # AI interpretation for pathway
+        pathway_interp = viz_interpretations.get('pathway_barplot', {})
+        pathway_ai_section = ''
+        if pathway_interp:
+            top_pathways = pathway_interp.get('top_pathways', [])
+            pathways_text = ', '.join(top_pathways[:3]) if top_pathways else ''
+            pathway_ai_section = f'''
+            <div class="ai-box green">
+                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-content">
+                    <p>{pathway_interp.get('summary', '')}</p>
+                    {f'<p><strong>Top pathways:</strong> {pathways_text}</p>' if pathways_text else ''}
+                    <p><strong>Functional theme:</strong> {pathway_interp.get('functional_theme', '')}</p>
+                    <p><strong>Therapeutic implications:</strong> {pathway_interp.get('therapeutic_implications', '')}</p>
+                </div>
+            </div>
+            '''
 
         # Separate pathways by category
         go_bp_rows = ''
@@ -1306,15 +1388,22 @@ class ReportAgent(BaseAgent):
 
         if pathway_df is not None and len(pathway_df) > 0:
             for _, row in pathway_df.head(50).iterrows():
-                term = row.get('term', row.get('Term', 'N/A'))
+                # Handle multiple column name formats
+                term = row.get('term_name', row.get('term', row.get('Term', 'N/A')))
                 gene_count = row.get('gene_count', row.get('Overlap', 'N/A'))
-                pval = row.get('pvalue', row.get('P-value', row.get('Adjusted P-value', 1)))
+                pval = row.get('padj', row.get('pvalue', row.get('P-value', row.get('Adjusted P-value', 1))))
                 db = row.get('database', row.get('Gene_set', ''))
+                genes = row.get('genes', '')
 
                 if isinstance(gene_count, str) and '/' in gene_count:
                     gene_count = gene_count.split('/')[0]
 
-                row_html = f'<tr><td>{term[:60]}{"..." if len(str(term)) > 60 else ""}</td><td>{gene_count}</td><td>{pval:.2e}</td></tr>'
+                # Format term name (remove GO ID for cleaner display)
+                term_display = str(term)[:55] + "..." if len(str(term)) > 55 else str(term)
+
+                # Show genes on hover
+                genes_preview = str(genes)[:100] + "..." if len(str(genes)) > 100 else str(genes)
+                row_html = f'<tr title="{genes_preview}"><td><strong>{term_display}</strong></td><td>{gene_count}</td><td>{pval:.2e}</td></tr>'
 
                 if 'Biological_Process' in str(db) or 'BP' in str(db):
                     go_bp_rows += row_html
@@ -1333,37 +1422,42 @@ class ReportAgent(BaseAgent):
 
             <div class="pathway-figure">
                 {pathway_html}
+                {pathway_ai_section}
             </div>
 
             <div class="pathway-subsections">
                 <div class="pathway-panel">
                     <h4>4.1 GO Biological Process (BP)</h4>
+                    <p class="panel-desc">세포의 생물학적 과정과 관련된 경로</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
                         <tbody>{go_bp_rows if go_bp_rows else "<tr><td colspan='3'>No significant BP terms</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
                     <h4>4.2 GO Molecular Function (MF)</h4>
+                    <p class="panel-desc">분자 수준의 기능 (효소 활성, 결합 등)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
                         <tbody>{go_mf_rows if go_mf_rows else "<tr><td colspan='3'>No significant MF terms</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
                     <h4>4.3 GO Cellular Component (CC)</h4>
+                    <p class="panel-desc">세포 내 위치 (막, 세포질, 핵 등)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
                         <tbody>{go_cc_rows if go_cc_rows else "<tr><td colspan='3'>No significant CC terms</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
                     <h4>4.4 KEGG Pathway</h4>
+                    <p class="panel-desc">대사/신호전달 경로 (KEGG 데이터베이스)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Pathway</th><th>Genes</th><th>p-value</th></tr></thead>
+                        <thead><tr><th>Pathway</th><th>Genes</th><th>adj.p-value</th></tr></thead>
                         <tbody>{kegg_rows if kegg_rows else "<tr><td colspan='3'>No significant KEGG pathways</td></tr>"}</tbody>
                     </table>
                 </div>
@@ -1374,158 +1468,546 @@ class ReportAgent(BaseAgent):
     def _generate_network_section_html(self, data: Dict) -> str:
         """Generate Network Analysis section."""
         hub_df = data.get('hub_genes_df')
+        integrated_df = data.get('integrated_gene_table_df')
         figures = data.get('figures', {})
-        interactive_figures = data.get('interactive_figures', {})
+        viz_interpretations = data.get('visualization_interpretations', {})
 
-        network_fig = figures.get('network_plot', figures.get('network_2d', ''))
+        network_fig = figures.get('network_graph', figures.get('network_plot', figures.get('network_2d', '')))
         network_html = f'<img src="{network_fig}" alt="Network" class="figure-img">' if network_fig else ''
 
-        # Hub genes table
+        # Build gene_id to gene_symbol mapping from integrated_gene_table
+        id_to_symbol = {}
+        if integrated_df is not None and len(integrated_df) > 0:
+            for _, row in integrated_df.iterrows():
+                gene_id = str(row.get('gene_id', ''))
+                gene_symbol = row.get('gene_symbol', '')
+                if gene_id and gene_symbol and str(gene_symbol) != 'nan':
+                    id_to_symbol[gene_id] = gene_symbol
+
+        # AI interpretation for network
+        network_interp = viz_interpretations.get('network_graph', {})
+        network_ai_section = ''
+        if network_interp:
+            network_ai_section = f'''
+            <div class="ai-box">
+                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-content">
+                    <p>{network_interp.get('summary', '')}</p>
+                    <p><strong>Network structure:</strong> {network_interp.get('structure_analysis', '')}</p>
+                </div>
+            </div>
+            '''
+
+        # Hub genes table with improved display
         hub_table = ''
         if hub_df is not None and len(hub_df) > 0:
             hub_rows = ''
-            for _, row in hub_df.head(20).iterrows():
-                gene = row.get('gene_id', row.get('gene', 'N/A'))
-                degree = row.get('degree', row.get('enhanced_score', 'N/A'))
-                betweenness = row.get('betweenness', row.get('betweenness_centrality', 'N/A'))
-                betweenness_str = f'{betweenness:.4f}' if isinstance(betweenness, (int, float)) else str(betweenness)
-                hub_rows += f'<tr><td>{gene}</td><td>{degree}</td><td>{betweenness_str}</td></tr>'
+            for _, row in hub_df.head(15).iterrows():
+                gene_id = str(row.get('gene_id', row.get('gene', 'N/A')))
+                gene_symbol = id_to_symbol.get(gene_id, gene_id)  # Use symbol if available
+
+                log2fc = row.get('log2FC', 0)
+                direction = row.get('direction', 'up' if log2fc > 0 else 'down')
+                hub_score = row.get('hub_score', row.get('enhanced_hub_score', 0))
+                degree = row.get('degree', 0)
+                targets = row.get('regulatory_targets', 0)
+
+                # Format display
+                fc_class = 'cell-up' if direction == 'up' else 'cell-down'
+                fc_arrow = '↑' if direction == 'up' else '↓'
+                fc_display = f'{fc_arrow} {abs(log2fc):.2f}'
+                score_display = f'{hub_score:.2f}' if isinstance(hub_score, float) else str(hub_score)
+
+                hub_rows += f'''<tr>
+                    <td class="cell-gene">{gene_symbol}</td>
+                    <td class="{fc_class}">{fc_display}</td>
+                    <td>{degree}</td>
+                    <td>{targets}</td>
+                    <td>{score_display}</td>
+                </tr>'''
 
             hub_table = f'''
-            <table class="hub-table">
-                <thead><tr><th>Gene</th><th>Degree/Score</th><th>Betweenness</th></tr></thead>
-                <tbody>{hub_rows}</tbody>
-            </table>
+            <div class="table-wrapper">
+                <div class="table-header">
+                    <span class="table-title">Top Hub Genes</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Gene</th>
+                            <th>log2FC</th>
+                            <th>Connections</th>
+                            <th>Targets</th>
+                            <th>Hub Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>{hub_rows}</tbody>
+                </table>
+            </div>
+            <div class="ai-box orange" style="margin-top: 16px;">
+                <div class="ai-box-header">Hub Genes 해석</div>
+                <div class="ai-box-content">
+                    <p><strong>Hub Gene이란?</strong> 네트워크에서 많은 유전자와 연결된 중심 유전자로, 주요 조절자 역할을 할 가능성이 높습니다.</p>
+                    <p><strong>Connections:</strong> 연결된 유전자 수 (높을수록 영향력 큼)</p>
+                    <p><strong>Targets:</strong> 조절 대상 유전자 수</p>
+                    <p><strong>Hub Score:</strong> 네트워크 중심성 종합 점수 (0-1, 높을수록 중요)</p>
+                </div>
+            </div>
             '''
 
         return f'''
         <section class="network-section" id="network-analysis">
             <h2>6. Network Analysis</h2>
 
-            <div class="network-grid">
-                <div class="network-figure-panel">
-                    <h4>6.1 Co-expression Network</h4>
+            <div class="figure-grid">
+                <div class="figure-panel">
+                    <div class="figure-header">Gene Co-expression Network</div>
                     <div class="figure-container">
                         {network_html if network_html else '<p class="no-data">Network visualization not available</p>'}
                     </div>
-                    <p class="figure-caption">Gene co-expression network constructed from DEGs.</p>
+                    <div class="figure-caption">DEG 기반 공발현 네트워크. 연결선은 유전자 간 발현 상관관계를 나타냄.</div>
+                    {network_ai_section}
                 </div>
 
-                <div class="hub-genes-panel">
-                    <h4>6.2 Hub Genes</h4>
+                <div>
                     {hub_table if hub_table else '<p class="no-data">No hub genes identified</p>'}
-                    <p class="panel-note">Hub genes are highly connected nodes in the network that may play key regulatory roles.</p>
                 </div>
             </div>
         </section>
         '''
 
     def _generate_clinical_implications_html(self, data: Dict) -> str:
-        """Generate Clinical Implications section."""
+        """Generate Clinical Implications section with detailed therapeutic targets and biomarkers."""
         driver_known = data.get('driver_known', [])
         driver_novel = data.get('driver_novel', [])
-        interpretation = data.get('interpretation_report', {})
+        recommendations = data.get('research_recommendations', {})
+        integrated_df = data.get('integrated_gene_table_df')
 
-        # Biomarker potential
-        biomarkers = []
-        therapeutic_targets = []
+        # Build gene_id to symbol mapping
+        id_to_symbol = {}
+        if integrated_df is not None and len(integrated_df) > 0:
+            for _, row in integrated_df.iterrows():
+                gene_id = str(row.get('gene_id', ''))
+                gene_symbol = row.get('gene_symbol', '')
+                if gene_id and gene_symbol and str(gene_symbol) != 'nan':
+                    id_to_symbol[gene_id] = gene_symbol
 
-        for d in driver_known[:5]:
-            gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
-            evidence = d.get('evidence_summary', '')
-            biomarkers.append(f'<li><strong>{gene}</strong>: {evidence[:100]}...</li>')
+        # ============ 8.1 Biomarker Potential ============
+        biomarker_data = recommendations.get('biomarker_development', {})
+        diagnostic_candidates = biomarker_data.get('diagnostic_candidates', [])
+        prognostic_candidates = biomarker_data.get('prognostic_candidates', [])
 
-        for d in driver_novel[:5]:
-            gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
-            evidence = d.get('regulatory_evidence', d.get('evidence_summary', ''))
-            therapeutic_targets.append(f'<li><strong>{gene}</strong>: {evidence[:100] if evidence else "Candidate regulatory gene"}...</li>')
+        biomarker_rows = ''
+        # Use diagnostic candidates from research_recommendations
+        for candidate in diagnostic_candidates[:4]:
+            gene = candidate.get('gene', '')
+            marker_type = candidate.get('marker_type', '진단')
+            evidence = candidate.get('evidence_level', 'medium')
+            rationale = candidate.get('rationale', '')
+
+            evidence_badge = 'high' if evidence == 'high' else ('medium' if evidence == 'medium' else 'low')
+            biomarker_rows += f'''
+            <tr>
+                <td class="cell-gene">{gene}</td>
+                <td>{marker_type}</td>
+                <td><span class="evidence-badge {evidence_badge}">{evidence.upper()}</span></td>
+                <td>{rationale[:80]}{'...' if len(rationale) > 80 else ''}</td>
+            </tr>'''
+
+        # Add prognostic candidates
+        for candidate in prognostic_candidates[:2]:
+            gene = candidate.get('gene', '')
+            association = candidate.get('association', '')
+            validation = candidate.get('validation_needed', '')
+
+            biomarker_rows += f'''
+            <tr>
+                <td class="cell-gene">{gene}</td>
+                <td>예후</td>
+                <td><span class="evidence-badge medium">MEDIUM</span></td>
+                <td>{association} - {validation[:50]}</td>
+            </tr>'''
+
+        # Fallback to driver_known if no recommendations
+        if not biomarker_rows:
+            for d in driver_known[:5]:
+                gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
+                # Convert if numeric
+                if gene.isdigit():
+                    gene = id_to_symbol.get(gene, gene)
+                evidence = d.get('evidence_summary', '데이터베이스 검증 기반 바이오마커 후보')
+                biomarker_rows += f'''
+                <tr>
+                    <td class="cell-gene">{gene}</td>
+                    <td>진단/예후</td>
+                    <td><span class="evidence-badge medium">MEDIUM</span></td>
+                    <td>{evidence[:80]}{'...' if len(evidence) > 80 else ''}</td>
+                </tr>'''
+
+        # ============ 8.2 Therapeutic Targets ============
+        therapeutic_data = recommendations.get('therapeutic_targets', {})
+        high_priority = therapeutic_data.get('high_priority', [])
+        medium_priority = therapeutic_data.get('medium_priority', [])
+
+        therapeutic_rows = ''
+        for target in high_priority[:4]:
+            gene = target.get('gene', '')
+            target_class = target.get('target_class', '')
+            drugs = target.get('existing_drugs', [])
+            rationale = target.get('rationale', '')
+
+            drugs_display = ', '.join(drugs[:2]) if drugs else '연구 중'
+            therapeutic_rows += f'''
+            <tr>
+                <td class="cell-gene">{gene}</td>
+                <td>{target_class}</td>
+                <td><span class="priority-badge high">HIGH</span></td>
+                <td class="cell-drugs">{drugs_display}</td>
+                <td>{rationale[:60]}{'...' if len(rationale) > 60 else ''}</td>
+            </tr>'''
+
+        for target in medium_priority[:2]:
+            gene = target.get('gene', '')
+            target_class = target.get('target_class', '')
+            rationale = target.get('rationale', '')
+
+            therapeutic_rows += f'''
+            <tr>
+                <td class="cell-gene">{gene}</td>
+                <td>{target_class}</td>
+                <td><span class="priority-badge medium">MEDIUM</span></td>
+                <td class="cell-drugs">연구 필요</td>
+                <td>{rationale[:60]}{'...' if len(rationale) > 60 else ''}</td>
+            </tr>'''
+
+        # Fallback to driver_novel
+        if not therapeutic_rows:
+            for d in driver_novel[:5]:
+                gene = d.get('gene_symbol', d.get('gene', 'Unknown'))
+                if gene.isdigit():
+                    gene = id_to_symbol.get(gene, gene)
+                evidence = d.get('regulatory_evidence', d.get('evidence_summary', ''))
+                therapeutic_rows += f'''
+                <tr>
+                    <td class="cell-gene">{gene}</td>
+                    <td>candidate</td>
+                    <td><span class="priority-badge medium">MEDIUM</span></td>
+                    <td class="cell-drugs">연구 필요</td>
+                    <td>{evidence[:60] if evidence else "후보 조절 유전자"}...</td>
+                </tr>'''
+
+        # ============ 8.3 Drug Repurposing ============
+        drug_repurposing = recommendations.get('drug_repurposing', {})
+        repurposing_candidates = drug_repurposing.get('candidates', [])
+
+        repurposing_rows = ''
+        for candidate in repurposing_candidates[:3]:
+            drug = candidate.get('drug', '')
+            target_gene = candidate.get('target_gene', '')
+            original = candidate.get('original_indication', '')
+            rationale = candidate.get('repurposing_rationale', '')
+            status = candidate.get('clinical_status', '')
+
+            status_class = 'approved' if 'FDA' in status or '승인' in status else 'trial'
+            repurposing_rows += f'''
+            <tr>
+                <td class="cell-drug-name">{drug}</td>
+                <td class="cell-gene">{target_gene}</td>
+                <td>{original}</td>
+                <td><span class="status-badge {status_class}">{status}</span></td>
+                <td>{rationale[:50]}{'...' if len(rationale) > 50 else ''}</td>
+            </tr>'''
 
         return f'''
         <section class="clinical-section" id="clinical-implications">
             <h2>8. Clinical Implications</h2>
 
-            <div class="clinical-grid">
-                <div class="clinical-panel">
-                    <h4>8.1 Biomarker Potential</h4>
-                    <ul class="clinical-list">
-                        {chr(10).join(biomarkers) if biomarkers else '<li>No established biomarkers identified</li>'}
-                    </ul>
-                    <p class="panel-note">These genes show potential as diagnostic or prognostic biomarkers based on database validation.</p>
-                </div>
-
-                <div class="clinical-panel">
-                    <h4>8.2 Therapeutic Targets</h4>
-                    <ul class="clinical-list">
-                        {chr(10).join(therapeutic_targets) if therapeutic_targets else '<li>No therapeutic targets identified</li>'}
-                    </ul>
-                    <p class="panel-note">Candidate regulatory genes that may serve as potential therapeutic targets pending validation.</p>
+            <div class="ai-box orange" style="margin-bottom: 20px;">
+                <div class="ai-box-header">임상적 의미 요약</div>
+                <div class="ai-box-content">
+                    <p>본 분석에서 식별된 유전자들은 {data.get('cancer_prediction', {}).get('predicted_cancer', 'cancer')}의 진단, 예후 예측,
+                    그리고 치료 표적으로서의 잠재력을 보여줍니다. 아래 표는 데이터베이스 검증 및 문헌 분석을 기반으로
+                    우선순위가 높은 후보들을 정리한 것입니다.</p>
                 </div>
             </div>
 
-            <div class="disclaimer-box">
-                <strong>⚠️ Important Note:</strong> All clinical implications are computational predictions and require
-                experimental and clinical validation before any diagnostic or therapeutic application.
+            <div class="table-wrapper">
+                <div class="table-header">
+                    <span class="table-title">8.1 바이오마커 후보 (Biomarker Candidates)</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Gene</th>
+                            <th>Type</th>
+                            <th>Evidence</th>
+                            <th>Rationale</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {biomarker_rows if biomarker_rows else '<tr><td colspan="4">바이오마커 후보가 없습니다.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-wrapper" style="margin-top: 24px;">
+                <div class="table-header">
+                    <span class="table-title">8.2 치료 표적 (Therapeutic Targets)</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Gene</th>
+                            <th>Class</th>
+                            <th>Priority</th>
+                            <th>Existing Drugs</th>
+                            <th>Rationale</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {therapeutic_rows if therapeutic_rows else '<tr><td colspan="5">치료 표적 후보가 없습니다.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            {f"""
+            <div class="table-wrapper" style="margin-top: 24px;">
+                <div class="table-header">
+                    <span class="table-title">8.3 약물 재목적화 후보 (Drug Repurposing)</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Drug</th>
+                            <th>Target Gene</th>
+                            <th>Original Indication</th>
+                            <th>Status</th>
+                            <th>Rationale</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {repurposing_rows}
+                    </tbody>
+                </table>
+            </div>
+            """ if repurposing_rows else ''}
+
+            <div class="disclaimer-box" style="margin-top: 24px;">
+                <strong>⚠️ Important Note:</strong> 모든 임상적 의미는 계산적 예측이며, 진단 또는 치료 적용 전에
+                반드시 실험적·임상적 검증이 필요합니다. 본 분석은 연구 참고용이며 의학적 조언이 아닙니다.
             </div>
         </section>
         '''
 
     def _generate_followup_experiments_html(self, data: Dict) -> str:
-        """Generate Suggested Follow-up Experiments section."""
+        """Generate Suggested Follow-up Experiments section with detailed protocols."""
         driver_known = data.get('driver_known', [])
         driver_novel = data.get('driver_novel', [])
         hub_df = data.get('hub_genes_df')
+        integrated_df = data.get('integrated_gene_table_df')
+        recommendations = data.get('research_recommendations', {})
 
-        # Get top genes to validate
+        # Build gene_id to symbol mapping
+        id_to_symbol = {}
+        if integrated_df is not None and len(integrated_df) > 0:
+            for _, row in integrated_df.iterrows():
+                gene_id = str(row.get('gene_id', ''))
+                gene_symbol = row.get('gene_symbol', '')
+                if gene_id and gene_symbol and str(gene_symbol) != 'nan':
+                    id_to_symbol[gene_id] = gene_symbol
+
+        # Get top genes to validate (with symbol conversion)
         top_genes = []
         if driver_known:
-            top_genes.extend([str(d.get('gene_symbol', d.get('gene', ''))) for d in driver_known[:3]])
+            for d in driver_known[:3]:
+                gene = str(d.get('gene_symbol', d.get('gene', '')))
+                if gene.isdigit():
+                    gene = id_to_symbol.get(gene, gene)
+                if gene:
+                    top_genes.append(gene)
         if driver_novel:
-            top_genes.extend([str(d.get('gene_symbol', d.get('gene', ''))) for d in driver_novel[:3]])
+            for d in driver_novel[:3]:
+                gene = str(d.get('gene_symbol', d.get('gene', '')))
+                if gene.isdigit():
+                    gene = id_to_symbol.get(gene, gene)
+                if gene:
+                    top_genes.append(gene)
         if hub_df is not None and len(hub_df) > 0:
-            hub_genes = [str(g) for g in hub_df.head(3)['gene_id'].tolist()] if 'gene_id' in hub_df.columns else []
-            top_genes.extend(hub_genes)
+            for _, row in hub_df.head(3).iterrows():
+                gene_id = str(row.get('gene_id', ''))
+                gene = id_to_symbol.get(gene_id, gene_id)
+                if gene and not gene.isdigit():
+                    top_genes.append(gene)
 
-        top_genes = [str(g) for g in list(set(top_genes))[:5] if g]  # Unique top 5, ensure strings
-        genes_str = ', '.join(top_genes) if top_genes else 'identified candidate genes'
+        top_genes = list(dict.fromkeys(top_genes))[:5]  # Unique, preserve order
+        genes_str = ', '.join(top_genes) if top_genes else '분석된 후보 유전자들'
+
+        # Get experimental validation from research_recommendations
+        exp_validation = recommendations.get('experimental_validation', {})
+        immediate_val = exp_validation.get('immediate_validation', {})
+        functional_studies = exp_validation.get('functional_studies', {})
+        clinical_val = exp_validation.get('clinical_validation', {})
+
+        # qPCR genes
+        qpcr_genes = immediate_val.get('qPCR', {}).get('genes', top_genes[:3])
+        qpcr_genes_str = ', '.join(qpcr_genes) if qpcr_genes else genes_str
+
+        # Western blot genes
+        wb_genes = immediate_val.get('western_blot', {}).get('genes', [])
+        wb_genes_str = ', '.join(wb_genes) if wb_genes else top_genes[0] if top_genes else 'target genes'
+
+        # Knockdown genes
+        kd_info = functional_studies.get('knockdown_knockout', {})
+        kd_genes = kd_info.get('genes', [])
+        kd_method = kd_info.get('method', 'siRNA')
+        kd_readout = kd_info.get('readout', '세포 성장 및 사멸 비율')
+
+        # Overexpression genes
+        oe_info = functional_studies.get('overexpression', {})
+        oe_genes = oe_info.get('genes', [])
+        oe_method = oe_info.get('method', 'plasmid')
+        oe_readout = oe_info.get('readout', '세포 성장 변화')
 
         return f'''
         <section class="followup-section" id="followup-experiments">
             <h2>9. Suggested Follow-up Experiments</h2>
 
-            <div class="experiment-grid">
-                <div class="experiment-panel">
-                    <h4>9.1 Validation Experiments</h4>
-                    <ul>
-                        <li><strong>qRT-PCR</strong>: Validate expression of {genes_str}</li>
-                        <li><strong>Western Blot</strong>: Confirm protein-level changes</li>
-                        <li><strong>IHC</strong>: Verify tissue localization</li>
-                    </ul>
-                </div>
-
-                <div class="experiment-panel">
-                    <h4>9.2 Functional Studies</h4>
-                    <ul>
-                        <li><strong>siRNA/shRNA Knockdown</strong>: Assess phenotypic changes</li>
-                        <li><strong>CRISPR-Cas9 Knockout</strong>: Generate knockout models</li>
-                        <li><strong>Overexpression</strong>: Study gain-of-function effects</li>
-                        <li><strong>Proliferation Assay</strong>: MTT/CCK-8 assay</li>
-                        <li><strong>Migration/Invasion</strong>: Transwell assay</li>
-                    </ul>
-                </div>
-
-                <div class="experiment-panel">
-                    <h4>9.3 In Vivo Studies</h4>
-                    <ul>
-                        <li><strong>Xenograft Model</strong>: Tumor growth in mice</li>
-                        <li><strong>PDX Model</strong>: Patient-derived xenografts</li>
-                        <li><strong>Drug Treatment</strong>: Therapeutic efficacy testing</li>
-                    </ul>
+            <div class="ai-box green" style="margin-bottom: 20px;">
+                <div class="ai-box-header">실험 검증 전략 요약</div>
+                <div class="ai-box-content">
+                    <p>본 분석에서 식별된 <strong>{genes_str}</strong>에 대해 아래와 같은 단계적 검증 실험을 권장합니다.
+                    발현 수준 검증 → 기능 연구 → 임상 검증 순서로 진행하는 것이 효율적입니다.</p>
                 </div>
             </div>
 
-            <div class="priority-note">
-                <h5>Recommended Priority</h5>
-                <p>Based on analysis results, we recommend prioritizing validation of: <strong>{genes_str}</strong></p>
+            <div class="table-wrapper">
+                <div class="table-header">
+                    <span class="table-title">9.1 발현 수준 검증 (Expression Validation)</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Target Genes</th>
+                            <th>Purpose</th>
+                            <th>Sample Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>qRT-PCR</strong></td>
+                            <td class="cell-gene">{qpcr_genes_str}</td>
+                            <td>mRNA 발현 수준 정량적 검증</td>
+                            <td>세포주, 종양 조직</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Western Blot</strong></td>
+                            <td class="cell-gene">{wb_genes_str}</td>
+                            <td>단백질 발현 수준 확인</td>
+                            <td>세포 용해물</td>
+                        </tr>
+                        <tr>
+                            <td><strong>IHC</strong></td>
+                            <td class="cell-gene">{top_genes[0] if top_genes else 'target genes'}</td>
+                            <td>조직 내 발현 위치 및 패턴 확인</td>
+                            <td>FFPE 조직</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-wrapper" style="margin-top: 24px;">
+                <div class="table-header">
+                    <span class="table-title">9.2 기능 연구 (Functional Studies)</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Experiment</th>
+                            <th>Target Genes</th>
+                            <th>Method</th>
+                            <th>Readout</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Knockdown</strong></td>
+                            <td class="cell-gene">{', '.join(kd_genes) if kd_genes else top_genes[0] if top_genes else 'target gene'}</td>
+                            <td>{kd_method}</td>
+                            <td>{kd_readout}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Overexpression</strong></td>
+                            <td class="cell-gene">{', '.join(oe_genes) if oe_genes else (top_genes[1] if len(top_genes) > 1 else 'target gene')}</td>
+                            <td>{oe_method}</td>
+                            <td>{oe_readout}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CRISPR-Cas9 KO</strong></td>
+                            <td class="cell-gene">{top_genes[0] if top_genes else 'target gene'}</td>
+                            <td>sgRNA guide design</td>
+                            <td>Complete loss-of-function 표현형</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Proliferation Assay</strong></td>
+                            <td class="cell-gene">KD/OE cells</td>
+                            <td>MTT/CCK-8 assay</td>
+                            <td>세포 생존율 및 증식 속도</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Migration/Invasion</strong></td>
+                            <td class="cell-gene">KD/OE cells</td>
+                            <td>Transwell assay</td>
+                            <td>세포 이동 및 침윤 능력</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-wrapper" style="margin-top: 24px;">
+                <div class="table-header">
+                    <span class="table-title">9.3 임상 검증 및 In Vivo 연구</span>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Study Type</th>
+                            <th>Description</th>
+                            <th>Expected Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Xenograft Model</strong></td>
+                            <td>KD/OE 세포를 이용한 마우스 이종이식 모델</td>
+                            <td>종양 성장 속도 및 크기 변화</td>
+                        </tr>
+                        <tr>
+                            <td><strong>PDX Model</strong></td>
+                            <td>환자 유래 이종이식 모델에서 타겟 유전자 발현 분석</td>
+                            <td>임상 관련성 검증</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Clinical Cohort</strong></td>
+                            <td>독립적 환자 코호트에서 발현-예후 연관성 분석</td>
+                            <td>바이오마커 가치 검증</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Liquid Biopsy</strong></td>
+                            <td>ctDNA/cfRNA에서 타겟 유전자 검출</td>
+                            <td>비침습적 모니터링 가능성</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="ai-box" style="margin-top: 24px;">
+                <div class="ai-box-header">우선순위 권장사항</div>
+                <div class="ai-box-content">
+                    <p><strong>1순위:</strong> <span class="cell-gene">{qpcr_genes_str}</span>에 대한 qRT-PCR 발현 검증</p>
+                    <p><strong>2순위:</strong> 발현 검증된 유전자에 대한 siRNA knockdown 기능 연구</p>
+                    <p><strong>3순위:</strong> 양성 결과 시 CRISPR-Cas9 knockout 및 in vivo 검증</p>
+                </div>
             </div>
         </section>
         '''
@@ -3434,6 +3916,75 @@ class ReportAgent(BaseAgent):
                 justify-content: center;
                 gap: var(--spacing-xl);
                 margin-bottom: var(--spacing-xl);
+            }
+
+            /* DEG Summary Box */
+            .deg-summary-box {
+                display: flex;
+                justify-content: center;
+                gap: var(--spacing-xl);
+                margin-bottom: var(--spacing-xl);
+                padding: var(--spacing-lg);
+                background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+                border-radius: 12px;
+            }
+
+            .deg-summary-box .summary-stat {
+                text-align: center;
+                background: white;
+                padding: var(--spacing-lg) var(--spacing-xl);
+                border-radius: 12px;
+                min-width: 150px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            }
+
+            .deg-summary-box .stat-number {
+                display: block;
+                font-size: 36px;
+                font-weight: 700;
+                color: var(--gray-800);
+            }
+
+            .deg-summary-box .summary-stat.up .stat-number { color: #dc2626; }
+            .deg-summary-box .summary-stat.down .stat-number { color: #2563eb; }
+
+            .deg-summary-box .stat-label {
+                display: block;
+                font-size: 14px;
+                color: var(--gray-600);
+                margin-top: 4px;
+            }
+
+            /* AI Interpretation Panel */
+            .ai-interpretation-panel {
+                background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+                border-left: 4px solid var(--npj-blue);
+                padding: var(--spacing-md);
+                margin-top: var(--spacing-md);
+                border-radius: 0 8px 8px 0;
+            }
+
+            .ai-interpretation-panel .ai-header {
+                font-weight: 600;
+                color: var(--npj-blue);
+                margin-bottom: 8px;
+            }
+
+            .ai-interpretation-panel .ai-summary {
+                font-size: 14px;
+                line-height: 1.6;
+                color: var(--gray-700);
+            }
+
+            .ai-interpretation-panel .ai-observations {
+                font-size: 13px;
+                color: var(--gray-600);
+                margin: 8px 0;
+                padding-left: 20px;
+            }
+
+            .ai-interpretation-panel .ai-observations li {
+                margin-bottom: 4px;
             }
 
             .driver-stat {
