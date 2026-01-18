@@ -411,6 +411,42 @@ Gene Symbol + Cancer Type + Direction
                               "BRCA1은 DNA 손상 복구에 중요한 역할..." [PMID: 12345678]
 ```
 
+### DGIdb Integration (Drug-Gene Interactions)
+
+DGIdb v5 GraphQL API를 통해 검증된 약물-유전자 상호작용 정보를 제공합니다:
+
+```python
+from rnaseq_pipeline.rag.dgidb_client import DGIdbClient, get_therapeutic_targets
+
+# 약물-유전자 상호작용 조회
+client = DGIdbClient()
+interactions = client.get_drug_interactions(["EGFR", "KRAS", "TP53"])
+
+# 치료 표적 추천
+targets = get_therapeutic_targets(hub_genes, deg_genes, max_targets=10)
+```
+
+**DGIdb 제공 정보**:
+- 약물-유전자 상호작용 (interaction_types, interaction_score)
+- 유전자 카테고리 (KINASE, RECEPTOR, DRUGGABLE 등)
+- FDA 승인 약물 여부
+- 문헌 근거 (PMIDs)
+- 데이터 출처 (DrugBank, PharmGKB, ChEMBL, OncoKB 등)
+
+### Research Recommendations (LLM 기반)
+
+Agent 6에서 LLM을 활용하여 자동 생성되는 연구 추천:
+
+| 섹션 | 내용 |
+|------|------|
+| **therapeutic_targets** | 고/중 우선순위 치료 표적, 기존 약물, 근거 |
+| **drug_repurposing** | 약물 재목적화 후보, 원래 적응증, 임상 상태 |
+| **experimental_validation** | qPCR, Western, IHC, Knockdown, Overexpression 프로토콜 |
+| **biomarker_development** | 진단/예후 바이오마커 후보, 근거 수준 |
+| **future_research_directions** | 단기/중기/장기 연구 방향 |
+
+**생성 파일**: `research_recommendations.json`
+
 ### Paper Explainer 평가 기준
 
 **Paper Characteristics** (`paper_explainer.py`):
@@ -540,7 +576,8 @@ VectorDB_BioInsight/
 │   │   ├── predictor.py                 # Prediction service
 │   │   └── pancancer_classifier.py      # Pan-cancer model
 │   └── rag/
-│       └── gene_interpreter.py          # RAG interpretation
+│       ├── gene_interpreter.py          # RAG interpretation
+│       └── dgidb_client.py              # DGIdb API client
 │
 ├── bio-daily-briefing/
 │   └── src/
@@ -688,14 +725,31 @@ interpretation = "KRAS는 췌장암의 주요 원인이다"  # 출처 없음
 
 # ✅ 올바른 폴더 구조
 output_dir/
-├── deg_significant.csv      # 필수
-├── hub_genes.csv            # 필수
-├── pathway_summary.csv      # 필수
-├── integrated_gene_table.csv # 필수
+├── deg_significant.csv       # 필수
+├── hub_genes.csv             # 필수
+├── pathway_summary.csv       # 필수
+├── integrated_gene_table.csv # 필수 (Entrez ID → Gene Symbol 매핑)
+├── research_recommendations.json  # LLM 생성 연구 추천
 └── figures/
     ├── volcano_plot.png
     └── network_3d_interactive.html
 ```
+
+### HTML 리포트 섹션 구조 (v4.0)
+
+| 섹션 | 내용 |
+|------|------|
+| 1. Executive Summary | Extended Abstract, 핵심 발견 요약 |
+| 2. Quality Control | PCA plot, 샘플 품질 분석 |
+| 3. Differential Expression | Volcano plot, Heatmap, DEG 통계 |
+| 4. Pathway Analysis | GO/KEGG enrichment, Pathway barplot |
+| 5. Database Validation | COSMIC/OncoKB 매칭, 문헌 근거 |
+| 6. Network Analysis | Hub genes 테이블 (Gene Symbol), 3D network |
+| 7. ML Prediction | Pan-cancer 예측, SHAP 해석 |
+| **8. Clinical Implications** | 바이오마커 후보, 치료 표적, 약물 재목적화 테이블 |
+| **9. Follow-up Experiments** | 발현 검증, 기능 연구, 임상 검증 프로토콜 |
+| 10. Research Recommendations | 단기/중기/장기 연구 방향 |
+| 11. Methods & References | 분석 파라미터, 참고 문헌 |
 
 ### Daily Briefing 데이터 형식
 
@@ -726,4 +780,4 @@ clinical_trials = [
 
 ---
 
-*Last Updated: 2026-01-16*
+*Last Updated: 2026-01-18*
