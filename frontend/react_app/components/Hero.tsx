@@ -89,6 +89,17 @@ export const Hero: React.FC<HeroProps> = ({
     return /^10\.\d{4,}\//.test(text.trim()) || text.includes('doi.org/');
   };
 
+  // Auto-detect RNA-seq related keywords in query
+  const isRNAseqQuery = (text: string): boolean => {
+    const lowerText = text.toLowerCase().trim();
+    const rnaseqPatterns = [
+      'rna-seq', 'rnaseq', 'rna seq',
+      'transcriptome', 'deseq', 'deg analysis',
+      '발현 분석', '전사체', '유전자 발현'
+    ];
+    return rnaseqPatterns.some(pattern => lowerText.includes(pattern));
+  };
+
   // Translate papers in background (non-blocking)
   const translatePapersInBackground = async (papers: any[]) => {
     for (let i = 0; i < papers.length; i++) {
@@ -143,6 +154,12 @@ export const Hero: React.FC<HeroProps> = ({
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
+
+    // Auto-detect RNA-seq keywords and open upload modal
+    if (isRNAseqQuery(query)) {
+      setShowRNAseqModal(true);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);

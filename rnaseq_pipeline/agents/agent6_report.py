@@ -1589,15 +1589,22 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_css(self) -> str:
-        """Generate npj Systems Biology and Applications journal-style CSS."""
+        """Generate Claude AI-inspired modern CSS design."""
+        # Load CSS from external file
+        css_path = Path(__file__).parent.parent / "assets" / "claude_report_style.css"
+        if css_path.exists():
+            with open(css_path, 'r', encoding='utf-8') as f:
+                css_content = f.read()
+            return f'<style>\n{css_content}\n</style>'
+
+        # Fallback to embedded CSS if file not found
         return '''
         <style>
-            /* ========== npj SYSTEMS BIOLOGY STYLE ========== */
-            /* Based on Nature/Springer journal design guidelines */
+            /* ========== CLAUDE AI MODERN STYLE (FALLBACK) ========== */
 
             :root {
-                /* npj Brand Colors */
-                --npj-blue: #0056b9;
+                /* Claude AI Inspired Color Palette */
+                --claude-bg: #faf9f7;
                 --npj-blue-dark: #003d82;
                 --npj-blue-light: #e8f4fc;
                 --npj-orange: #e87722;
