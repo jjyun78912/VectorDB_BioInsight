@@ -5622,11 +5622,11 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         }
 
     def _generate_research_recommendations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Generate comprehensive research recommendations using LLM.
+        """Generate comprehensive research recommendations using LLM + DGIdb.
 
         Creates actionable next-step recommendations including:
-        - Therapeutic target candidates (druggable genes)
-        - Drug repurposing suggestions (DGIdb-based)
+        - Therapeutic target candidates (druggable genes) - DGIdb verified
+        - Drug repurposing suggestions (DGIdb-based) - real drug-gene interactions
         - Experimental validation priorities
         - Future research directions
         - Biomarker development opportunities
@@ -5644,6 +5644,10 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 
         llm_provider = "OpenAI" if use_openai else "Anthropic"
         self.logger.info(f"Generating research recommendations via {llm_provider}...")
+
+        # Query DGIdb for verified drug-gene interactions
+        dgidb_info = self._query_dgidb_for_recommendations(data)
+        dgidb_section = dgidb_info.get("prompt_section", "")
 
         # Gather comprehensive data for recommendations
         deg_df = data.get('deg_significant_df')
@@ -5754,6 +5758,9 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 ## 암 DB 매칭 유전자
 {chr(10).join(db_info[:10]) if db_info else '없음'}
 
+## DGIdb 약물-유전자 상호작용 (검증된 데이터)
+{dgidb_section if dgidb_section else '(DGIdb 조회 실패 또는 매칭 결과 없음)'}
+
 아래 JSON 형식으로 종합적인 후속 연구 추천을 제공해주세요:
 
 ```json
@@ -5832,12 +5839,14 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 1. 한국어로 작성 (유전자명, 약물명, 기술 용어는 영어 유지)
 2. 구체적이고 실행 가능한 추천 제공
 3. 분석 결과에 기반한 맞춤형 추천 (일반적인 내용 지양)
-4. 실제 유전자명과 관련 약물 정보 포함
-5. 우선순위와 근거를 명확히 제시
-6. 현실적인 timeline과 resource 제안
-7. therapeutic_targets의 high_priority는 3-5개, medium_priority는 3-5개
-8. drug_repurposing candidates는 3-5개
-9. 각 섹션에 최소 2개 이상의 구체적 항목 포함
+4. **drug_repurposing 섹션은 반드시 DGIdb 데이터에서 제공된 약물만 사용** (위 DGIdb 섹션 참조)
+5. DGIdb에서 검증된 약물-유전자 상호작용을 우선 추천
+6. therapeutic_targets는 DGIdb에서 druggable로 분류된 유전자를 우선
+7. 우선순위와 근거를 명확히 제시
+8. 현실적인 timeline과 resource 제안
+9. therapeutic_targets의 high_priority는 3-5개, medium_priority는 3-5개
+10. drug_repurposing candidates는 DGIdb 매칭 기준 3-5개 (검증되지 않은 약물 추천 금지)
+11. 각 섹션에 최소 2개 이상의 구체적 항목 포함
 """
 
         try:
@@ -5882,14 +5891,102 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
             self.logger.error(f"Error generating research recommendations via {llm_provider}: {e}")
             return self._generate_fallback_research_recommendations(data)
 
+    def _query_dgidb_for_recommendations(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Query DGIdb for verified drug-gene interactions.
+
+        Returns a dictionary with:
+        - prompt_section: Formatted string for LLM prompt
+        - interactions: Raw interaction data
+        - druggable_genes: List of druggable gene symbols
+        """
+        try:
+            from ..rag.dgidb_client import DGIdbClient, get_therapeutic_targets
+        except ImportError:
+            self.logger.warning("DGIdb client not available")
+            return {"prompt_section": "", "interactions": {}, "druggable_genes": []}
+
+        # Collect gene symbols from hub genes and drivers
+        gene_symbols = set()
+
+        hub_df = data.get('hub_genes_df')
+        if hub_df is not None:
+            gene_col = 'gene_symbol' if 'gene_symbol' in hub_df.columns else 'gene_id'
+            for _, row in hub_df.head(20).iterrows():
+                gene = str(row.get(gene_col, row.get('gene_id', '')))
+                if gene and not gene.startswith('ENSG'):
+                    gene_symbols.add(gene)
+
+        driver_known = data.get('driver_known', [])
+        for d in driver_known[:10]:
+            gene = d.get('gene_symbol', '')
+            if gene:
+                gene_symbols.add(gene)
+
+        driver_novel = data.get('driver_novel', [])
+        for d in driver_novel[:10]:
+            gene = d.get('gene_symbol', '')
+            if gene:
+                gene_symbols.add(gene)
+
+        if not gene_symbols:
+            return {"prompt_section": "", "interactions": {}, "druggable_genes": []}
+
+        self.logger.info(f"Querying DGIdb for {len(gene_symbols)} genes...")
+
+        try:
+            client = DGIdbClient(timeout=30)
+            interactions = client.get_drug_interactions(list(gene_symbols))
+            categories = client.get_gene_categories(list(gene_symbols))
+
+            # Build prompt section
+            prompt_lines = []
+            druggable_genes = []
+
+            for gene, drugs in interactions.items():
+                if drugs:
+                    druggable_genes.append(gene)
+                    drug_info = []
+                    for drug in drugs[:3]:  # Top 3 drugs per gene
+                        int_types = ", ".join(drug.interaction_types[:2]) if drug.interaction_types else "unknown"
+                        sources = ", ".join(drug.sources[:2]) if drug.sources else ""
+                        drug_info.append(f"{drug.drug_name} ({int_types}; {sources})")
+                    prompt_lines.append(f"- {gene}: {'; '.join(drug_info)}")
+
+            # Add category info for genes without drugs
+            for gene, cat in categories.items():
+                if gene not in druggable_genes and cat.is_druggable:
+                    cat_str = ", ".join(cat.categories[:2]) if cat.categories else "druggable"
+                    prompt_lines.append(f"- {gene}: (druggable - {cat_str}, 약물 조회 필요)")
+                    druggable_genes.append(gene)
+
+            self.logger.info(f"DGIdb: Found {len(druggable_genes)} druggable genes with {sum(len(v) for v in interactions.values())} drug interactions")
+
+            return {
+                "prompt_section": "\n".join(prompt_lines) if prompt_lines else "(매칭 결과 없음)",
+                "interactions": {g: [d.to_dict() for d in drugs] for g, drugs in interactions.items()},
+                "druggable_genes": druggable_genes
+            }
+
+        except Exception as e:
+            self.logger.error(f"DGIdb query error: {e}")
+            return {"prompt_section": f"(DGIdb 조회 실패: {e})", "interactions": {}, "druggable_genes": []}
+
     def _generate_fallback_research_recommendations(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate template-based research recommendations when LLM API is unavailable."""
+        """Generate template-based research recommendations when LLM API is unavailable.
+
+        Uses DGIdb for verified drug-gene interactions to avoid hallucination.
+        """
         deg_df = data.get('deg_significant_df')
         hub_df = data.get('hub_genes_df')
         pathway_df = data.get('pathway_summary_df')
         driver_known = data.get('driver_known', [])
         driver_novel = data.get('driver_novel', [])
         cancer_type = self.config.get('cancer_type', 'cancer').replace('_', ' ').title()
+
+        # Query DGIdb for verified drug-gene interactions
+        dgidb_info = self._query_dgidb_for_recommendations(data)
+        dgidb_interactions = dgidb_info.get("interactions", {})
+        druggable_genes = dgidb_info.get("druggable_genes", [])
 
         # Extract gene names
         hub_gene_names = []
@@ -5945,11 +6042,8 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 ] if known_names else []
             },
             "drug_repurposing": {
-                "description": "Hub 유전자와 Driver 후보에 대한 기존 약물 재목적화 가능성을 검토하세요. DGIdb (dgidb.org)에서 약물-유전자 상호작용을 조회할 수 있습니다.",
-                "candidates": [
-                    {"drug": "DGIdb 조회 필요", "target_gene": gene, "original_indication": "조회 필요", "repurposing_rationale": f"{cancer_type}에서 유의한 발현 변화", "clinical_status": "확인 필요"}
-                    for gene in hub_gene_names[:3]
-                ] if hub_gene_names else []
+                "description": f"DGIdb (Drug-Gene Interaction Database)에서 검증된 약물-유전자 상호작용 정보입니다. {len(dgidb_interactions)}개 유전자에서 약물 상호작용이 확인되었습니다.",
+                "candidates": self._build_dgidb_drug_candidates(dgidb_interactions, cancer_type)
             },
             "experimental_validation": {
                 "description": "분석 결과를 실험적으로 검증하기 위한 단계별 전략입니다. 1차 검증(qPCR), 2차 검증(Western blot), 기능 연구 순으로 진행하세요.",
@@ -6022,6 +6116,66 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 ]
             }
         }
+
+    def _build_dgidb_drug_candidates(
+        self,
+        dgidb_interactions: Dict[str, List[Dict]],
+        cancer_type: str
+    ) -> List[Dict[str, Any]]:
+        """Build drug repurposing candidates from DGIdb interactions.
+
+        Returns verified drug-gene interactions only, avoiding hallucination.
+        """
+        candidates = []
+
+        for gene, drugs in dgidb_interactions.items():
+            if not drugs:
+                continue
+
+            for drug in drugs[:2]:  # Top 2 drugs per gene
+                drug_name = drug.get("drug_name", "Unknown")
+                int_types = drug.get("interaction_types", [])
+                sources = drug.get("sources", [])
+                pmids = drug.get("pmids", [])
+
+                # Determine clinical status based on sources
+                clinical_status = "연구 단계"
+                if "DrugBank" in sources or "FDA" in " ".join(sources):
+                    clinical_status = "FDA 승인 (타 적응증)"
+                elif "CIViC" in sources or "OncoKB" in sources:
+                    clinical_status = "임상시험 진행/완료"
+                elif "PharmGKB" in sources:
+                    clinical_status = "약물유전체학 근거 있음"
+
+                # Build interaction type string
+                int_type_str = ", ".join(int_types[:2]) if int_types else "상호작용"
+
+                candidates.append({
+                    "drug": drug_name,
+                    "target_gene": gene,
+                    "original_indication": f"DGIdb 출처: {', '.join(sources[:2])}" if sources else "조회 필요",
+                    "repurposing_rationale": f"{gene} {int_type_str} - {cancer_type}에서 유의한 발현 변화 관찰",
+                    "clinical_status": clinical_status,
+                    "evidence": f"PMID: {', '.join(pmids[:2])}" if pmids else "DGIdb 데이터베이스"
+                })
+
+                if len(candidates) >= 5:
+                    break
+
+            if len(candidates) >= 5:
+                break
+
+        # If no DGIdb results, return placeholder
+        if not candidates:
+            candidates.append({
+                "drug": "DGIdb 매칭 결과 없음",
+                "target_gene": "-",
+                "original_indication": "해당 유전자에 대한 약물 상호작용이 DGIdb에서 발견되지 않았습니다",
+                "repurposing_rationale": "수동 문헌 검색 또는 다른 데이터베이스 조회를 권장합니다",
+                "clinical_status": "-"
+            })
+
+        return candidates
 
     def validate_outputs(self) -> bool:
         """Validate report outputs."""
