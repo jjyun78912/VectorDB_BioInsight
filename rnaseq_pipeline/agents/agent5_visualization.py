@@ -761,7 +761,7 @@ class VisualizationAgent(BaseAgent):
         return saved_files
 
     def _plot_pca(self) -> Optional[List[str]]:
-        """Generate PCA plot."""
+        """Generate PCA plot with condition-based coloring."""
         if self.norm_counts is None:
             self.logger.warning("Skipping PCA - no normalized counts")
             return None
@@ -785,10 +785,58 @@ class VisualizationAgent(BaseAgent):
         pca = PCA(n_components=2)
         pca_result = pca.fit_transform(expr_scaled)
 
+        # Load metadata for condition coloring
+        # Try multiple possible locations for metadata.csv
+        possible_metadata_paths = [
+            self.input_dir / "metadata.csv",                    # Current input dir
+            self.input_dir.parent / "metadata.csv",             # Parent (run dir)
+            self.input_dir.parent.parent / "metadata.csv",      # Grandparent (pipeline output)
+            self.input_dir.parent.parent.parent / "metadata.csv",  # Original input
+        ]
+
+        metadata_path = None
+        for path in possible_metadata_paths:
+            if path.exists():
+                metadata_path = path
+                break
+
+        sample_conditions = {}
+        if metadata_path and metadata_path.exists():
+            try:
+                metadata_df = pd.read_csv(metadata_path)
+                for _, row in metadata_df.iterrows():
+                    sample_id = row.get('sample_id', row.get('sample', ''))
+                    condition = row.get('condition', row.get('group', 'unknown'))
+                    sample_conditions[sample_id] = condition
+                self.logger.info(f"Loaded metadata for {len(sample_conditions)} samples")
+            except Exception as e:
+                self.logger.warning(f"Could not load metadata: {e}")
+
+        # Define colors for conditions
+        condition_colors = {
+            'tumor': '#dc2626',      # Red
+            'cancer': '#dc2626',     # Red
+            'case': '#dc2626',       # Red
+            'treatment': '#dc2626',  # Red
+            'normal': '#2563eb',     # Blue
+            'control': '#2563eb',    # Blue
+            'healthy': '#2563eb',    # Blue
+        }
+        default_color = '#6b7280'  # Gray for unknown
+
         # Plot
         fig, ax = plt.subplots(figsize=self.config["figsize"]["pca"])
 
-        ax.scatter(pca_result[:, 0], pca_result[:, 1], s=100, alpha=0.7)
+        # Get colors for each sample
+        colors = []
+        for sample in expr_t.index:
+            condition = sample_conditions.get(sample, 'unknown').lower()
+            color = condition_colors.get(condition, default_color)
+            colors.append(color)
+
+        # Scatter plot with colors
+        scatter = ax.scatter(pca_result[:, 0], pca_result[:, 1],
+                            c=colors, s=120, alpha=0.8, edgecolors='white', linewidths=1.5)
 
         # Label points
         for i, sample in enumerate(expr_t.index):
@@ -801,6 +849,17 @@ class VisualizationAgent(BaseAgent):
 
         ax.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
         ax.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+
+        # Add legend if we have conditions
+        if sample_conditions:
+            unique_conditions = list(set(sample_conditions.values()))
+            legend_elements = []
+            from matplotlib.patches import Patch
+            for cond in sorted(unique_conditions):
+                color = condition_colors.get(cond.lower(), default_color)
+                legend_elements.append(Patch(facecolor=color, edgecolor='white',
+                                            label=cond.capitalize()))
+            ax.legend(handles=legend_elements, loc='upper right', framealpha=0.9)
 
         return self._save_figure(fig, "pca_plot")
 
