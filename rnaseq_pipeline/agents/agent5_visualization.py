@@ -812,6 +812,60 @@ class VisualizationAgent(BaseAgent):
             except Exception as e:
                 self.logger.warning(f"Could not load metadata: {e}")
 
+        # If no metadata, try to infer condition from TCGA barcode pattern
+        # TCGA barcode format: TCGA-XX-XXXX-01A (01-09: Tumor, 10-19: Normal, 11: Solid Tissue Normal)
+        if not sample_conditions:
+            import re
+            tcga_pattern = re.compile(r'TCGA-[A-Z0-9]{2}-[A-Z0-9]{4}-(\d{2})')
+            inferred_count = 0
+            for sample in expr_t.index:
+                match = tcga_pattern.search(sample)
+                if match:
+                    sample_type = int(match.group(1))
+                    if sample_type >= 10:  # Normal tissue (10-19)
+                        sample_conditions[sample] = 'normal'
+                    else:  # Tumor tissue (01-09)
+                        sample_conditions[sample] = 'tumor'
+                    inferred_count += 1
+            if inferred_count > 0:
+                self.logger.info(f"Inferred condition from TCGA barcode for {inferred_count} samples")
+
+        # If still no conditions, try to infer from cancer_prediction.json
+        # Samples in prediction are tumor, others are normal
+        if not sample_conditions:
+            import json
+            prediction_paths = [
+                self.input_dir / "cancer_prediction.json",
+                self.input_dir.parent / "cancer_prediction.json",
+                self.input_dir.parent.parent / "cancer_prediction.json",
+            ]
+            for pred_path in prediction_paths:
+                if pred_path.exists():
+                    try:
+                        with open(pred_path) as f:
+                            prediction = json.load(f)
+                        # Get tumor samples from all_results or sample_count
+                        tumor_samples = set()
+                        if 'all_results' in prediction:
+                            tumor_samples = {r['sample_id'] for r in prediction['all_results']}
+
+                        # If all_results is incomplete, use sample_count heuristic
+                        # Samples used in prediction are tumor, rest are normal
+                        if not tumor_samples and 'sample_count' in prediction:
+                            # Can't determine specific samples, skip
+                            pass
+
+                        if tumor_samples:
+                            for sample in expr_t.index:
+                                if sample in tumor_samples:
+                                    sample_conditions[sample] = 'tumor'
+                                else:
+                                    sample_conditions[sample] = 'normal'
+                            self.logger.info(f"Inferred condition from cancer_prediction.json: {len(tumor_samples)} tumor samples")
+                            break
+                    except Exception as e:
+                        self.logger.warning(f"Could not load cancer_prediction.json: {e}")
+
         # Define colors for conditions
         condition_colors = {
             'tumor': '#dc2626',      # Red
@@ -838,10 +892,25 @@ class VisualizationAgent(BaseAgent):
         scatter = ax.scatter(pca_result[:, 0], pca_result[:, 1],
                             c=colors, s=120, alpha=0.8, edgecolors='white', linewidths=1.5)
 
-        # Label points
-        for i, sample in enumerate(expr_t.index):
-            ax.annotate(sample, (pca_result[i, 0], pca_result[i, 1]),
-                       fontsize=8, ha='center', va='bottom')
+        # Label points - only if sample count is manageable
+        n_samples = len(expr_t.index)
+        if n_samples <= 20:
+            # Show all labels for small datasets
+            for i, sample in enumerate(expr_t.index):
+                ax.annotate(sample, (pca_result[i, 0], pca_result[i, 1]),
+                           fontsize=8, ha='center', va='bottom')
+        elif n_samples <= 50:
+            # Show shortened labels for medium datasets
+            for i, sample in enumerate(expr_t.index):
+                # Shorten TCGA sample IDs: TCGA-XX-XXXX-01A-... -> XX-XXXX
+                if sample.startswith('TCGA-'):
+                    parts = sample.split('-')
+                    short_label = f"{parts[1]}-{parts[2]}" if len(parts) >= 3 else sample[:12]
+                else:
+                    short_label = sample[:12]
+                ax.annotate(short_label, (pca_result[i, 0], pca_result[i, 1]),
+                           fontsize=7, ha='center', va='bottom', alpha=0.7)
+        # For large datasets (>50), skip labels to avoid clutter
 
         ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
         ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
@@ -861,7 +930,93 @@ class VisualizationAgent(BaseAgent):
                                             label=cond.capitalize()))
             ax.legend(handles=legend_elements, loc='upper right', framealpha=0.9)
 
-        return self._save_figure(fig, "pca_plot")
+        saved_files = self._save_figure(fig, "pca_plot")
+
+        # Generate interactive PCA plot (Plotly) for hover functionality
+        if HAS_PLOTLY:
+            try:
+                interactive_path = self._plot_pca_interactive(
+                    pca_result, expr_t.index, sample_conditions,
+                    condition_colors, default_color, pca
+                )
+                if interactive_path:
+                    saved_files.append(interactive_path)
+            except Exception as e:
+                self.logger.warning(f"Interactive PCA failed: {e}")
+
+        return saved_files
+
+    def _plot_pca_interactive(self, pca_result, sample_names, sample_conditions,
+                               condition_colors, default_color, pca) -> Optional[str]:
+        """Generate interactive PCA plot with Plotly for hover sample identification."""
+        self.logger.info("Generating interactive PCA plot (Plotly)...")
+
+        # Prepare data
+        conditions = []
+        colors_list = []
+        for sample in sample_names:
+            cond = sample_conditions.get(sample, 'unknown')
+            conditions.append(cond.capitalize())
+            colors_list.append(condition_colors.get(cond.lower(), default_color))
+
+        # Create figure
+        fig = go.Figure()
+
+        # Add traces for each condition
+        unique_conds = list(set(conditions))
+        plotly_colors = {
+            'Tumor': '#dc2626', 'Normal': '#2563eb', 'Cancer': '#dc2626',
+            'Control': '#2563eb', 'Unknown': '#6b7280'
+        }
+
+        for cond in sorted(unique_conds):
+            mask = [c == cond for c in conditions]
+            indices = [i for i, m in enumerate(mask) if m]
+
+            fig.add_trace(go.Scatter(
+                x=[pca_result[i, 0] for i in indices],
+                y=[pca_result[i, 1] for i in indices],
+                mode='markers',
+                name=f'{cond} ({len(indices)})',
+                marker=dict(
+                    size=12,
+                    color=plotly_colors.get(cond, '#6b7280'),
+                    line=dict(width=1, color='white')
+                ),
+                text=[sample_names[i] for i in indices],
+                hovertemplate='<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<extra></extra>'
+            ))
+
+        # Layout
+        fig.update_layout(
+            title=dict(
+                text=f'<b>Interactive PCA Plot</b><br><sup>Hover to see sample IDs</sup>',
+                x=0.5,
+                font=dict(size=16)
+            ),
+            xaxis_title=f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)',
+            yaxis_title=f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)',
+            legend=dict(
+                yanchor="top", y=0.99,
+                xanchor="right", x=0.99,
+                bgcolor='rgba(255,255,255,0.9)',
+                bordercolor='#ddd', borderwidth=1
+            ),
+            hovermode='closest',
+            template='plotly_white',
+            width=800, height=600
+        )
+
+        # Add zero lines
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.3)
+        fig.add_vline(x=0, line_dash="dash", line_color="gray", opacity=0.3)
+
+        # Save
+        html_path = self.figures_dir / "pca_interactive.html"
+        fig.write_html(str(html_path), include_plotlyjs='cdn')
+        self.logger.info(f"Saved interactive PCA: {html_path.name}")
+
+        return str(html_path)
 
     def _plot_network(self) -> Optional[List[str]]:
         """Generate npj-style network visualization.
