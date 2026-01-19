@@ -146,11 +146,20 @@ class ValidationAgent(BaseAgent):
             # RAG interpretation settings
             "enable_rag": True,  # Enable RAG-based literature interpretation
             "rag_max_genes": 20,  # Max genes to interpret via RAG (top by score)
-            "rag_top_k": 5  # Number of papers to retrieve per gene
+            "rag_top_k": 5,  # Number of papers to retrieve per gene
+            # 2-stage validation settings
+            "validation_stage": 1,  # 1 = DEG/Network/Pathway, 2 = ML Prediction
+            "validate_ml_prediction": False  # Set True for stage 2
         }
 
         merged_config = {**default_config, **(config or {})}
-        super().__init__("agent4_validation", input_dir, output_dir, merged_config)
+
+        # Use different output directory for stage 2
+        agent_name = "agent4_validation"
+        if merged_config.get("validation_stage") == 2:
+            agent_name = "agent4_validation_ml"
+
+        super().__init__(agent_name, input_dir, output_dir, merged_config)
 
         self.deg_significant: Optional[pd.DataFrame] = None
         self.hub_genes: Optional[pd.DataFrame] = None
@@ -158,9 +167,22 @@ class ValidationAgent(BaseAgent):
         self.ensembl_to_symbol: Dict[str, str] = {}  # Ensembl ID -> Gene Symbol mapping
         self.rag_interpreter: Optional[Any] = None  # RAG interpreter instance
         self.rag_interpretations: Dict[str, Any] = {}  # gene_symbol -> interpretation
+        self.cancer_prediction: Optional[Dict[str, Any]] = None  # ML prediction results
 
     def validate_inputs(self) -> bool:
-        """Validate inputs from previous agents."""
+        """Validate inputs from previous agents.
+
+        Stage 1: Validates DEG, Network, Pathway results
+        Stage 2: Validates ML Prediction results
+        """
+        validation_stage = self.config.get('validation_stage', 1)
+        self.logger.info(f"Running Validation Stage {validation_stage}")
+
+        # Stage 2: ML Prediction validation
+        if validation_stage == 2 or self.config.get('validate_ml_prediction', False):
+            return self._validate_ml_inputs()
+
+        # Stage 1: DEG/Network/Pathway validation (original behavior)
         # Required: DEG results
         self.deg_significant = self.load_csv("deg_significant.csv")
         if self.deg_significant is None:
@@ -185,14 +207,61 @@ class ValidationAgent(BaseAgent):
 
         return True
 
+    def _validate_ml_inputs(self) -> bool:
+        """Validate ML prediction inputs for Stage 2 validation."""
+        # Load ML prediction results
+        cancer_prediction_file = self.input_dir / "cancer_prediction.json"
+        if not cancer_prediction_file.exists():
+            # Try parent directory (accumulated folder structure)
+            parent_file = self.input_dir.parent / "cancer_prediction.json"
+            if parent_file.exists():
+                cancer_prediction_file = parent_file
+            else:
+                self.logger.warning("No ML prediction results found - skipping ML validation")
+                return True  # Not an error, just skip
+
+        try:
+            with open(cancer_prediction_file, 'r', encoding='utf-8') as f:
+                self.cancer_prediction = json.load(f)
+            self.logger.info(f"Loaded ML prediction: {self.cancer_prediction.get('predicted_cancer', 'Unknown')}")
+        except Exception as e:
+            self.logger.error(f"Failed to load ML prediction: {e}")
+            return False
+
+        # Also load integrated gene table for cross-validation
+        self.deg_significant = self.load_csv("integrated_gene_table.csv", required=False)
+        if self.deg_significant is None:
+            self.deg_significant = self.load_csv("deg_significant.csv", required=False)
+
+        return True
+
     def _build_gene_id_mapping(self):
-        """Build Ensembl ID to Gene Symbol mapping using mygene."""
+        """Build Gene ID to Gene Symbol mapping using mygene.
+
+        Supports:
+        - Ensembl IDs (ENSG00000141510)
+        - Entrez Gene IDs (7157)
+        - Gene Symbols (TP53) - passed through as-is
+        """
         gene_ids = self.deg_significant['gene_id'].tolist()
 
-        # Check if IDs are Ensembl format
-        if not any(str(g).startswith('ENSG') for g in gene_ids[:10]):
+        # Detect ID type
+        sample_ids = [str(g) for g in gene_ids[:100]]
+
+        # Check for Ensembl format
+        ensembl_count = sum(1 for g in sample_ids if str(g).startswith('ENSG'))
+
+        # Check for numeric (Entrez) format
+        numeric_count = sum(1 for g in sample_ids if str(g).isdigit())
+
+        # Check if already symbols (non-numeric, non-ENSG)
+        symbol_count = sum(1 for g in sample_ids if not str(g).isdigit() and not str(g).startswith('ENSG'))
+
+        self.logger.info(f"Gene ID format detection: Ensembl={ensembl_count}, Entrez={numeric_count}, Symbol={symbol_count}")
+
+        # If mostly symbols already, no conversion needed
+        if symbol_count > len(sample_ids) * 0.5:
             self.logger.info("Gene IDs appear to be symbols, no conversion needed")
-            # Map to themselves
             for gene_id in gene_ids:
                 self.ensembl_to_symbol[str(gene_id)] = str(gene_id)
             return
@@ -200,16 +269,22 @@ class ValidationAgent(BaseAgent):
         if not HAS_MYGENE:
             self.logger.warning("mygene not installed. Install with: pip install mygene")
             self.logger.warning("DB matching will not work without gene ID conversion")
+            # Map to themselves as fallback
+            for gene_id in gene_ids:
+                self.ensembl_to_symbol[str(gene_id)] = str(gene_id)
             return
-
-        self.logger.info("Converting Ensembl IDs to Gene Symbols via mygene...")
 
         try:
             mg = mygene.MyGeneInfo()
+            unique_ids = list(set([str(g).split('.')[0] for g in gene_ids]))
 
-            # Remove version numbers (ENSG00000141510.18 -> ENSG00000141510)
-            clean_ids = [str(g).split('.')[0] for g in gene_ids]
-            unique_ids = list(set(clean_ids))
+            # Determine scope based on ID type
+            if ensembl_count > numeric_count:
+                scope = 'ensembl.gene'
+                self.logger.info(f"Converting {len(unique_ids)} Ensembl IDs to Gene Symbols via mygene...")
+            else:
+                scope = 'entrezgene'
+                self.logger.info(f"Converting {len(unique_ids)} Entrez Gene IDs to Gene Symbols via mygene...")
 
             # Query in batches
             batch_size = 1000
@@ -217,7 +292,7 @@ class ValidationAgent(BaseAgent):
                 batch = unique_ids[i:i+batch_size]
                 results = mg.querymany(
                     batch,
-                    scopes='ensembl.gene',
+                    scopes=scope,
                     fields='symbol',
                     species='human',
                     verbose=False
@@ -227,18 +302,31 @@ class ValidationAgent(BaseAgent):
                     if 'symbol' in r:
                         self.ensembl_to_symbol[r['query']] = r['symbol']
 
-            # Map versioned IDs to symbols
+            # Map versioned IDs (for Ensembl) and original IDs to symbols
             for gene_id in gene_ids:
                 clean_id = str(gene_id).split('.')[0]
                 if clean_id in self.ensembl_to_symbol:
                     self.ensembl_to_symbol[str(gene_id)] = self.ensembl_to_symbol[clean_id]
+                elif str(gene_id) not in self.ensembl_to_symbol:
+                    # Fallback: keep original ID if conversion failed
+                    self.ensembl_to_symbol[str(gene_id)] = str(gene_id)
 
-            converted = len([g for g in gene_ids if str(g) in self.ensembl_to_symbol])
-            self.logger.info(f"Converted {converted}/{len(gene_ids)} Ensembl IDs to Gene Symbols")
+            converted = len([g for g in gene_ids if self.ensembl_to_symbol.get(str(g), str(g)) != str(g)])
+            self.logger.info(f"Converted {converted}/{len(gene_ids)} gene IDs to Gene Symbols")
+
+            # Log some examples
+            examples = [(str(g), self.ensembl_to_symbol.get(str(g), str(g)))
+                       for g in gene_ids[:5]
+                       if self.ensembl_to_symbol.get(str(g), str(g)) != str(g)]
+            if examples:
+                self.logger.info(f"Conversion examples: {examples}")
 
         except Exception as e:
             self.logger.error(f"Gene ID conversion failed: {e}")
             self.logger.warning("DB matching may not work correctly")
+            # Fallback: map to themselves
+            for gene_id in gene_ids:
+                self.ensembl_to_symbol[str(gene_id)] = str(gene_id)
 
     def _check_database_match(self, gene: str) -> Dict[str, Any]:
         """Check if gene is in cancer databases.
@@ -663,7 +751,18 @@ class ValidationAgent(BaseAgent):
             return {}
 
     def run(self) -> Dict[str, Any]:
-        """Execute validation and interpretation."""
+        """Execute validation and interpretation.
+
+        Stage 1: Validates DEG/Network/Pathway results against cancer databases
+        Stage 2: Validates ML prediction results and cross-validates with DEG findings
+        """
+        validation_stage = self.config.get('validation_stage', 1)
+
+        # Stage 2: ML Prediction validation
+        if validation_stage == 2 or self.config.get('validate_ml_prediction', False):
+            return self._run_ml_validation()
+
+        # Stage 1: Original DEG/Network/Pathway validation
         self.logger.info(f"Starting validation for cancer type: {self.config['cancer_type']}")
 
         # Process each DEG
@@ -869,13 +968,131 @@ class ValidationAgent(BaseAgent):
             }
         }
 
+    def _run_ml_validation(self) -> Dict[str, Any]:
+        """Execute Stage 2 validation: ML Prediction validation.
+
+        Validates ML prediction results against:
+        1. TCGA cancer type characteristics
+        2. DEG expression patterns
+        3. Known cancer-specific gene signatures
+        """
+        self.logger.info("=" * 60)
+        self.logger.info("Validation Stage 2: ML Prediction Validation")
+        self.logger.info("=" * 60)
+
+        if self.cancer_prediction is None:
+            self.logger.warning("No ML prediction to validate")
+            return {
+                "validation_stage": 2,
+                "ml_prediction_validated": False,
+                "reason": "No ML prediction found"
+            }
+
+        predicted_cancer = self.cancer_prediction.get('predicted_cancer', 'Unknown')
+        confidence = self.cancer_prediction.get('confidence', 0)
+        agreement_ratio = self.cancer_prediction.get('agreement_ratio', 0)
+
+        self.logger.info(f"Predicted cancer type: {predicted_cancer}")
+        self.logger.info(f"Confidence: {confidence:.1%}")
+        self.logger.info(f"Sample agreement: {agreement_ratio:.1%}")
+
+        # Validation checks
+        validation_results = {
+            "validation_stage": 2,
+            "predicted_cancer": predicted_cancer,
+            "confidence": confidence,
+            "agreement_ratio": agreement_ratio,
+            "checks": {}
+        }
+
+        # Check 1: Confidence threshold
+        confidence_check = confidence >= 0.7
+        validation_results["checks"]["confidence_threshold"] = {
+            "passed": confidence_check,
+            "value": confidence,
+            "threshold": 0.7,
+            "message": "High confidence prediction" if confidence_check else "Low confidence - consider alternative diagnoses"
+        }
+
+        # Check 2: Sample agreement
+        agreement_check = agreement_ratio >= 0.8
+        validation_results["checks"]["sample_agreement"] = {
+            "passed": agreement_check,
+            "value": agreement_ratio,
+            "threshold": 0.8,
+            "message": "Strong sample agreement" if agreement_check else "Mixed predictions across samples"
+        }
+
+        # Check 3: Cancer-type specific gene expression (if DEG data available)
+        if self.deg_significant is not None and len(self.deg_significant) > 0:
+            cancer_type_genes = self.CANCER_TYPE_GENES.get(predicted_cancer.lower().replace('-', '_').replace(' ', '_'), set())
+            if cancer_type_genes:
+                # Check if cancer-specific genes are in DEGs
+                gene_col = 'gene_symbol' if 'gene_symbol' in self.deg_significant.columns else 'gene_id'
+                deg_genes = set(self.deg_significant[gene_col].tolist())
+                matching_genes = cancer_type_genes.intersection(deg_genes)
+                gene_match_ratio = len(matching_genes) / len(cancer_type_genes) if cancer_type_genes else 0
+
+                validation_results["checks"]["cancer_gene_signature"] = {
+                    "passed": gene_match_ratio >= 0.2,
+                    "matching_genes": list(matching_genes),
+                    "expected_genes": list(cancer_type_genes)[:10],  # Top 10
+                    "match_ratio": gene_match_ratio,
+                    "message": f"Found {len(matching_genes)}/{len(cancer_type_genes)} cancer-specific genes in DEGs"
+                }
+
+        # Check 4: Confusable cancer pairs warning
+        confusable_pairs = [
+            ({'HNSC', 'LUSC', 'SKCM'}, 'Squamous cell carcinomas'),
+            ({'LUAD', 'PAAD'}, 'Adenocarcinomas'),
+            ({'COAD', 'STAD'}, 'GI tract cancers'),
+            ({'OV', 'UCEC'}, 'Gynecologic cancers')
+        ]
+
+        for pair_set, pair_name in confusable_pairs:
+            if predicted_cancer in pair_set:
+                top_k = self.cancer_prediction.get('top_k_summary', [])
+                other_predictions = [p['cancer'] for p in top_k if p['cancer'] != predicted_cancer]
+                confusable_detected = any(p in pair_set for p in other_predictions[:2])
+
+                if confusable_detected:
+                    validation_results["checks"]["confusable_pair_warning"] = {
+                        "passed": False,
+                        "pair_name": pair_name,
+                        "cancers_in_pair": list(pair_set),
+                        "message": f"Warning: {predicted_cancer} is part of a confusable pair ({pair_name}). Consider tissue-specific markers for confirmation."
+                    }
+                    break
+
+        # Overall validation score
+        passed_checks = sum(1 for check in validation_results["checks"].values() if check.get("passed", False))
+        total_checks = len(validation_results["checks"])
+        validation_results["overall_score"] = passed_checks / total_checks if total_checks > 0 else 0
+        validation_results["ml_prediction_validated"] = validation_results["overall_score"] >= 0.5
+
+        # Save validation report
+        self.save_json(validation_results, "ml_validation_report.json")
+
+        self.logger.info(f"ML Validation Complete:")
+        self.logger.info(f"  Checks passed: {passed_checks}/{total_checks}")
+        self.logger.info(f"  Overall score: {validation_results['overall_score']:.1%}")
+        self.logger.info(f"  Validated: {validation_results['ml_prediction_validated']}")
+
+        return validation_results
+
     def validate_outputs(self) -> bool:
         """Validate interpretation outputs."""
-        required_files = [
-            "integrated_gene_table.csv",
-            "db_matched_genes.csv",
-            "interpretation_report.json"
-        ]
+        validation_stage = self.config.get('validation_stage', 1)
+
+        # Stage 2 has different output files
+        if validation_stage == 2:
+            required_files = ["ml_validation_report.json"]
+        else:
+            required_files = [
+                "integrated_gene_table.csv",
+                "db_matched_genes.csv",
+                "interpretation_report.json"
+            ]
 
         for filename in required_files:
             filepath = self.output_dir / filename
@@ -883,7 +1100,18 @@ class ValidationAgent(BaseAgent):
                 self.logger.error(f"Missing output file: {filename}")
                 return False
 
-        # Validate interpretation report structure
+        # Stage 2: Validate ML validation report
+        if validation_stage == 2:
+            with open(self.output_dir / "ml_validation_report.json", 'r') as f:
+                report = json.load(f)
+            required_keys = ['validation_stage', 'checks']
+            for key in required_keys:
+                if key not in report:
+                    self.logger.error(f"Missing key in ML validation report: {key}")
+                    return False
+            return True
+
+        # Stage 1: Validate interpretation report structure
         with open(self.output_dir / "interpretation_report.json", 'r') as f:
             report = json.load(f)
 

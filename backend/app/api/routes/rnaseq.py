@@ -631,7 +631,9 @@ _analysis_jobs: dict[str, AnalysisStatus] = {}
 _analysis_results: dict[str, AnalysisResult] = {}
 _job_queues: dict[str, Queue] = {}  # For SSE streaming
 
-# Agent info for frontend display - Bulk RNA-seq (6 agents)
+# Agent info for frontend display - Bulk RNA-seq (8 steps with 2-stage validation)
+# Bulk RNA-seq Agent Info
+# Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
 BULK_AGENT_INFO = {
     "agent1_deg": {
         "name": "DEG Analysis",
@@ -652,8 +654,8 @@ BULK_AGENT_INFO = {
         "order": 3
     },
     "agent4_validation": {
-        "name": "DB Validation",
-        "description": "DisGeNET, OMIM, COSMIC 검증",
+        "name": "Validation Stage 1",
+        "description": "DEG/Network/Pathway 결과 검증 (COSMIC, OncoKB)",
         "icon": "database",
         "order": 4
     },
@@ -669,11 +671,17 @@ BULK_AGENT_INFO = {
         "icon": "brain",
         "order": 6
     },
+    "agent4_validation_ml": {
+        "name": "Validation Stage 2",
+        "description": "ML 예측 결과 검증",
+        "icon": "database",
+        "order": 7
+    },
     "agent6_report": {
         "name": "Report Generation",
         "description": "HTML 보고서 생성",
         "icon": "file-text",
-        "order": 7
+        "order": 8
     }
 }
 
@@ -1615,27 +1623,47 @@ async def get_report(job_id: str):
 
     Returns the report.html file as a downloadable response.
     """
-    if job_id not in _analysis_jobs:
+    run_dir = None
+
+    # First try memory-based job status
+    if job_id in _analysis_jobs:
+        status = _analysis_jobs[job_id]
+        if status.status not in ["completed", "completed_with_errors"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job {job_id} is not complete. Current status: {status.status}"
+            )
+        run_dir = status.current_step
+
+    # Fallback: search file system for job results
+    if not run_dir:
+        # Use project root for results directory
+        project_root = Path(__file__).parent.parent.parent.parent.parent
+        results_base = project_root / "rnaseq_test_results"
+        job_dirs = list(results_base.glob(f"web_analysis_{job_id}"))
+        if job_dirs:
+            # Find the latest run directory
+            run_dirs = sorted(job_dirs[0].glob("run_*"), reverse=True)
+            if run_dirs:
+                run_dir = str(run_dirs[0])
+
+    if not run_dir:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    status = _analysis_jobs[job_id]
-    if status.status not in ["completed", "completed_with_errors"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job {job_id} is not complete. Current status: {status.status}"
-        )
+    # Try multiple locations for report.html
+    possible_paths = [
+        Path(run_dir) / "agent6_report" / "report.html",  # Standard location
+        Path(run_dir) / "report.html",
+        Path(run_dir) / "accumulated" / "report.html",
+    ]
 
-    # Get run directory from status (stored in current_step after completion)
-    run_dir = status.current_step
-    if not run_dir:
-        raise HTTPException(status_code=404, detail="Report path not found")
+    report_path = None
+    for path in possible_paths:
+        if path.exists():
+            report_path = path
+            break
 
-    report_path = Path(run_dir) / "report.html"
-    if not report_path.exists():
-        # Try accumulated directory
-        report_path = Path(run_dir) / "accumulated" / "report.html"
-
-    if not report_path.exists():
+    if not report_path:
         raise HTTPException(status_code=404, detail="Report file not found")
 
     return FileResponse(
@@ -2201,15 +2229,17 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
             }
         else:
             agent_info_dict = BULK_AGENT_INFO
-            # Bulk RNA-seq progress (6 agents + ML prediction virtual)
+            # Bulk RNA-seq progress (8 steps with 2-stage validation)
+            # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
             agent_progress = {
-                "agent1_deg": (0, 15),
-                "agent2_network": (15, 30),
-                "agent3_pathway": (30, 45),
-                "agent4_validation": (45, 60),
-                "agent5_visualization": (60, 75),
-                "ml_prediction": (75, 88),  # Virtual stage within agent6
-                "agent6_report": (88, 100)
+                "agent1_deg": (0, 12),
+                "agent2_network": (12, 25),
+                "agent3_pathway": (25, 37),
+                "agent4_validation": (37, 50),       # Validation Stage 1: DEG/Network/Pathway
+                "agent5_visualization": (50, 62),
+                "ml_prediction": (62, 74),           # ML Prediction (virtual stage)
+                "agent4_validation_ml": (74, 87),    # Validation Stage 2: ML Prediction
+                "agent6_report": (87, 100)
             }
 
         completed_agents = []
@@ -2218,6 +2248,29 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
         # Get agent order from pipeline
         agent_order = pipeline.get_agent_order()
 
+        # ===== STEP 0: Predict Cancer Type =====
+        # Run cancer type prediction BEFORE any agents (if cancer_type is unknown)
+        if config.get('cancer_type', 'unknown').lower() == 'unknown':
+            try:
+                cancer_prediction = pipeline._predict_cancer_type()
+                if cancer_prediction:
+                    predicted_cancer = cancer_prediction.get('predicted_cancer', 'Unknown')
+                    predicted_korean = cancer_prediction.get('predicted_cancer_korean', predicted_cancer)
+                    confidence = cancer_prediction.get('confidence', 0)
+
+                    logger.info(f"🎯 Cancer type predicted: {predicted_cancer} ({predicted_korean}) - {confidence:.1%}")
+
+                    # Send cancer prediction SSE event
+                    send_sse_message(job_id, {
+                        "type": "cancer_prediction",
+                        "predicted_cancer": predicted_cancer,
+                        "predicted_cancer_korean": predicted_korean,
+                        "confidence": confidence,
+                        "timestamp": datetime.now().isoformat()
+                    })
+            except Exception as e:
+                logger.warning(f"Cancer type prediction failed: {e}")
+
         # Handle single-cell pipeline differently (1 agent with virtual stages)
         if pipeline.pipeline_type == "singlecell":
             _run_singlecell_pipeline_with_streaming(
@@ -2225,13 +2278,14 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
                 completed_agents, failed_agents, status
             )
         else:
-            # Bulk RNA-seq pipeline (6 agents)
+            # Bulk RNA-seq pipeline (8 steps with 2-stage validation)
+            # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
             for agent_name in agent_order:
                 try:
-                    # Send ML prediction virtual stage before agent6_report
-                    if agent_name == "agent6_report":
+                    # Send ML prediction virtual stage before agent4_validation_ml (after Visualization)
+                    if agent_name == "agent4_validation_ml":
                         ml_info = agent_info_dict.get("ml_prediction", {})
-                        ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
+                        ml_start, ml_end = agent_progress.get("ml_prediction", (62, 74))
 
                         # ML prediction start
                         send_sse_message(job_id, {
@@ -2244,15 +2298,11 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
                         status.current_step = ml_info.get("name", "ML Prediction")
                         status.progress = ml_start
 
-                    start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
-                    agent_info = agent_info_dict.get(agent_name, {})
+                        # Simulate ML prediction time (already done at start, but show progress)
+                        import time
+                        time.sleep(2)  # Brief pause to show ML stage
 
-                    # For agent6_report, ML prediction completes when it starts
-                    if agent_name == "agent6_report":
-                        ml_info = agent_info_dict.get("ml_prediction", {})
-                        ml_start, ml_end = agent_progress.get("ml_prediction", (75, 88))
-
-                        # ML prediction complete (runs within agent6_report)
+                        # ML prediction complete
                         send_sse_message(job_id, {
                             "type": "agent_complete",
                             "agent": "ml_prediction",
@@ -2261,6 +2311,9 @@ def run_pipeline_with_streaming(job_id: str, input_dir: Path, config: dict):
                             "timestamp": datetime.now().isoformat()
                         })
                         completed_agents.append("ml_prediction")
+
+                    start_progress, end_progress = agent_progress.get(agent_name, (0, 100))
+                    agent_info = agent_info_dict.get(agent_name, {})
 
                     # Send agent start message
                     send_sse_message(job_id, {
@@ -2434,6 +2487,8 @@ def _get_agent_summary(agent_name: str, result: dict) -> dict:
         summary["pathway_count"] = result.get("total_significant_terms", result.get("pathway_count", 0))
     elif agent_name == "agent4_validation":
         summary["validated_count"] = result.get("db_matched_count", result.get("validated_count", 0))
+    elif agent_name == "agent4_validation_ml":
+        summary["ml_validated"] = result.get("ml_prediction_validated", result.get("validated_count", 0))
     elif agent_name == "agent5_visualization":
         summary["figures"] = result.get("figures", [])
     elif agent_name == "agent6_report":
@@ -2454,13 +2509,16 @@ def _run_demo_pipeline(job_id: str):
     import time
 
     status = _analysis_jobs[job_id]
+    # 2-stage validation pipeline:
+    # DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
     agents = [
-        ("agent1_deg", "차등 발현 분석", 15),
-        ("agent2_network", "네트워크 분석", 30),
-        ("agent3_pathway", "경로 분석", 45),
-        ("agent4_validation", "데이터베이스 검증", 60),
-        ("agent5_visualization", "시각화", 75),
-        ("ml_prediction", "ML 예측", 88),
+        ("agent1_deg", "차등 발현 분석", 12),
+        ("agent2_network", "네트워크 분석", 25),
+        ("agent3_pathway", "경로 분석", 37),
+        ("agent4_validation", "검증 1단계", 50),
+        ("agent5_visualization", "시각화", 62),
+        ("ml_prediction", "ML 예측", 74),
+        ("agent4_validation_ml", "검증 2단계", 87),
         ("agent6_report", "리포트 생성", 100)
     ]
 

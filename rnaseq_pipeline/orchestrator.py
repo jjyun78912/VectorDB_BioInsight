@@ -52,15 +52,17 @@ from .utils.data_type_detector import DataTypeDetector, detect_data_type
 class RNAseqPipeline:
     """Orchestrator for the RNA-seq analysis pipeline."""
 
-    # Bulk RNA-seq pipeline (6 agents)
-    # Order: DEG → Network → Pathway → Validation → Visualization → Report
-    # (ML prediction runs as virtual stage before Report)
+    # Bulk RNA-seq pipeline (7 agents with 2-stage validation)
+    # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
+    # - Validation1: Validates DEG, Network, Pathway results (before visualization)
+    # - Validation2: Validates ML prediction results (before report)
     BULK_AGENT_ORDER = [
         "agent1_deg",
         "agent2_network",
         "agent3_pathway",
-        "agent4_validation",
+        "agent4_validation",      # Validation Stage 1: DEG/Network/Pathway
         "agent5_visualization",
+        "agent4_validation_ml",   # Validation Stage 2: ML Prediction (after ML runs)
         "agent6_report"
     ]
 
@@ -69,6 +71,7 @@ class RNAseqPipeline:
         "agent2_network": NetworkAgent,
         "agent3_pathway": PathwayAgent,
         "agent4_validation": ValidationAgent,
+        "agent4_validation_ml": ValidationAgent,  # Same class, different config
         "agent5_visualization": VisualizationAgent,
         "agent6_report": ReportAgent
     }
@@ -82,7 +85,7 @@ class RNAseqPipeline:
     AGENT_CLASSES = BULK_AGENT_CLASSES
 
     # Define which outputs each agent needs from previous agents
-    # Order: DEG → Network → Pathway → Validation → Visualization → (ML) → Report
+    # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
     AGENT_DEPENDENCIES = {
         "agent1_deg": [],
         "agent2_network": ["normalized_counts.csv", "deg_significant.csv"],
@@ -93,6 +96,7 @@ class RNAseqPipeline:
             "hub_genes.csv", "network_edges.csv", "pathway_summary.csv",
             "integrated_gene_table.csv"
         ],
+        "agent4_validation_ml": ["cancer_prediction.json", "integrated_gene_table.csv"],  # ML validation
         "agent6_report": ["*"],  # All outputs
         "singlecell": []  # Single-cell is self-contained
     }
@@ -254,6 +258,12 @@ class RNAseqPipeline:
 
         # Merge configs
         agent_config = {**self.config, **(config_override or {})}
+
+        # Special handling for validation_ml (2nd validation stage)
+        if agent_name == "agent4_validation_ml":
+            agent_config["validation_stage"] = 2
+            agent_config["validate_ml_prediction"] = True
+            self.logger.info("Running Validation Stage 2: ML Prediction validation")
 
         # Get directories
         input_dir = self._get_agent_input_dir(agent_name)

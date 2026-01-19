@@ -2,14 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { X, Activity, Share2, GitBranch, Database, BarChart2, FileText, CheckCircle2, Loader2, AlertCircle, ExternalLink, Download, Brain, Microscope, Filter, Layers, Boxes, Users, Target, PieChart, Dna } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
-// Bulk RNA-seq Agent info (6-agent pipeline)
+// Bulk RNA-seq Agent info (7-step pipeline with 2-stage validation)
+// Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
 const BULK_AGENTS = [
   { id: 'agent1_deg', name: 'DEG Analysis', nameKo: '차등 발현 분석', icon: Activity },
   { id: 'agent2_network', name: 'Network Analysis', nameKo: '네트워크 분석', icon: Share2 },
   { id: 'agent3_pathway', name: 'Pathway Enrichment', nameKo: '경로 분석', icon: GitBranch },
-  { id: 'agent4_validation', name: 'Database Validation', nameKo: '데이터베이스 검증', icon: Database },
+  { id: 'agent4_validation', name: 'Validation Stage 1', nameKo: '검증 1단계 (DEG/Network/Pathway)', icon: Database },
   { id: 'agent5_visualization', name: 'Visualization', nameKo: '시각화', icon: BarChart2 },
   { id: 'ml_prediction', name: 'ML Prediction', nameKo: 'ML 예측', icon: Brain },
+  { id: 'agent4_validation_ml', name: 'Validation Stage 2', nameKo: '검증 2단계 (ML Prediction)', icon: Database },
   { id: 'agent6_report', name: 'Report Generation', nameKo: '리포트 생성', icon: FileText },
 ];
 
@@ -169,12 +171,59 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
     eventSource.onerror = () => {
       console.error('SSE connection error');
       eventSource.close();
+
+      // Fallback: poll status API to check if pipeline completed
+      const checkStatus = async () => {
+        try {
+          const response = await fetch(`http://localhost:8000/api/rnaseq/status/${jobId}`);
+          if (response.ok) {
+            const status = await response.json();
+            if (status.status === 'completed' || status.status === 'completed_with_errors') {
+              setPipelineStatus('completed');
+              setProgress(100);
+              setCurrentAgent(null);
+            } else if (status.status === 'failed') {
+              setPipelineStatus('error');
+              setErrorMessage(status.error || 'Pipeline failed');
+            }
+          }
+        } catch (err) {
+          console.error('Failed to check status:', err);
+        }
+      };
+      checkStatus();
     };
 
     return () => {
       eventSource.close();
     };
   }, [jobId]);
+
+  // Polling fallback: check status every 5 seconds if pipeline is still running
+  useEffect(() => {
+    if (pipelineStatus !== 'running') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/rnaseq/status/${jobId}`);
+        if (response.ok) {
+          const status = await response.json();
+          if (status.status === 'completed' || status.status === 'completed_with_errors') {
+            setPipelineStatus('completed');
+            setProgress(100);
+            setCurrentAgent(null);
+          } else if (status.status === 'failed') {
+            setPipelineStatus('error');
+            setErrorMessage(status.error || 'Pipeline failed');
+          }
+        }
+      } catch (err) {
+        console.error('Status polling error:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [jobId, pipelineStatus]);
 
   const handleViewReport = () => {
     if (onViewReport) {
