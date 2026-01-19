@@ -892,7 +892,7 @@ class VisualizationAgent(BaseAgent):
         scatter = ax.scatter(pca_result[:, 0], pca_result[:, 1],
                             c=colors, s=120, alpha=0.8, edgecolors='white', linewidths=1.5)
 
-        # Label points - only if sample count is manageable
+        # Label points - only for small datasets, otherwise use interactive version
         n_samples = len(expr_t.index)
         if n_samples <= 20:
             # Show all labels for small datasets
@@ -910,7 +910,7 @@ class VisualizationAgent(BaseAgent):
                     short_label = sample[:12]
                 ax.annotate(short_label, (pca_result[i, 0], pca_result[i, 1]),
                            fontsize=7, ha='center', va='bottom', alpha=0.7)
-        # For large datasets (>50), skip labels to avoid clutter
+        # For large datasets (>50), no labels - use interactive HTML version for hover
 
         ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
         ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
