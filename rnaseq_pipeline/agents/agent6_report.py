@@ -1258,8 +1258,9 @@ class ReportAgent(BaseAgent):
         if deg_df is not None and len(deg_df) > 0:
             # Sort by log2FC and get top 20 up/down
             if 'log2FC' in deg_df.columns:
-                up_genes = deg_df[deg_df['log2FC'] > 0].nlargest(20, 'log2FC')
-                down_genes = deg_df[deg_df['log2FC'] < 0].nsmallest(20, 'log2FC')
+                # Top 5 for concise display (Best Practice: 핵심 데이터만 간소화된 표로)
+                up_genes = deg_df[deg_df['log2FC'] > 0].nlargest(5, 'log2FC')
+                down_genes = deg_df[deg_df['log2FC'] < 0].nsmallest(5, 'log2FC')
 
                 # Build upregulated table - prefer gene_symbol over gene_id
                 up_rows = ''
@@ -1273,9 +1274,9 @@ class ReportAgent(BaseAgent):
                     up_rows += f'<tr><td><strong>{display_name}</strong></td><td class="up-text">+{log2fc:.2f}</td><td>{fold_change:.1f}x</td><td>{padj:.2e}</td></tr>'
 
                 up_table = f'''
-                <div class="table-wrapper">
+                <div class="table-wrapper compact">
                     <div class="table-header">
-                        <span class="table-title">Top 20 Upregulated (암에서 증가)</span>
+                        <span class="table-title">Top 5 Upregulated (암에서 증가)</span>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
@@ -1296,9 +1297,9 @@ class ReportAgent(BaseAgent):
                     down_rows += f'<tr><td><strong>{display_name}</strong></td><td class="down-text">{log2fc:.2f}</td><td>{fold_change:.1f}x</td><td>{padj:.2e}</td></tr>'
 
                 down_table = f'''
-                <div class="table-wrapper">
+                <div class="table-wrapper compact">
                     <div class="table-header">
-                        <span class="table-title">Top 20 Downregulated (암에서 감소)</span>
+                        <span class="table-title">Top 5 Downregulated (암에서 감소)</span>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
@@ -1316,21 +1317,7 @@ class ReportAgent(BaseAgent):
         <section class="deg-section" id="deg-analysis">
             <h2>3. Differential Expression Analysis</h2>
 
-            <div class="metrics-row">
-                <div class="metric-box primary">
-                    <div class="metric-value">{n_total:,}</div>
-                    <div class="metric-label">Total DEGs</div>
-                </div>
-                <div class="metric-box">
-                    <div class="metric-value up">{n_up:,}</div>
-                    <div class="metric-label">Upregulated</div>
-                </div>
-                <div class="metric-box">
-                    <div class="metric-value down">{n_down:,}</div>
-                    <div class="metric-label">Downregulated</div>
-                </div>
-            </div>
-
+            <!-- 1. 시각화 (Eye-catching): Volcano Plot을 먼저 보여줘서 전체 변화 양상 전달 -->
             <div class="figure-grid">
                 <div class="figure-panel">
                     <div class="figure-header">Volcano Plot</div>
@@ -1346,6 +1333,31 @@ class ReportAgent(BaseAgent):
                 </div>
             </div>
 
+            <!-- 2. 요약 (Summary): 전체적인 변화 양상을 한 문장으로 정리 -->
+            <div class="deg-summary-statement">
+                <p>총 <strong>{n_total:,}</strong>개의 유전자가 유의미하게 변화하였습니다
+                (상향조절: <span class="up-text">{n_up:,}</span>개, 하향조절: <span class="down-text">{n_down:,}</span>개).</p>
+            </div>
+
+            <div class="metrics-row compact">
+                <div class="metric-box primary">
+                    <div class="metric-value">{n_total:,}</div>
+                    <div class="metric-label">Total DEGs</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value up">{n_up:,}</div>
+                    <div class="metric-label">Upregulated</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value down">{n_down:,}</div>
+                    <div class="metric-label">Downregulated</div>
+                </div>
+            </div>
+
+            <!-- 3. 핵심 데이터 (Selected Table): 가장 많이 변한 Top 5만 깔끔하게 -->
+            <div class="deg-tables-header">
+                <p>그 중 가장 크게 변화한 상위 5개 유전자는 다음과 같습니다:</p>
+            </div>
             <div class="deg-tables-grid">
                 {up_table}
                 {down_table}
@@ -4432,6 +4444,49 @@ class ReportAgent(BaseAgent):
                 background: var(--npj-blue-light);
             }
 
+            /* DEG Summary Statement */
+            .deg-summary-statement {
+                text-align: center;
+                font-size: 16px;
+                color: var(--gray-700);
+                margin: var(--spacing-lg) 0;
+                padding: var(--spacing-md);
+                background: var(--gray-50);
+                border-radius: 8px;
+                border-left: 4px solid var(--npj-blue);
+            }
+
+            .deg-summary-statement p {
+                margin: 0;
+            }
+
+            .deg-tables-header {
+                text-align: center;
+                font-size: 14px;
+                color: var(--gray-600);
+                margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+            }
+
+            .deg-tables-header p {
+                margin: 0;
+            }
+
+            .metrics-row.compact {
+                margin: var(--spacing-sm) 0;
+            }
+
+            .metrics-row.compact .metric-box {
+                padding: var(--spacing-sm) var(--spacing-md);
+            }
+
+            .table-wrapper.compact {
+                max-width: 100%;
+            }
+
+            .table-wrapper.compact .data-table {
+                font-size: 13px;
+            }
+
             /* Pathway Section */
             .pathway-section {
                 margin-bottom: var(--spacing-xl);
@@ -5296,7 +5351,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 
         # Generate extended abstract if not already present
         if 'abstract_extended' not in data:
-            self.logger.info("Generating extended abstract with Claude API...")
+            self.logger.info("Generating extended abstract with LLM API...")
             extended_abstract = self._generate_extended_abstract(data)
             if extended_abstract:
                 data['abstract_extended'] = extended_abstract
@@ -5315,7 +5370,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             except Exception as e:
                 self.logger.warning(f"Error loading visualization interpretations: {e}")
         else:
-            self.logger.info("Generating visualization interpretations with Claude API...")
+            self.logger.info("Generating visualization interpretations with LLM API...")
             viz_interpretations = self._generate_visualization_interpretations(data)
             if viz_interpretations:
                 data['visualization_interpretations'] = viz_interpretations
@@ -5353,7 +5408,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         }
 
     def _generate_extended_abstract(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Generate extended abstract using Claude API.
+        """Generate extended abstract using LLM API.
 
         Creates a comprehensive abstract that summarizes ALL report sections:
         - DEG Analysis (Volcano, Heatmap)
@@ -5369,14 +5424,32 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         openai_key = os.environ.get("OPENAI_API_KEY")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
-        use_openai = OPENAI_AVAILABLE and openai_key
-        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+        # Runtime check for OpenAI availability (more reliable than module-level check)
+        openai_available = False
+        try:
+            from openai import OpenAI as OpenAIClient
+            openai_available = True
+        except ImportError:
+            pass
+
+        anthropic_available = False
+        try:
+            import anthropic as anthropic_module
+            anthropic_available = True
+        except ImportError:
+            pass
+
+        self.logger.info(f"LLM availability: OpenAI={openai_available}, Anthropic={anthropic_available}")
+        self.logger.info(f"API keys set: OpenAI={bool(openai_key)}, Anthropic={bool(anthropic_key)}")
+
+        use_openai = openai_available and openai_key
+        use_anthropic = anthropic_available and anthropic_key and not use_openai
 
         if not use_openai and not use_anthropic:
             self.logger.warning("No LLM API available (need OPENAI_API_KEY or ANTHROPIC_API_KEY)")
-            return None
+            return self._generate_fallback_extended_abstract(data)
 
-        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        llm_provider = "OpenAI (gpt-4o-mini)" if use_openai else "Anthropic (Claude)"
         self.logger.info(f"Using {llm_provider} for extended abstract generation")
 
         # Prepare analysis summary
@@ -5729,9 +5802,10 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 """
 
         try:
-            # Call LLM API (OpenAI or Anthropic)
+            # Call LLM API (OpenAI or Anthropic) - using runtime imports
             if use_openai:
-                client = OpenAI(api_key=openai_key)
+                from openai import OpenAI as OpenAIClient
+                client = OpenAIClient(api_key=openai_key)
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     max_tokens=4000,
@@ -5739,7 +5813,8 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 )
                 response_text = response.choices[0].message.content
             else:
-                client = anthropic.Anthropic(api_key=anthropic_key)
+                import anthropic as anthropic_module
+                client = anthropic_module.Anthropic(api_key=anthropic_key)
                 message = client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=4000,
@@ -5763,7 +5838,7 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 return extended_abstract
             else:
                 self.logger.warning(f"Could not extract JSON from {llm_provider} response")
-                return None
+                return self._generate_fallback_extended_abstract(data)
 
         except Exception as e:
             self.logger.error(f"Error generating extended abstract via {llm_provider}: {e}")
@@ -5896,14 +5971,30 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         openai_key = os.environ.get("OPENAI_API_KEY")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
-        use_openai = OPENAI_AVAILABLE and openai_key
-        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+        # Runtime check for LLM availability
+        openai_available = False
+        try:
+            from openai import OpenAI as OpenAIClient
+            openai_available = True
+        except ImportError:
+            pass
+
+        anthropic_available = False
+        try:
+            import anthropic as anthropic_module
+            anthropic_available = True
+        except ImportError:
+            pass
+
+        use_openai = openai_available and openai_key
+        use_anthropic = anthropic_available and anthropic_key and not use_openai
 
         if not use_openai and not use_anthropic:
             self.logger.warning("No LLM API available for visualization interpretations")
             return self._generate_fallback_viz_interpretations(data)
 
-        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        llm_provider = "OpenAI (gpt-4o-mini)" if use_openai else "Anthropic (Claude)"
+        self.logger.info(f"Using {llm_provider} for visualization interpretations")
 
         # Prepare data summaries for each visualization
         deg_df = data.get('deg_significant_df')
@@ -6037,9 +6128,10 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 """
 
         try:
-            # Call LLM API (OpenAI or Anthropic)
+            # Call LLM API (OpenAI or Anthropic) - using runtime imports
             if use_openai:
-                client = OpenAI(api_key=openai_key)
+                from openai import OpenAI as OpenAIClient
+                client = OpenAIClient(api_key=openai_key)
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     max_tokens=4000,
@@ -6047,7 +6139,8 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 )
                 response_text = response.choices[0].message.content
             else:
-                client = anthropic.Anthropic(api_key=anthropic_key)
+                import anthropic as anthropic_module
+                client = anthropic_module.Anthropic(api_key=anthropic_key)
                 message = client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=4000,
@@ -6072,7 +6165,7 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 return viz_interpretations
             else:
                 self.logger.warning(f"Could not extract JSON from {llm_provider} response")
-                return None
+                return self._generate_fallback_viz_interpretations(data)
 
         except Exception as e:
             self.logger.error(f"Error generating visualization interpretations via {llm_provider}: {e}")
@@ -6186,14 +6279,29 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         openai_key = os.environ.get("OPENAI_API_KEY")
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
-        use_openai = OPENAI_AVAILABLE and openai_key
-        use_anthropic = ANTHROPIC_AVAILABLE and anthropic_key and not use_openai
+        # Runtime check for LLM availability
+        openai_available = False
+        try:
+            from openai import OpenAI as OpenAIClient
+            openai_available = True
+        except ImportError:
+            pass
+
+        anthropic_available = False
+        try:
+            import anthropic as anthropic_module
+            anthropic_available = True
+        except ImportError:
+            pass
+
+        use_openai = openai_available and openai_key
+        use_anthropic = anthropic_available and anthropic_key and not use_openai
 
         if not use_openai and not use_anthropic:
             self.logger.warning("No LLM API available for research recommendations")
             return self._generate_fallback_research_recommendations(data)
 
-        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        llm_provider = "OpenAI (gpt-4o-mini)" if use_openai else "Anthropic (Claude)"
         self.logger.info(f"Generating research recommendations via {llm_provider}...")
 
         # Query DGIdb for verified drug-gene interactions
@@ -6401,9 +6509,10 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 """
 
         try:
-            # Call LLM API
+            # Call LLM API - using runtime imports
             if use_openai:
-                client = OpenAI(api_key=openai_key)
+                from openai import OpenAI as OpenAIClient
+                client = OpenAIClient(api_key=openai_key)
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
                     max_tokens=6000,
@@ -6411,7 +6520,8 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 )
                 response_text = response.choices[0].message.content
             else:
-                client = anthropic.Anthropic(api_key=anthropic_key)
+                import anthropic as anthropic_module
+                client = anthropic_module.Anthropic(api_key=anthropic_key)
                 message = client.messages.create(
                     model="claude-sonnet-4-20250514",
                     max_tokens=6000,
