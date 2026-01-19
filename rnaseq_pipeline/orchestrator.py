@@ -24,7 +24,7 @@ Usage:
     pipeline.run_from("agent3_pathway")  # Resume from agent 3
 
 Bulk RNA-seq (2-Step, 6 Agents):
-    DEG → Network → Pathway → Validation → Visualization → Report
+    DEG → Network → Pathway → Visualization → (ML Prediction) → Validation → Report
 
 Single-cell RNA-seq (1-Step):
     SingleCellAgent (QC → Clustering → Annotation → DEG → Report)
@@ -53,6 +53,8 @@ class RNAseqPipeline:
     """Orchestrator for the RNA-seq analysis pipeline."""
 
     # Bulk RNA-seq pipeline (6 agents)
+    # Order: DEG → Network → Pathway → Validation → Visualization → Report
+    # (ML prediction runs as virtual stage before Report)
     BULK_AGENT_ORDER = [
         "agent1_deg",
         "agent2_network",
@@ -80,6 +82,7 @@ class RNAseqPipeline:
     AGENT_CLASSES = BULK_AGENT_CLASSES
 
     # Define which outputs each agent needs from previous agents
+    # Order: DEG → Network → Pathway → Validation → Visualization → (ML) → Report
     AGENT_DEPENDENCIES = {
         "agent1_deg": [],
         "agent2_network": ["normalized_counts.csv", "deg_significant.csv"],
@@ -391,7 +394,7 @@ class RNAseqPipeline:
                             }
                             for c, cnt in cancer_counts.most_common(5)
                         ],
-                        'all_results': [r.to_dict() for r in results[:10]]  # Top 10 samples
+                        'all_results': [r.to_dict() for r in results]  # All samples for condition inference
                     }
 
                     # Update config with predicted cancer type
