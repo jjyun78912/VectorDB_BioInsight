@@ -1043,21 +1043,21 @@ class SingleCellAgent(BaseAgent):
         sc.settings.figdir = str(figures_dir)
         sc.settings.set_figure_params(dpi=150, facecolor='white')
 
-        # UMAP by cluster
+        # UMAP by cluster (no title - will be added in HTML report)
         sc.pl.umap(
             self.adata,
             color='cluster',
-            title='Clusters (UMAP)',
+            title='',
             save='_clusters.png',
             show=False
         )
         self.logger.info("  Saved umap_clusters.png")
 
-        # UMAP by cell type
+        # UMAP by cell type (no title - will be added in HTML report)
         sc.pl.umap(
             self.adata,
             color='cell_type',
-            title='Cell Types (UMAP)',
+            title='',
             save='_celltypes.png',
             show=False
         )
@@ -1074,27 +1074,42 @@ class SingleCellAgent(BaseAgent):
         )
         self.logger.info("  Saved violin_qc.png")
 
-        # Top marker genes heatmap
+        # Top marker genes - use same genes for both plots
         if self.markers_df is not None and len(self.markers_df) > 0:
-            top_markers = self.markers_df.groupby('cluster').head(5)['gene'].unique().tolist()
+            # Get top 3 markers per cluster for consistent visualization
+            top_markers = self.markers_df.groupby('cluster').head(3)['gene'].unique().tolist()[:30]
+            n_clusters = len(self.adata.obs['cluster'].unique())
+
             if len(top_markers) > 0:
-                sc.pl.heatmap(
+                # Calculate figure height based on number of clusters (same for both plots)
+                fig_height = max(8, n_clusters * 0.5)
+                fig_width = 10
+
+                # Matrixplot (cluster mean heatmap) - same Y-axis as Dotplot
+                sc.pl.matrixplot(
                     self.adata,
-                    var_names=top_markers[:50],  # Limit to 50
+                    var_names=top_markers,
                     groupby='cluster',
+                    figsize=(fig_width, fig_height),
+                    cmap='viridis',
+                    standard_scale='var',  # Standardize per gene
+                    colorbar_title='Mean\nexpression',
                     save='_markers.png',
                     show=False
                 )
-                self.logger.info("  Saved heatmap_markers.png")
+                # Scanpy saves as 'matrixplot__markers.png', rename to expected name
+                old_heatmap = figures_dir / 'matrixplot__markers.png'
+                new_heatmap = figures_dir / 'heatmap_markers.png'
+                if old_heatmap.exists():
+                    old_heatmap.rename(new_heatmap)
+                self.logger.info("  Saved heatmap_markers.png (matrixplot)")
 
-        # Dot plot for top markers
-        if self.markers_df is not None and len(self.markers_df) > 0:
-            top_per_cluster = self.markers_df.groupby('cluster').head(3)['gene'].unique().tolist()
-            if len(top_per_cluster) > 0:
+                # Dotplot with same dimensions for Y-axis alignment
                 sc.pl.dotplot(
                     self.adata,
-                    var_names=top_per_cluster[:30],
+                    var_names=top_markers,
                     groupby='cluster',
+                    figsize=(fig_width, fig_height),
                     save='_markers.png',
                     show=False
                 )
@@ -1144,7 +1159,7 @@ class SingleCellAgent(BaseAgent):
             ax.set_yticks(y_pos)
             ax.set_yticklabels(cell_types, fontsize=11)
             ax.set_xlabel('Percentage (%)', fontsize=12)
-            ax.set_title('Cell Type Composition', fontsize=14, fontweight='bold')
+            # No title - will be added in HTML report
             ax.set_xlim(0, max(percentages) * 1.35)  # Leave room for labels
             ax.invert_yaxis()  # Largest on top
             ax.spines['top'].set_visible(False)

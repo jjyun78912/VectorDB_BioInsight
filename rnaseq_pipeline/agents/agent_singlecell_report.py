@@ -17,6 +17,7 @@ Output:
 
 import json
 import base64
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -227,6 +228,63 @@ body {
     margin-top: 8px;
 }
 
+/* AI Interpretation Cards */
+.interpretation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.interpretation-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 20px;
+    transition: box-shadow 0.2s;
+}
+
+.interpretation-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.interpretation-card.full-width {
+    grid-column: 1 / -1;
+}
+
+.interpretation-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.interpretation-icon {
+    font-size: 20px;
+}
+
+.interpretation-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.interpretation-content {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.interpretation-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 16px;
+    padding: 12px;
+    background: #fef3c7;
+    border-radius: 8px;
+}
+
 /* Sections */
 .section {
     background: var(--bg-secondary);
@@ -253,29 +311,89 @@ body {
 
 /* Figures */
 .figure-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 24px;
+    align-items: stretch;
+}
+
+.figure-grid > .figure-panel {
+    flex: 1 1 400px;
+    max-width: calc(50% - 12px);
+    display: flex;
+    flex-direction: column;
 }
 
 .figure-panel {
-    background: var(--bg-tertiary);
-    border-radius: 8px;
-    overflow: hidden;
+    background: transparent;
+}
+
+.figure-title {
+    text-align: center;
+    padding: 0 0 12px 0;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
 }
 
 .figure-panel .title {
-    padding: 12px 16px;
+    padding: 0 0 8px 0;
     font-weight: 600;
     font-size: 13px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-light);
+}
+
+.figure-panel .figure-content {
+    padding: 0;
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 .figure-panel img {
     width: 100%;
+    max-height: 450px;
+    object-fit: contain;
+    object-position: top center;
+}
+
+/* Cell Type Analysis Section - Special Layout */
+.celltype-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+}
+
+.celltype-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.celltype-title {
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    padding: 6px 16px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.celltype-figure {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.celltype-figure img {
+    max-width: 100%;
     height: auto;
-    display: block;
+    object-fit: contain;
 }
 
 /* Tables */
@@ -325,6 +443,138 @@ tr:hover {
 .cluster-5 { background: #ffedd5; color: #9a3412; }
 .cluster-6 { background: #cffafe; color: #0e7490; }
 .cluster-7 { background: #fce7f3; color: #9d174d; }
+.cluster-8 { background: #e0e7ff; color: #3730a3; }
+.cluster-9 { background: #fef9c3; color: #854d0e; }
+.cluster-10 { background: #d1fae5; color: #065f46; }
+.cluster-11 { background: #ffe4e6; color: #be123c; }
+.cluster-12 { background: #e0f2fe; color: #0369a1; }
+.cluster-13 { background: #fae8ff; color: #86198f; }
+.cluster-14 { background: #ecfccb; color: #3f6212; }
+.cluster-15 { background: #fecaca; color: #b91c1c; }
+
+/* Accordion Styles */
+.accordion-container {
+    margin-top: 24px;
+}
+
+.accordion-item {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.accordion-header:hover {
+    background: var(--bg-tertiary);
+}
+
+.accordion-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.accordion-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.accordion-chevron {
+    transition: transform 0.2s;
+    color: var(--text-muted);
+}
+
+.accordion-item.open .accordion-chevron {
+    transform: rotate(180deg);
+}
+
+.accordion-content {
+    display: none;
+    padding: 0 16px 16px 16px;
+}
+
+.accordion-item.open .accordion-content {
+    display: block;
+}
+
+.accordion-table {
+    width: 100%;
+    font-size: 13px;
+}
+
+.accordion-table th,
+.accordion-table td {
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.accordion-table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.accordion-table tr:hover {
+    background: var(--bg-tertiary);
+}
+
+.show-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.show-more-btn:hover {
+    background: var(--primary-dark);
+}
+
+.hidden-rows {
+    display: none;
+}
+
+.hidden-rows.visible {
+    display: table-row-group;
+}
+
+.marker-count {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.top-gene {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+}
 
 /* Composition Chart */
 .composition-chart {
@@ -396,6 +646,9 @@ tr:hover {
         trajectory_df = data.get('trajectory_pseudotime')
         interactions_df = data.get('cell_interactions')
 
+        # Generate LLM interpretation
+        llm_interpretation = self._generate_llm_interpretation(data)
+
         # Calculate summary stats
         n_cells = adata_summary.get('n_cells', 0)
         n_genes = adata_summary.get('n_genes', 0)
@@ -433,6 +686,7 @@ tr:hover {
 
     <nav class="nav">
         <a href="#summary">요약</a>
+        <a href="#interpretation">AI 해석</a>
         <a href="#prediction">암종 예측</a>
         <a href="#umap">UMAP</a>
         <a href="#composition">세포 구성</a>
@@ -479,6 +733,51 @@ tr:hover {
             </div>
         </section>
 
+        <!-- AI Interpretation Section -->
+        <section id="interpretation" class="section">
+            <h2>🤖 AI 분석 해석</h2>
+            <div class="interpretation-grid">
+                <div class="interpretation-card">
+                    <div class="interpretation-header">
+                        <span class="interpretation-icon">📊</span>
+                        <span class="interpretation-title">Executive Summary</span>
+                    </div>
+                    <div class="interpretation-content">{llm_interpretation.get('executive_summary', '해석을 생성할 수 없습니다.')}</div>
+                </div>
+                <div class="interpretation-card">
+                    <div class="interpretation-header">
+                        <span class="interpretation-icon">🧬</span>
+                        <span class="interpretation-title">세포 구성 해석</span>
+                    </div>
+                    <div class="interpretation-content">{llm_interpretation.get('cell_composition', '')}</div>
+                </div>
+                <div class="interpretation-card">
+                    <div class="interpretation-header">
+                        <span class="interpretation-icon">🔬</span>
+                        <span class="interpretation-title">마커 유전자 해석</span>
+                    </div>
+                    <div class="interpretation-content">{llm_interpretation.get('marker_interpretation', '')}</div>
+                </div>
+                <div class="interpretation-card">
+                    <div class="interpretation-header">
+                        <span class="interpretation-icon">🛡️</span>
+                        <span class="interpretation-title">TME/면역 해석</span>
+                    </div>
+                    <div class="interpretation-content">{llm_interpretation.get('tme_interpretation', '')}</div>
+                </div>
+                <div class="interpretation-card full-width">
+                    <div class="interpretation-header">
+                        <span class="interpretation-icon">💊</span>
+                        <span class="interpretation-title">임상적 함의</span>
+                    </div>
+                    <div class="interpretation-content">{llm_interpretation.get('clinical_implications', '')}</div>
+                </div>
+            </div>
+            <p class="interpretation-note">
+                ⚠️ 본 해석은 AI 모델에 의해 자동 생성되었으며, 최종 판단은 전문가의 검토가 필요합니다.
+            </p>
+        </section>
+
         <!-- NEW: Cancer Prediction Section -->
         <section id="prediction" class="section">
             <h2>🔬 암종 예측 (Pseudo-bulk ML)</h2>
@@ -488,9 +787,19 @@ tr:hover {
         <!-- Cell Type Analysis Section (UMAP + Bar Chart) -->
         <section id="celltype" class="section">
             <h2>세포 유형 분석 (Cell Type Analysis)</h2>
-            <div class="figure-grid">
-                {self._figure_html(figures, 'umap_celltypes', 'Cell Types (UMAP)')}
-                {self._figure_html(figures, 'celltype_barchart', 'Cell Type Composition')}
+            <div class="celltype-grid">
+                <div class="celltype-panel">
+                    <div class="celltype-title">Cell Types (UMAP)</div>
+                    <div class="celltype-figure">
+                        {f'<img src="{figures["umap_celltypes"]}" alt="Cell Types UMAP">' if 'umap_celltypes' in figures else '<p>Figure not available</p>'}
+                    </div>
+                </div>
+                <div class="celltype-panel">
+                    <div class="celltype-title">Cell Type Composition</div>
+                    <div class="celltype-figure">
+                        {f'<img src="{figures["celltype_barchart"]}" alt="Cell Type Composition">' if 'celltype_barchart' in figures else '<p>Figure not available</p>'}
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -899,13 +1208,18 @@ tr:hover {
             '''
 
     def _figure_html(self, figures: Dict, key: str, title: str) -> str:
-        """Generate HTML for a figure panel."""
+        """Generate HTML for a figure panel with centered title."""
         if key not in figures:
-            return f'<div class="figure-panel"><div class="title">{title}</div><p style="padding:24px;color:#999;">Figure not available</p></div>'
+            return f'''<div class="figure-panel">
+                <div class="figure-title">{title}</div>
+                <div class="figure-content"><p style="padding:24px;color:#999;">Figure not available</p></div>
+            </div>'''
 
         return f'''<div class="figure-panel">
-            <div class="title">{title}</div>
-            <img src="{figures[key]}" alt="{title}">
+            <div class="figure-title">{title}</div>
+            <div class="figure-content">
+                <img src="{figures[key]}" alt="{title}">
+            </div>
         </div>'''
 
     def _composition_html(self, df: Optional[pd.DataFrame], figures: Dict[str, str] = None) -> str:
@@ -997,43 +1311,307 @@ tr:hover {
         return ''
 
     def _markers_table_html(self, df: Optional[pd.DataFrame]) -> str:
-        """Generate marker genes table."""
+        """Generate accordion-style marker genes table grouped by cluster."""
         if df is None or len(df) == 0:
             return '<p>No marker data available</p>'
 
-        # Get top markers per cluster
-        max_markers = self.config.get('max_markers_per_cluster', 10)
-        if 'cluster' in df.columns:
-            top_markers = df.groupby('cluster').head(max_markers)
-        else:
-            top_markers = df.head(100)
+        if 'cluster' not in df.columns:
+            return '<p>No cluster information in marker data</p>'
 
-        rows_html = ''
-        for _, row in top_markers.iterrows():
-            cluster = row.get('cluster', '-')
-            gene = row.get('gene', '-')
-            score = row.get('score', 0)
-            lfc = row.get('logfoldchange', 0)
-            pval = row.get('pval_adj', row.get('pval', 1))
+        # Sort by cluster and score
+        df_sorted = df.sort_values(['cluster', 'score'], ascending=[True, False])
+        clusters = sorted(df_sorted['cluster'].unique())
 
-            rows_html += f'''<tr>
-                <td><span class="cluster-badge cluster-{cluster}">{cluster}</span></td>
-                <td><strong>{gene}</strong></td>
-                <td>{score:.2f}</td>
-                <td style="color:{'#dc2626' if lfc > 0 else '#2563eb'}">{lfc:+.2f}</td>
-                <td>{pval:.2e}</td>
-            </tr>'''
+        initial_show = 10  # Show first 10 markers initially
 
-        return f'''
-        <div class="table-wrapper" style="margin-top:24px;">
-            <table>
-                <thead>
-                    <tr><th>Cluster</th><th>Gene</th><th>Score</th><th>Log2FC</th><th>Adj. P-value</th></tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-        </div>
+        accordion_html = '<div class="accordion-container">'
+
+        for cluster in clusters:
+            cluster_df = df_sorted[df_sorted['cluster'] == cluster]
+            n_markers = len(cluster_df)
+            top_gene = cluster_df.iloc[0]['gene'] if n_markers > 0 else '-'
+
+            # Build rows for initial display (first 10)
+            visible_rows = ''
+            hidden_rows = ''
+
+            for idx, (_, row) in enumerate(cluster_df.iterrows()):
+                gene = row.get('gene', '-')
+                score = row.get('score', 0)
+                lfc = row.get('logfoldchange', 0)
+                pval = row.get('pval_adj', row.get('pval', 1))
+
+                row_html = f'''<tr>
+                    <td><strong>{gene}</strong></td>
+                    <td>{score:.2f}</td>
+                    <td style="color:{'#dc2626' if lfc > 0 else '#2563eb'}">{lfc:+.2f}</td>
+                    <td>{pval:.2e}</td>
+                </tr>'''
+
+                if idx < initial_show:
+                    visible_rows += row_html
+                else:
+                    hidden_rows += row_html
+
+            # Show more button if there are hidden rows
+            show_more_html = ''
+            if n_markers > initial_show:
+                remaining = n_markers - initial_show
+                show_more_html = f'''
+                <button class="show-more-btn" onclick="toggleMoreRows(this, 'cluster-{cluster}-hidden')">
+                    <span class="btn-text">더보기 (+{remaining}개)</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>'''
+
+            accordion_html += f'''
+            <div class="accordion-item" data-cluster="{cluster}">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <div class="accordion-header-left">
+                        <span class="cluster-badge cluster-{cluster}">Cluster {cluster}</span>
+                        <span class="top-gene">Top: {top_gene}</span>
+                    </div>
+                    <div class="accordion-header-right">
+                        <span class="marker-count">{n_markers} markers</span>
+                        <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                </div>
+                <div class="accordion-content">
+                    <table class="accordion-table">
+                        <thead>
+                            <tr><th>Gene</th><th>Score</th><th>Log2FC</th><th>Adj. P-value</th></tr>
+                        </thead>
+                        <tbody class="visible-rows">{visible_rows}</tbody>
+                        <tbody class="hidden-rows" id="cluster-{cluster}-hidden">{hidden_rows}</tbody>
+                    </table>
+                    {show_more_html}
+                </div>
+            </div>
+            '''
+
+        accordion_html += '</div>'
+
+        # Add JavaScript for accordion functionality
+        accordion_html += '''
+        <script>
+        function toggleAccordion(header) {
+            const item = header.parentElement;
+            item.classList.toggle('open');
+        }
+
+        function toggleMoreRows(btn, hiddenId) {
+            const hiddenRows = document.getElementById(hiddenId);
+            const btnText = btn.querySelector('.btn-text');
+
+            if (hiddenRows.classList.contains('visible')) {
+                hiddenRows.classList.remove('visible');
+                btnText.textContent = btnText.textContent.replace('접기', '더보기');
+                btn.querySelector('svg').style.transform = 'rotate(0deg)';
+            } else {
+                hiddenRows.classList.add('visible');
+                btnText.textContent = btnText.textContent.replace('더보기', '접기');
+                btn.querySelector('svg').style.transform = 'rotate(180deg)';
+            }
+        }
+
+        // Expand all / Collapse all functionality
+        function expandAllAccordions() {
+            document.querySelectorAll('.accordion-item').forEach(item => {
+                item.classList.add('open');
+            });
+        }
+
+        function collapseAllAccordions() {
+            document.querySelectorAll('.accordion-item').forEach(item => {
+                item.classList.remove('open');
+            });
+        }
+        </script>
         '''
+
+        return accordion_html
+
+    def _generate_llm_interpretation(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate LLM-based interpretations for single-cell analysis.
+
+        Returns:
+            Dict with keys: executive_summary, cell_composition, marker_interpretation,
+                           tme_interpretation, clinical_implications
+        """
+        # Check for LLM API availability
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        openai_available = False
+        try:
+            from openai import OpenAI as OpenAIClient
+            openai_available = True
+        except ImportError:
+            pass
+
+        anthropic_available = False
+        try:
+            import anthropic as anthropic_module
+            anthropic_available = True
+        except ImportError:
+            pass
+
+        use_openai = openai_available and openai_key
+        use_anthropic = anthropic_available and anthropic_key and not use_openai
+
+        if not use_openai and not use_anthropic:
+            self.logger.warning("No LLM API available for interpretation")
+            return self._generate_fallback_interpretation(data)
+
+        llm_provider = "OpenAI" if use_openai else "Anthropic"
+        self.logger.info(f"Generating LLM interpretation using {llm_provider}...")
+
+        # Prepare data summary
+        adata_summary = data.get('adata_summary', {})
+        n_cells = adata_summary.get('n_cells', 0)
+        n_clusters = adata_summary.get('n_clusters', 0)
+        n_celltypes = adata_summary.get('n_celltypes', 0)
+
+        # Cell composition
+        composition_df = data.get('cell_composition')
+        composition_text = ""
+        if composition_df is not None and len(composition_df) > 0:
+            type_col = 'cell_type' if 'cell_type' in composition_df.columns else 'cluster'
+            if type_col in composition_df.columns and 'count' in composition_df.columns:
+                comp_data = composition_df.groupby(type_col)['count'].sum().sort_values(ascending=False)
+                total = comp_data.sum()
+                composition_text = ", ".join([f"{ct}: {cnt/total*100:.1f}%" for ct, cnt in comp_data.head(10).items()])
+
+        # Top markers per cluster
+        markers_df = data.get('cluster_markers')
+        markers_text = ""
+        if markers_df is not None and len(markers_df) > 0:
+            top_markers = markers_df.groupby('cluster').head(3)[['cluster', 'gene']].values.tolist()
+            cluster_markers = {}
+            for cluster, gene in top_markers:
+                if cluster not in cluster_markers:
+                    cluster_markers[cluster] = []
+                cluster_markers[cluster].append(gene)
+            markers_text = "; ".join([f"Cluster {c}: {', '.join(genes)}" for c, genes in sorted(cluster_markers.items())[:8]])
+
+        # TME composition
+        tme_df = data.get('tme_composition')
+        tme_text = ""
+        if tme_df is not None and len(tme_df) > 0:
+            tme_text = ", ".join([f"{row['category']}: {row['percentage']:.1f}%" for _, row in tme_df.iterrows()])
+
+        # Cancer prediction
+        cancer_pred = data.get('cancer_prediction', {})
+        pred_text = ""
+        if cancer_pred:
+            pred_label = cancer_pred.get('predicted_label', 'Unknown')
+            pred_prob = cancer_pred.get('probability', 0)
+            pred_text = f"예측 암종: {pred_label} ({pred_prob*100:.1f}%)"
+
+        # Master regulators (GRN)
+        mr_df = data.get('master_regulators')
+        mr_text = ""
+        if mr_df is not None and len(mr_df) > 0:
+            top_mrs = mr_df.head(5)['tf'].tolist() if 'tf' in mr_df.columns else []
+            mr_text = ", ".join(top_mrs)
+
+        # Build prompt
+        prompt = f"""당신은 단일세포 RNA-seq 분석 전문가입니다. 다음 분석 결과를 바탕으로 연구자를 위한 해석을 제공해주세요.
+
+## 분석 데이터 요약
+- 총 세포 수: {n_cells:,}개
+- 클러스터 수: {n_clusters}개
+- 세포 유형 수: {n_celltypes}개
+
+## 세포 구성
+{composition_text}
+
+## 클러스터별 마커 유전자
+{markers_text}
+
+## 종양 미세환경 (TME)
+{tme_text}
+
+## 암종 예측
+{pred_text}
+
+## 주요 전사인자 (Master Regulators)
+{mr_text}
+
+---
+
+다음 항목들을 한국어로 작성해주세요. 각 항목은 2-4문장으로 간결하게 작성하세요:
+
+1. **Executive Summary**: 전체 분석 결과의 핵심 발견을 요약
+2. **세포 구성 해석**: 세포 유형 분포의 의미와 특징
+3. **마커 유전자 해석**: 주요 마커 유전자들이 나타내는 생물학적 의미
+4. **TME/면역 해석**: 종양 미세환경 구성이 시사하는 면역학적 특성
+5. **임상적 함의**: 이 결과가 치료 전략에 어떤 시사점을 주는지
+
+JSON 형식으로 응답해주세요:
+{{"executive_summary": "...", "cell_composition": "...", "marker_interpretation": "...", "tme_interpretation": "...", "clinical_implications": "..."}}
+"""
+
+        try:
+            if use_openai:
+                client = OpenAIClient(api_key=openai_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                    max_tokens=1500,
+                    response_format={"type": "json_object"}
+                )
+                result_text = response.choices[0].message.content
+            else:
+                client = anthropic_module.Anthropic(api_key=anthropic_key)
+                response = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": prompt + "\n\nJSON 형식으로만 응답하세요."}]
+                )
+                result_text = response.content[0].text
+
+            # Parse JSON
+            result = json.loads(result_text)
+            self.logger.info("LLM interpretation generated successfully")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"LLM interpretation failed: {e}")
+            return self._generate_fallback_interpretation(data)
+
+    def _generate_fallback_interpretation(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Generate rule-based fallback interpretation when LLM is unavailable."""
+        adata_summary = data.get('adata_summary', {})
+        n_cells = adata_summary.get('n_cells', 0)
+        n_clusters = adata_summary.get('n_clusters', 0)
+
+        # TME phenotype detection
+        tme_df = data.get('tme_composition')
+        immune_pct = 0
+        if tme_df is not None and len(tme_df) > 0:
+            immune_rows = tme_df[tme_df['category'].str.contains('immune|T_cell|NK|B_cell', case=False, na=False)]
+            if len(immune_rows) > 0:
+                immune_pct = immune_rows['percentage'].sum()
+
+        tme_phenotype = "Hot (Inflamed)" if immune_pct > 30 else "Altered" if immune_pct > 15 else "Cold (Desert)"
+
+        return {
+            "executive_summary": f"본 분석에서 총 {n_cells:,}개 세포가 {n_clusters}개 클러스터로 분류되었습니다. "
+                                f"TME 표현형은 '{tme_phenotype}'으로 분류되었으며, 면역세포 비율은 {immune_pct:.1f}%입니다.",
+            "cell_composition": "세포 유형별 구성 비율은 UMAP 시각화와 Bar chart에서 확인할 수 있습니다. "
+                               "각 클러스터의 세포 유형은 마커 유전자 발현 패턴을 기반으로 자동 추론되었습니다.",
+            "marker_interpretation": "클러스터별 마커 유전자는 Wilcoxon rank-sum test를 통해 식별되었습니다. "
+                                    "상위 마커 유전자들은 각 클러스터의 세포 유형 특성을 반영합니다.",
+            "tme_interpretation": f"면역 침윤 분석 결과, TME는 '{tme_phenotype}' 표현형을 보입니다. "
+                                 f"면역세포 비율 {immune_pct:.1f}%는 {'높은' if immune_pct > 30 else '중간' if immune_pct > 15 else '낮은'} 면역 활성도를 시사합니다.",
+            "clinical_implications": "TME 구성 및 세포 유형 분포는 면역치료 반응성 예측에 참고될 수 있습니다. "
+                                    "자세한 치료 전략은 추가적인 임상 정보와 함께 종합적으로 평가되어야 합니다."
+        }
 
     def run(self) -> Dict[str, Any]:
         """Generate the single-cell report."""
