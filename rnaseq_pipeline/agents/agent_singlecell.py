@@ -627,7 +627,9 @@ class SingleCellAgent(BaseAgent):
                 'markers': ['ACTA2', 'MYH11', 'TAGLN', 'CNN1', 'DES'],
             },
 
-            # Epithelial cells (liver-specific)
+            # =============================================
+            # LIVER (LIHC)
+            # =============================================
             'Hepatocytes': {
                 'markers': ['ALB', 'APOB', 'SERPINA1', 'HP', 'TF', 'ASGR1', 'CYP3A4',
                            'TTR', 'TAT', 'ADH1B', 'RBP4', 'CYP2C9', 'CYP2E1', 'CYP2A6',
@@ -645,7 +647,233 @@ class SingleCellAgent(BaseAgent):
             'Kupffer_cells': {
                 'markers': ['MARCO', 'CD163', 'TIMD4', 'CLEC4F', 'CD68', 'VSIG4', 'C1QA', 'C1QB'],
             },
+            'Stellate_cells': {
+                'markers': ['LRAT', 'RGS5', 'ACTA2', 'TAGLN', 'COL1A1', 'PDGFRB', 'DES'],
+            },
 
+            # =============================================
+            # BREAST (BRCA)
+            # =============================================
+            'Luminal_epithelial': {
+                'markers': ['KRT8', 'KRT18', 'KRT19', 'EPCAM', 'ESR1', 'PGR', 'GATA3', 'FOXA1', 'MUC1'],
+            },
+            'Basal_epithelial': {
+                'markers': ['KRT5', 'KRT14', 'KRT17', 'TP63', 'EGFR', 'ACTA2'],
+            },
+            'Myoepithelial': {
+                'markers': ['ACTA2', 'MYH11', 'KRT5', 'KRT14', 'TAGLN', 'CNN1', 'TP63'],
+            },
+
+            # =============================================
+            # LUNG (LUAD/LUSC)
+            # =============================================
+            'Alveolar_type1': {  # AT1
+                'markers': ['AGER', 'PDPN', 'CAV1', 'AQP5', 'CLDN18', 'HOPX'],
+            },
+            'Alveolar_type2': {  # AT2
+                'markers': ['SFTPC', 'SFTPB', 'SFTPA1', 'SFTPA2', 'SFTPD', 'ABCA3', 'NAPSA', 'NKX2-1'],
+            },
+            'Club_cells': {
+                'markers': ['SCGB1A1', 'SCGB3A1', 'SCGB3A2', 'CYP2F1', 'BPIFB1'],
+            },
+            'Ciliated_cells': {
+                'markers': ['FOXJ1', 'TPPP3', 'PIFO', 'DNAH5', 'DNAI1', 'RSPH1', 'CFAP299'],
+            },
+            'Goblet_cells': {
+                'markers': ['MUC5AC', 'MUC5B', 'SPDEF', 'TFF3', 'AGR2'],
+            },
+            'Basal_airway': {
+                'markers': ['KRT5', 'KRT17', 'TP63', 'NGFR', 'KRT14'],
+            },
+
+            # =============================================
+            # COLON/COLORECTAL (COAD)
+            # =============================================
+            'Colonocytes': {
+                'markers': ['CA1', 'CA2', 'FABP1', 'CEACAM7', 'AQP8', 'SLC26A3', 'GUCA2A'],
+            },
+            'Goblet_intestinal': {
+                'markers': ['MUC2', 'TFF3', 'SPDEF', 'FCGBP', 'ZG16', 'CLCA1'],
+            },
+            'Enterocytes': {
+                'markers': ['FABP2', 'FABP1', 'SLC5A1', 'ANPEP', 'SI', 'APOA1', 'APOA4'],
+            },
+            'Paneth_cells': {
+                'markers': ['DEFA5', 'DEFA6', 'LYZ', 'REG3A', 'REG3G'],
+            },
+            'Enteroendocrine': {
+                'markers': ['CHGA', 'CHGB', 'SYP', 'NEUROD1', 'GCG', 'PYY'],
+            },
+            'Stem_intestinal': {
+                'markers': ['LGR5', 'ASCL2', 'OLFM4', 'SOX9', 'RGMB'],
+            },
+
+            # =============================================
+            # STOMACH (STAD)
+            # =============================================
+            'Chief_cells': {
+                'markers': ['PGA3', 'PGA4', 'PGA5', 'PGC', 'LIPF', 'GKN2'],
+            },
+            'Parietal_cells': {
+                'markers': ['ATP4A', 'ATP4B', 'GIF', 'KCNQ1'],
+            },
+            'Pit_cells': {  # Foveolar/mucous cells
+                'markers': ['MUC5AC', 'TFF1', 'TFF2', 'GKN1', 'MUC6'],
+            },
+
+            # =============================================
+            # KIDNEY (KIRC)
+            # =============================================
+            'Proximal_tubule': {
+                'markers': ['SLC34A1', 'LRP2', 'CUBN', 'SLC5A12', 'ALDOB', 'GPX3'],
+            },
+            'Distal_tubule': {
+                'markers': ['SLC12A3', 'CALB1', 'TRPM6'],
+            },
+            'Collecting_duct': {
+                'markers': ['AQP2', 'AQP3', 'HSD11B2', 'SCNN1A', 'SCNN1B', 'SCNN1G'],
+                'subtype_markers': {
+                    'Principal_cell': ['AQP2', 'AQP3', 'FXYD4'],
+                    'Intercalated_A': ['SLC4A1', 'ATP6V1G3', 'ATP6V0D2'],
+                    'Intercalated_B': ['SLC26A4', 'SLC4A9'],
+                }
+            },
+            'Loop_of_Henle': {
+                'markers': ['SLC12A1', 'UMOD', 'CLDN16', 'CLDN19'],
+            },
+            'Podocytes': {
+                'markers': ['NPHS1', 'NPHS2', 'WT1', 'PODXL', 'SYNPO'],
+            },
+            'Mesangial_cells': {
+                'markers': ['PDGFRB', 'DES', 'ACTA2', 'TAGLN', 'ITGA8'],
+            },
+
+            # =============================================
+            # PANCREAS (PAAD)
+            # =============================================
+            'Acinar_cells': {
+                'markers': ['PRSS1', 'PRSS2', 'CPA1', 'CPA2', 'CELA3A', 'CELA3B', 'PNLIP', 'AMY2A'],
+            },
+            'Ductal_cells': {
+                'markers': ['KRT19', 'KRT7', 'CFTR', 'MUC1', 'SOX9', 'SPP1', 'CA2'],
+            },
+            'Alpha_cells': {
+                'markers': ['GCG', 'ARX', 'IRX2', 'TTR'],
+            },
+            'Beta_cells': {
+                'markers': ['INS', 'IAPP', 'MAFA', 'NKX6-1', 'PDX1', 'SLC2A2'],
+            },
+            'Delta_cells': {
+                'markers': ['SST', 'RBP4', 'HHEX'],
+            },
+            'PP_cells': {
+                'markers': ['PPY', 'SERTM1'],
+            },
+
+            # =============================================
+            # PROSTATE (PRAD)
+            # =============================================
+            'Luminal_prostate': {
+                'markers': ['KRT8', 'KRT18', 'AR', 'NKX3-1', 'KLK3', 'ACPP', 'MSMB'],
+            },
+            'Basal_prostate': {
+                'markers': ['KRT5', 'KRT14', 'TP63', 'KRT15'],
+            },
+            'Neuroendocrine_prostate': {
+                'markers': ['CHGA', 'SYP', 'NCAM1', 'ENO2'],
+            },
+
+            # =============================================
+            # OVARY (OV)
+            # =============================================
+            'Ovarian_epithelial': {
+                'markers': ['PAX8', 'WT1', 'KRT7', 'MUC16', 'EPCAM', 'CA125'],
+            },
+            'Granulosa_cells': {
+                'markers': ['FSHR', 'CYP19A1', 'FOXL2', 'AMH', 'INHA', 'INHBA'],
+            },
+            'Theca_cells': {
+                'markers': ['CYP17A1', 'STAR', 'LHCGR'],
+            },
+
+            # =============================================
+            # UTERUS (UCEC)
+            # =============================================
+            'Endometrial_epithelial': {
+                'markers': ['EPCAM', 'KRT8', 'KRT18', 'MUC1', 'PAX8', 'ESR1', 'PGR'],
+            },
+            'Endometrial_stromal': {
+                'markers': ['VIM', 'CD10', 'MME', 'IGFBP1', 'PRL'],
+            },
+
+            # =============================================
+            # THYROID (THCA)
+            # =============================================
+            'Thyrocytes': {
+                'markers': ['TG', 'TPO', 'TSHR', 'NKX2-1', 'PAX8', 'SLC5A5', 'DIO1', 'DIO2'],
+            },
+            'Parafollicular_C_cells': {
+                'markers': ['CALCA', 'CHGA', 'SYP'],
+            },
+
+            # =============================================
+            # BRAIN (GBM/LGG)
+            # =============================================
+            'Astrocytes': {
+                'markers': ['GFAP', 'AQP4', 'SLC1A2', 'SLC1A3', 'ALDH1L1', 'S100B', 'GJA1'],
+            },
+            'Oligodendrocytes': {
+                'markers': ['MBP', 'PLP1', 'MOG', 'MAG', 'OLIG1', 'OLIG2', 'SOX10', 'CNP'],
+            },
+            'OPC': {  # Oligodendrocyte precursor cells
+                'markers': ['PDGFRA', 'CSPG4', 'OLIG1', 'OLIG2', 'SOX10'],
+            },
+            'Neurons': {
+                'markers': ['RBFOX3', 'SYT1', 'SNAP25', 'SLC17A7', 'GAD1', 'GAD2', 'MAP2'],
+            },
+            'Microglia': {
+                'markers': ['CX3CR1', 'P2RY12', 'TMEM119', 'AIF1', 'CSF1R', 'ITGAM'],
+            },
+            'Ependymal': {
+                'markers': ['FOXJ1', 'PIFO', 'DNAH9', 'CCDC153'],
+            },
+
+            # =============================================
+            # MELANOMA (SKCM)
+            # =============================================
+            'Melanocytes': {
+                'markers': ['MLANA', 'PMEL', 'TYR', 'TYRP1', 'DCT', 'MITF', 'SOX10'],
+            },
+            'Keratinocytes': {
+                'markers': ['KRT1', 'KRT5', 'KRT10', 'KRT14', 'LOR', 'IVL', 'FLG'],
+            },
+
+            # =============================================
+            # HEAD & NECK (HNSC)
+            # =============================================
+            'Squamous_epithelial': {
+                'markers': ['KRT5', 'KRT6A', 'KRT13', 'KRT14', 'TP63', 'DSG3'],
+            },
+
+            # =============================================
+            # BLADDER (BLCA)
+            # =============================================
+            'Urothelial': {
+                'markers': ['UPK1A', 'UPK1B', 'UPK2', 'UPK3A', 'KRT20', 'GATA3'],
+            },
+            'Umbrella_cells': {
+                'markers': ['UPK1A', 'UPK2', 'UPK3A', 'KRT20'],
+            },
+            'Intermediate_urothelial': {
+                'markers': ['KRT13', 'KRT7', 'UPK1B'],
+            },
+            'Basal_urothelial': {
+                'markers': ['KRT5', 'KRT17', 'CD44', 'TP63'],
+            },
+
+            # =============================================
+            # COMMON / GENERAL
+            # =============================================
             # Plasma cells (B cell derived)
             'Plasma_cells': {
                 'markers': ['MZB1', 'JCHAIN', 'IGKC', 'IGHG1', 'IGHG3', 'XBP1', 'SDC1',
@@ -658,7 +886,7 @@ class SingleCellAgent(BaseAgent):
                            'CA1', 'BLVRB', 'SNCA', 'GYPA', 'SLC4A1', 'ANK1'],
             },
 
-            # Other epithelial
+            # Generic epithelial (fallback)
             'Epithelial': {
                 'markers': ['EPCAM', 'KRT8', 'KRT18', 'CDH1'],
             },
@@ -668,9 +896,9 @@ class SingleCellAgent(BaseAgent):
                 'markers': ['MKI67', 'TOP2A', 'PCNA', 'CDK1', 'CCNB1'],
             },
 
-            # Stellate cells (liver-specific fibroblasts)
-            'Stellate_cells': {
-                'markers': ['LRAT', 'RGS5', 'ACTA2', 'TAGLN', 'COL1A1', 'PDGFRB', 'DES'],
+            # Cancer stem cells markers
+            'Cancer_stem_cells': {
+                'markers': ['CD44', 'ALDH1A1', 'PROM1', 'SOX2', 'NANOG', 'POU5F1'],
             },
         }
 
