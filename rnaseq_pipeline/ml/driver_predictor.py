@@ -20,6 +20,20 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, asdict
 from functools import lru_cache
 
+# Gene function lookup
+try:
+    import mygene
+    HAS_MYGENE = True
+except ImportError:
+    HAS_MYGENE = False
+
+# Translation service for Korean output
+try:
+    from backend.app.core.translator import TranslationService
+    HAS_TRANSLATOR = True
+except ImportError:
+    HAS_TRANSLATOR = False
+
 # Project paths
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data" / "driver_db"
@@ -72,6 +86,9 @@ class DriverCandidate:
     # Validation suggestion
     validation_method: str = ""
     validation_detail: str = ""
+
+    # Gene function description (from mygene/NCBI)
+    gene_function: str = ""
 
     def __post_init__(self):
         if self.hotspots is None:
@@ -562,10 +579,125 @@ class DriverPredictor:
         # Generate summary
         self.results['summary'] = self._generate_summary()
 
+        # Add gene function descriptions
+        self._add_gene_functions()
+
         print(f"\n✅ Top Known Drivers: {len(self.results['known_drivers'])}")
         print(f"✅ Top Novel Drivers: {len(self.results['novel_drivers'])}")
 
         return self.results
+
+    def _add_gene_functions(self) -> None:
+        """Add gene function descriptions from mygene/NCBI with Korean translation."""
+        if not HAS_MYGENE:
+            print("⚠️ mygene not installed. Gene functions will not be added.")
+            return
+
+        # Collect all gene symbols
+        all_genes = []
+        for driver in self.results['known_drivers']:
+            all_genes.append(driver.gene_symbol)
+        for driver in self.results['novel_drivers']:
+            all_genes.append(driver.gene_symbol)
+
+        if not all_genes:
+            return
+
+        try:
+            mg = mygene.MyGeneInfo()
+            # Query gene summary/description
+            results = mg.querymany(
+                all_genes,
+                scopes='symbol',
+                fields='summary,name',
+                species='human',
+                returnall=True
+            )
+
+            # Build gene -> function mapping (English)
+            gene_functions_en = {}
+            for hit in results.get('out', []):
+                if isinstance(hit, dict) and 'query' in hit:
+                    gene = hit['query'].upper()
+                    # Prefer summary, fallback to name
+                    summary = hit.get('summary', '')
+                    name = hit.get('name', '')
+
+                    if summary:
+                        # Truncate long summaries
+                        if len(summary) > 300:
+                            summary = summary[:297] + '...'
+                        gene_functions_en[gene] = summary
+                    elif name:
+                        gene_functions_en[gene] = name
+
+            # Translate to Korean using LLM
+            gene_functions_kr = self._translate_gene_functions(gene_functions_en)
+
+            # Apply to driver candidates
+            for driver in self.results['known_drivers']:
+                driver.gene_function = gene_functions_kr.get(driver.gene_symbol.upper(), '')
+            for driver in self.results['novel_drivers']:
+                driver.gene_function = gene_functions_kr.get(driver.gene_symbol.upper(), '')
+
+            func_count = len([d for d in self.results['known_drivers'] + self.results['novel_drivers'] if d.gene_function])
+            print(f"✅ Added gene functions for {func_count} genes (Korean)")
+
+        except Exception as e:
+            print(f"⚠️ Failed to fetch gene functions: {e}")
+
+    def _translate_gene_functions(self, gene_functions_en: Dict[str, str]) -> Dict[str, str]:
+        """Translate gene functions to Korean using LLM."""
+        if not gene_functions_en:
+            return {}
+
+        # Try using OpenAI for batch translation (faster)
+        try:
+            from openai import OpenAI
+            import os
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+            # Batch translate all functions at once
+            functions_text = "\n".join([f"{gene}: {desc}" for gene, desc in gene_functions_en.items()])
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """유전자 기능 설명을 한국어로 번역하세요.
+규칙:
+1. 유전자 기호(KRAS, TP53 등)는 영어 그대로 유지
+2. 단백질명, 경로명 등 전문 용어는 영어로 유지하고 괄호 안에 한글 설명 추가 가능
+3. 각 줄은 "유전자명: 설명" 형식으로 출력
+4. 간결하게 핵심만 번역 (150자 이내)
+5. 번역만 출력, 다른 설명 없이"""
+                    },
+                    {"role": "user", "content": functions_text}
+                ],
+                temperature=0.3,
+                max_tokens=2000
+            )
+
+            # Parse response
+            translated_text = response.choices[0].message.content.strip()
+            gene_functions_kr = {}
+
+            for line in translated_text.split("\n"):
+                if ":" in line:
+                    parts = line.split(":", 1)
+                    gene = parts[0].strip().upper()
+                    desc = parts[1].strip() if len(parts) > 1 else ""
+                    if gene in gene_functions_en:
+                        gene_functions_kr[gene] = desc
+
+            print(f"✅ Translated {len(gene_functions_kr)} gene functions to Korean")
+            return gene_functions_kr
+
+        except Exception as e:
+            print(f"⚠️ Translation failed, using English: {e}")
+            return gene_functions_en
 
     def _prepare_gene_data(
         self,

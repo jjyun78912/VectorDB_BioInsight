@@ -428,8 +428,8 @@ class ReportAgent(BaseAgent):
         <section class="executive-summary" id="executive-summary">
             <div class="summary-header">
                 <div class="summary-title">
-                    <h2>Executive Summary</h2>
-                    <span class="confidence-badge {conf_level}">{conf_emoji} {conf_label} Confidence</span>
+                    <h2>핵심 요약</h2>
+                    <span class="confidence-badge {conf_level}">{conf_emoji} 신뢰도: {conf_label}</span>
                 </div>
             </div>
 
@@ -441,7 +441,7 @@ class ReportAgent(BaseAgent):
                 </div>
                 <div class="metric-card highlight">
                     <div class="metric-value">{top_gene['symbol']}</div>
-                    <div class="metric-label">Top Gene</div>
+                    <div class="metric-label">최상위 유전자</div>
                     <div class="metric-detail">{top_gene['direction']} {abs(top_gene['log2fc']):.1f}x</div>
                 </div>
                 <div class="metric-card">
@@ -886,6 +886,7 @@ class ReportAgent(BaseAgent):
             val_method = driver.get('validation_method', '')
             val_detail = driver.get('validation_detail', '')
             is_hub = driver.get('is_hub', False)
+            gene_function = driver.get('gene_function', '')
 
             # Score badge color
             if score >= 70:
@@ -902,6 +903,11 @@ class ReportAgent(BaseAgent):
             if hotspots:
                 hotspot_chips = "".join([f'<span class="hotspot-chip">{h}</span>' for h in hotspots[:3]])
 
+            # Gene function description
+            function_html = ""
+            if gene_function:
+                function_html = f'<div class="gene-function"><span class="function-icon">📖</span><span class="function-text">{gene_function}</span></div>'
+
             known_cards_html += f'''
             <div class="driver-card known">
                 <div class="driver-header">
@@ -913,6 +919,7 @@ class ReportAgent(BaseAgent):
                     <span class="driver-score {score_class}">{score:.0f}/100</span>
                 </div>
                 <div class="driver-body">
+                    {function_html}
                     <div class="driver-evidence">
                         <div class="evidence-row">
                             <span class="evidence-label">Expression</span>
@@ -952,6 +959,7 @@ class ReportAgent(BaseAgent):
             val_method = driver.get('validation_method', '')
             val_detail = driver.get('validation_detail', '')
             is_hub = driver.get('is_hub', False)
+            gene_function = driver.get('gene_function', '')
 
             # Score badge color
             if score >= 70:
@@ -960,6 +968,11 @@ class ReportAgent(BaseAgent):
                 score_class = "medium"
             else:
                 score_class = "low"
+
+            # Gene function description
+            function_html = ""
+            if gene_function:
+                function_html = f'<div class="gene-function"><span class="function-icon">📖</span><span class="function-text">{gene_function}</span></div>'
 
             novel_cards_html += f'''
             <div class="driver-card novel">
@@ -973,6 +986,7 @@ class ReportAgent(BaseAgent):
                     <span class="driver-score {score_class}">{score:.0f}/100</span>
                 </div>
                 <div class="driver-body">
+                    {function_html}
                     <div class="driver-evidence">
                         <div class="evidence-row">
                             <span class="evidence-label">Expression</span>
@@ -1009,50 +1023,50 @@ class ReportAgent(BaseAgent):
         return f'''
         <section class="driver-analysis" id="driver-analysis">
             <div class="driver-header-section">
-                <h2>🎯 Driver Gene Analysis</h2>
+                <h2>🎯 Driver 유전자 분석</h2>
                 <p class="driver-subtitle">RNA-seq 발현 패턴 + TCGA 돌연변이 데이터 기반 Driver 예측</p>
             </div>
 
             <div class="driver-summary-stats">
                 <div class="driver-stat known-stat">
                     <span class="stat-value">{total_known}</span>
-                    <span class="stat-label">Known Drivers</span>
-                    <span class="stat-detail">{high_conf_known} high confidence</span>
+                    <span class="stat-label">알려진 Driver</span>
+                    <span class="stat-detail">높은 신뢰도 {high_conf_known}개</span>
                 </div>
                 <div class="driver-stat novel-stat">
                     <span class="stat-value">{total_novel}</span>
-                    <span class="stat-label">Candidate Regulators</span>
-                    <span class="stat-detail">{high_conf_novel} high confidence</span>
+                    <span class="stat-label">후보 조절자</span>
+                    <span class="stat-detail">높은 신뢰도 {high_conf_novel}개</span>
                 </div>
                 <div class="driver-stat actionable-stat">
                     <span class="stat-value">{len(actionable)}</span>
-                    <span class="stat-label">Actionable</span>
-                    <span class="stat-detail">{', '.join(actionable[:3]) if actionable else 'None'}</span>
+                    <span class="stat-label">치료 표적</span>
+                    <span class="stat-detail">{', '.join(actionable[:3]) if actionable else '없음'}</span>
                 </div>
             </div>
 
             <div class="driver-method-note">
                 <span class="method-icon">📊</span>
                 <div class="method-text">
-                    <strong>Known Driver Track:</strong> COSMIC Cancer Gene Census + TCGA 돌연변이 빈도 + 발현 변화량 기반 scoring<br>
-                    <strong>Candidate Regulator Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 + 문헌 지지도 기반 scoring
+                    <strong>알려진 Driver Track:</strong> COSMIC Cancer Gene Census + TCGA 돌연변이 빈도 + 발현 변화량 기반 scoring<br>
+                    <strong>후보 조절자 Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 + 문헌 지지도 기반 scoring
                 </div>
             </div>
 
             <div class="driver-tracks">
                 <div class="driver-track known-track">
-                    <h3>🏆 Known Driver Track</h3>
+                    <h3>🏆 알려진 Driver Track</h3>
                     <p class="track-desc">COSMIC/OncoKB에서 검증된 암 드라이버 유전자. 타겟 치료제 개발 후보.</p>
                     <div class="driver-cards-grid">
-                        {known_cards_html if known_cards_html else '<p class="no-data">No known drivers found in DEG list</p>'}
+                        {known_cards_html if known_cards_html else '<p class="no-data">DEG 목록에서 알려진 driver가 발견되지 않음</p>'}
                     </div>
                 </div>
 
                 <div class="driver-track novel-track">
-                    <h3>🔬 Candidate Regulator Track</h3>
+                    <h3>🔬 후보 조절자 Track</h3>
                     <p class="track-desc">네트워크 분석 기반 핵심 조절인자 후보. 문헌 검증 및 기능 연구가 필요한 유전자.</p>
                     <div class="driver-cards-grid">
-                        {novel_cards_html if novel_cards_html else '<p class="no-data">No candidate regulators found</p>'}
+                        {novel_cards_html if novel_cards_html else '<p class="no-data">후보 조절자가 발견되지 않음</p>'}
                     </div>
                 </div>
             </div>
@@ -1061,7 +1075,7 @@ class ReportAgent(BaseAgent):
                 <span class="disclaimer-icon">⚠️</span>
                 <div class="disclaimer-text">
                     <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
-                    Candidate Regulator는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
+                    후보 조절자는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
                     실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
                 </div>
             </div>
@@ -1124,34 +1138,34 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="study-overview-section" id="study-overview">
-            <h2>1. Study Overview</h2>
+            <h2>1. 연구 개요</h2>
 
             <div class="overview-grid">
                 <div class="overview-table">
                     <table class="info-table">
-                        <tr><td><strong>Dataset ID</strong></td><td>{dataset_id}</td></tr>
+                        <tr><td><strong>데이터셋 ID</strong></td><td>{dataset_id}</td></tr>
                         <tr>
-                            <td><strong>예측 암종 (Cancer Type)</strong></td>
+                            <td><strong>예측 암종</strong></td>
                             <td>
                                 <span class="cancer-type-predicted">{cancer_type_display}</span> {confidence_badge}
                                 <br/>{prediction_note}
                             </td>
                         </tr>
                         <tr><td><strong>예측 방법</strong></td><td>{prediction_method}</td></tr>
-                        <tr><td><strong>Comparison</strong></td><td>{contrast[0]} vs {contrast[1]}</td></tr>
-                        <tr><td><strong>Analysis Pipeline</strong></td><td>BioInsight AI v2.0</td></tr>
-                        <tr><td><strong>Analysis Date</strong></td><td>{datetime.now().strftime("%Y-%m-%d")}</td></tr>
+                        <tr><td><strong>비교 조건</strong></td><td>{contrast[0]} vs {contrast[1]}</td></tr>
+                        <tr><td><strong>분석 파이프라인</strong></td><td>BioInsight AI v2.0</td></tr>
+                        <tr><td><strong>분석 일자</strong></td><td>{datetime.now().strftime("%Y-%m-%d")}</td></tr>
                     </table>
                 </div>
 
                 <div class="deg-summary-box">
-                    <h4>DEG Summary</h4>
+                    <h4>DEG 요약</h4>
                     <table class="info-table">
-                        <tr><td>Total DEGs</td><td><strong>{total_deg:,}</strong></td></tr>
-                        <tr><td>Upregulated</td><td class="up-text">{up_count:,}</td></tr>
-                        <tr><td>Downregulated</td><td class="down-text">{down_count:,}</td></tr>
-                        <tr><td>Cutoff (|log2FC|)</td><td>> 1.0</td></tr>
-                        <tr><td>Cutoff (padj)</td><td>< 0.05</td></tr>
+                        <tr><td>총 DEG 수</td><td><strong>{total_deg:,}</strong></td></tr>
+                        <tr><td>상향 발현</td><td class="up-text">{up_count:,}</td></tr>
+                        <tr><td>하향 발현</td><td class="down-text">{down_count:,}</td></tr>
+                        <tr><td>기준값 (|log2FC|)</td><td>> 1.0</td></tr>
+                        <tr><td>기준값 (padj)</td><td>< 0.05</td></tr>
                     </table>
                 </div>
             </div>
@@ -1164,12 +1178,29 @@ class ReportAgent(BaseAgent):
         interactive_figures = data.get('interactive_figures', {})
         viz_interpretations = data.get('visualization_interpretations', {})
 
-        # Look for PCA only (Sample correlation is not generated separately)
+        # Look for PCA - prefer interactive over static
         pca_fig = figures.get('pca_plot', '')
+        pca_interactive = interactive_figures.get('pca_interactive', '')
 
         pca_html = ''
-        if pca_fig:
-            pca_html = f'<img src="{pca_fig}" alt="PCA Plot" class="figure-img">'
+        if pca_interactive:
+            # Use interactive PCA with hover for sample names
+            escaped_html = pca_interactive.replace('"', '&quot;')
+            pca_html = f'''
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="showPcaView('interactive')">Interactive</button>
+                <button class="toggle-btn" onclick="showPcaView('static')">Static</button>
+            </div>
+            <div id="pca-interactive" class="pca-view active" style="display:flex; flex-direction:column; align-items:center;">
+                <iframe id="pca-iframe" srcdoc="{escaped_html}" style="width:100%; max-width:720px; height:420px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스를 올리면 샘플 ID를 확인할 수 있습니다</p>
+            </div>
+            <div id="pca-static" class="pca-view" style="display:none; text-align:center;">
+                <img src="{pca_fig}" alt="PCA Plot" class="figure-img" style="max-width:100%;">
+            </div>
+            '''
+        elif pca_fig:
+            pca_html = f'<div style="text-align:center;"><img src="{pca_fig}" alt="PCA Plot" class="figure-img" style="max-width:100%;"></div>'
         else:
             pca_html = '<p class="no-data">PCA plot not available</p>'
 
@@ -1179,22 +1210,22 @@ class ReportAgent(BaseAgent):
         if pca_interp:
             pca_ai_section = f'''
             <div class="ai-box">
-                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-header">AI 분석</div>
                 <div class="ai-box-content">
                     <p>{pca_interp.get('summary', '')}</p>
-                    <p><strong>Sample separation:</strong> {pca_interp.get('separation_analysis', '')}</p>
-                    <p><strong>Variance explained:</strong> {pca_interp.get('variance_explanation', '')}</p>
+                    <p><strong>샘플 분리:</strong> {pca_interp.get('separation_analysis', '')}</p>
+                    <p><strong>설명된 분산:</strong> {pca_interp.get('variance_explanation', '')}</p>
                 </div>
             </div>
             '''
 
         return f'''
         <section class="qc-section" id="qc">
-            <h2>2. Data Quality Control</h2>
-            <div class="figure-panel">
-                <div class="figure-header">Principal Component Analysis</div>
+            <h2>2. 데이터 품질 관리</h2>
+            <div class="figure-panel pca-container">
+                <div class="figure-header">주성분 분석 (PCA)</div>
                 <div class="figure-container">{pca_html}</div>
-                <div class="figure-caption">PCA showing sample clustering between conditions (Tumor vs Normal)</div>
+                <div class="figure-caption">조건별 샘플 클러스터링 (Tumor vs Normal) - <span style="color:#dc2626;">●</span> Tumor <span style="color:#2563eb;">●</span> Normal</div>
                 {pca_ai_section}
             </div>
         </section>
@@ -1208,14 +1239,36 @@ class ReportAgent(BaseAgent):
             deg_df = data.get('deg_significant_df')
 
         figures = data.get('figures', {})
+        interactive_figures = data.get('interactive_figures', {})
         viz_interpretations = data.get('visualization_interpretations', {})
 
         # Get figures
         volcano_fig = figures.get('volcano_plot', '')
+        volcano_interactive = interactive_figures.get('volcano_interactive', '')
         heatmap_fig = figures.get('heatmap_top50', figures.get('heatmap_key_genes', figures.get('top_genes_heatmap', '')))
 
-        volcano_html = f'<img src="{volcano_fig}" alt="Volcano Plot" class="figure-img">' if volcano_fig else '<p class="no-data">Volcano plot not available</p>'
-        heatmap_html = f'<img src="{heatmap_fig}" alt="Heatmap" class="figure-img">' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
+        # Volcano plot with interactive toggle
+        if volcano_interactive:
+            escaped_html = volcano_interactive.replace('"', '&quot;')
+            volcano_html = f'''
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="showVolcanoView('interactive')">Interactive</button>
+                <button class="toggle-btn" onclick="showVolcanoView('static')">Static</button>
+            </div>
+            <div id="volcano-interactive" class="volcano-view active" style="display:flex; flex-direction:column; align-items:center;">
+                <iframe id="volcano-iframe" srcdoc="{escaped_html}" style="width:100%; max-width:900px; height:500px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스를 올리면 유전자 정보를 확인할 수 있습니다. 드래그하여 확대/축소 가능합니다.</p>
+            </div>
+            <div id="volcano-static" class="volcano-view" style="display:none; text-align:center;">
+                <img src="{volcano_fig}" alt="Volcano Plot" class="figure-img" style="max-width:100%;">
+            </div>
+            '''
+        elif volcano_fig:
+            volcano_html = f'<div style="text-align:center;"><img src="{volcano_fig}" alt="Volcano Plot" class="figure-img" style="max-width:100%;"></div>'
+        else:
+            volcano_html = '<p class="no-data">Volcano plot not available</p>'
+
+        heatmap_html = f'<div style="text-align:center;"><img src="{heatmap_fig}" alt="Heatmap" class="figure-img" style="max-width:100%;"></div>' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
 
         # AI interpretation for volcano plot
         volcano_interp = viz_interpretations.get('volcano_plot', {})
@@ -1225,11 +1278,11 @@ class ReportAgent(BaseAgent):
             obs_text = ' '.join(observations[:2]) if observations else ''
             volcano_ai_section = f'''
             <div class="ai-box">
-                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-header">AI 분석</div>
                 <div class="ai-box-content">
                     <p>{volcano_interp.get('summary', '')}</p>
                     {f'<p>{obs_text}</p>' if obs_text else ''}
-                    <p><strong>Biological significance:</strong> {volcano_interp.get('biological_significance', '')}</p>
+                    <p><strong>생물학적 의의:</strong> {volcano_interp.get('biological_significance', '')}</p>
                 </div>
             </div>
             '''
@@ -1242,11 +1295,11 @@ class ReportAgent(BaseAgent):
             obs_text = ' '.join(observations[:2]) if observations else ''
             heatmap_ai_section = f'''
             <div class="ai-box">
-                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-header">AI 분석</div>
                 <div class="ai-box-content">
                     <p>{heatmap_interp.get('summary', '')}</p>
                     {f'<p>{obs_text}</p>' if obs_text else ''}
-                    <p><strong>Expression pattern:</strong> {heatmap_interp.get('pattern_analysis', '')}</p>
+                    <p><strong>발현 패턴:</strong> {heatmap_interp.get('pattern_analysis', '')}</p>
                 </div>
             </div>
             '''
@@ -1276,10 +1329,10 @@ class ReportAgent(BaseAgent):
                 up_table = f'''
                 <div class="table-wrapper compact">
                     <div class="table-header">
-                        <span class="table-title">Top 5 Upregulated (암에서 증가)</span>
+                        <span class="table-title">상향 발현 Top 5 (암에서 증가)</span>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
+                        <thead><tr><th>유전자</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
                         <tbody>{up_rows}</tbody>
                     </table>
                 </div>
@@ -1299,10 +1352,10 @@ class ReportAgent(BaseAgent):
                 down_table = f'''
                 <div class="table-wrapper compact">
                     <div class="table-header">
-                        <span class="table-title">Top 5 Downregulated (암에서 감소)</span>
+                        <span class="table-title">하향 발현 Top 5 (암에서 감소)</span>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Gene</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
+                        <thead><tr><th>유전자</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
                         <tbody>{down_rows}</tbody>
                     </table>
                 </div>
@@ -1315,22 +1368,22 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="deg-section" id="deg-analysis">
-            <h2>3. Differential Expression Analysis</h2>
+            <h2>3. 차등발현 분석</h2>
 
-            <!-- 1. 시각화 (Eye-catching): Volcano Plot을 먼저 보여줘서 전체 변화 양상 전달 -->
-            <div class="figure-grid">
-                <div class="figure-panel">
-                    <div class="figure-header">Volcano Plot</div>
-                    <div class="figure-container">{volcano_html}</div>
-                    <div class="figure-caption">X축: log2FC | Y축: -log10(padj) | <span style="color:#dc2626;">●</span> 상향 | <span style="color:#2563eb;">●</span> 하향</div>
-                    {volcano_ai_section}
-                </div>
-                <div class="figure-panel">
-                    <div class="figure-header">Expression Heatmap</div>
-                    <div class="figure-container">{heatmap_html}</div>
-                    <div class="figure-caption">상위 DEG 발현 패턴. Red=High, Blue=Low</div>
-                    {heatmap_ai_section}
-                </div>
+            <!-- 1. Volcano Plot (전체 폭) -->
+            <div class="figure-panel volcano-container" style="margin-bottom: 24px;">
+                <div class="figure-header">Volcano Plot</div>
+                <div class="figure-container">{volcano_html}</div>
+                <div class="figure-caption">X축: log2FC | Y축: -log10(padj) | <span style="color:#dc2626;">●</span> 상향 | <span style="color:#2563eb;">●</span> 하향</div>
+                {volcano_ai_section}
+            </div>
+
+            <!-- 2. Heatmap (전체 폭) -->
+            <div class="figure-panel" style="margin-bottom: 24px;">
+                <div class="figure-header">발현 히트맵</div>
+                <div class="figure-container">{heatmap_html}</div>
+                <div class="figure-caption">상위 DEG 발현 패턴. Red=High, Blue=Low</div>
+                {heatmap_ai_section}
             </div>
 
             <!-- 2. 요약 (Summary): 전체적인 변화 양상을 한 문장으로 정리 -->
@@ -1342,15 +1395,15 @@ class ReportAgent(BaseAgent):
             <div class="metrics-row compact">
                 <div class="metric-box primary">
                     <div class="metric-value">{n_total:,}</div>
-                    <div class="metric-label">Total DEGs</div>
+                    <div class="metric-label">총 DEG</div>
                 </div>
                 <div class="metric-box">
                     <div class="metric-value up">{n_up:,}</div>
-                    <div class="metric-label">Upregulated</div>
+                    <div class="metric-label">상향 발현</div>
                 </div>
                 <div class="metric-box">
                     <div class="metric-value down">{n_down:,}</div>
-                    <div class="metric-label">Downregulated</div>
+                    <div class="metric-label">하향 발현</div>
                 </div>
             </div>
 
@@ -1372,7 +1425,7 @@ class ReportAgent(BaseAgent):
         viz_interpretations = data.get('visualization_interpretations', {})
 
         pathway_fig = figures.get('pathway_barplot', figures.get('pathway_enrichment', figures.get('go_enrichment', '')))
-        pathway_html = f'<img src="{pathway_fig}" alt="Pathway Enrichment" class="figure-img">' if pathway_fig else ''
+        pathway_html = f'<div style="text-align:center;"><img src="{pathway_fig}" alt="Pathway Enrichment" class="figure-img" style="max-width:100%;"></div>' if pathway_fig else ''
 
         # AI interpretation for pathway
         pathway_interp = viz_interpretations.get('pathway_barplot', {})
@@ -1382,12 +1435,12 @@ class ReportAgent(BaseAgent):
             pathways_text = ', '.join(top_pathways[:3]) if top_pathways else ''
             pathway_ai_section = f'''
             <div class="ai-box green">
-                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-header">AI 분석</div>
                 <div class="ai-box-content">
                     <p>{pathway_interp.get('summary', '')}</p>
-                    {f'<p><strong>Top pathways:</strong> {pathways_text}</p>' if pathways_text else ''}
-                    <p><strong>Functional theme:</strong> {pathway_interp.get('functional_theme', '')}</p>
-                    <p><strong>Therapeutic implications:</strong> {pathway_interp.get('therapeutic_implications', '')}</p>
+                    {f'<p><strong>주요 경로:</strong> {pathways_text}</p>' if pathways_text else ''}
+                    <p><strong>기능적 테마:</strong> {pathway_interp.get('functional_theme', '')}</p>
+                    <p><strong>치료적 시사점:</strong> {pathway_interp.get('therapeutic_implications', '')}</p>
                 </div>
             </div>
             '''
@@ -1430,7 +1483,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="pathway-section" id="pathway-analysis">
-            <h2>4. Pathway & Functional Analysis</h2>
+            <h2>4. 경로 및 기능 분석</h2>
 
             <div class="pathway-figure">
                 {pathway_html}
@@ -1439,38 +1492,38 @@ class ReportAgent(BaseAgent):
 
             <div class="pathway-subsections">
                 <div class="pathway-panel">
-                    <h4>4.1 GO Biological Process (BP)</h4>
+                    <h4>4.1 GO 생물학적 과정 (BP)</h4>
                     <p class="panel-desc">세포의 생물학적 과정과 관련된 경로</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
-                        <tbody>{go_bp_rows if go_bp_rows else "<tr><td colspan='3'>No significant BP terms</td></tr>"}</tbody>
+                        <thead><tr><th>용어</th><th>유전자 수</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{go_bp_rows if go_bp_rows else "<tr><td colspan='3'>유의한 BP 용어 없음</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
-                    <h4>4.2 GO Molecular Function (MF)</h4>
+                    <h4>4.2 GO 분자 기능 (MF)</h4>
                     <p class="panel-desc">분자 수준의 기능 (효소 활성, 결합 등)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
-                        <tbody>{go_mf_rows if go_mf_rows else "<tr><td colspan='3'>No significant MF terms</td></tr>"}</tbody>
+                        <thead><tr><th>용어</th><th>유전자 수</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{go_mf_rows if go_mf_rows else "<tr><td colspan='3'>유의한 MF 용어 없음</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
-                    <h4>4.3 GO Cellular Component (CC)</h4>
+                    <h4>4.3 GO 세포 구성요소 (CC)</h4>
                     <p class="panel-desc">세포 내 위치 (막, 세포질, 핵 등)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Term</th><th>Genes</th><th>adj.p-value</th></tr></thead>
-                        <tbody>{go_cc_rows if go_cc_rows else "<tr><td colspan='3'>No significant CC terms</td></tr>"}</tbody>
+                        <thead><tr><th>용어</th><th>유전자 수</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{go_cc_rows if go_cc_rows else "<tr><td colspan='3'>유의한 CC 용어 없음</td></tr>"}</tbody>
                     </table>
                 </div>
 
                 <div class="pathway-panel">
-                    <h4>4.4 KEGG Pathway</h4>
+                    <h4>4.4 KEGG 경로</h4>
                     <p class="panel-desc">대사/신호전달 경로 (KEGG 데이터베이스)</p>
                     <table class="pathway-table">
-                        <thead><tr><th>Pathway</th><th>Genes</th><th>adj.p-value</th></tr></thead>
-                        <tbody>{kegg_rows if kegg_rows else "<tr><td colspan='3'>No significant KEGG pathways</td></tr>"}</tbody>
+                        <thead><tr><th>경로</th><th>유전자 수</th><th>adj.p-value</th></tr></thead>
+                        <tbody>{kegg_rows if kegg_rows else "<tr><td colspan='3'>유의한 KEGG 경로 없음</td></tr>"}</tbody>
                     </table>
                 </div>
             </div>
@@ -1482,10 +1535,32 @@ class ReportAgent(BaseAgent):
         hub_df = data.get('hub_genes_df')
         integrated_df = data.get('integrated_gene_table_df')
         figures = data.get('figures', {})
+        interactive_figures = data.get('interactive_figures', {})
         viz_interpretations = data.get('visualization_interpretations', {})
 
         network_fig = figures.get('network_graph', figures.get('network_plot', figures.get('network_2d', '')))
-        network_html = f'<img src="{network_fig}" alt="Network" class="figure-img">' if network_fig else ''
+        network_interactive = interactive_figures.get('network_3d_interactive', '')
+
+        # Network with interactive toggle
+        if network_interactive:
+            escaped_html = network_interactive.replace('"', '&quot;')
+            network_html = f'''
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="showNetworkView('interactive')">Interactive 3D</button>
+                <button class="toggle-btn" onclick="showNetworkView('static')">Static 2D</button>
+            </div>
+            <div id="network-interactive" class="network-view active" style="display:flex; flex-direction:column; align-items:center;">
+                <iframe id="network-iframe" srcdoc="{escaped_html}" style="width:720px; max-width:100%; height:520px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능. 노드를 클릭하면 유전자 정보 확인.</p>
+            </div>
+            <div id="network-static" class="network-view" style="display:none; text-align:center;">
+                <img src="{network_fig}" alt="Network" class="figure-img" style="max-width:100%;">
+            </div>
+            '''
+        elif network_fig:
+            network_html = f'<div style="text-align:center;"><img src="{network_fig}" alt="Network" class="figure-img" style="max-width:100%;"></div>'
+        else:
+            network_html = ''
 
         # Build gene_id to gene_symbol mapping from integrated_gene_table
         id_to_symbol = {}
@@ -1502,10 +1577,10 @@ class ReportAgent(BaseAgent):
         if network_interp:
             network_ai_section = f'''
             <div class="ai-box">
-                <div class="ai-box-header">AI Analysis</div>
+                <div class="ai-box-header">AI 분석</div>
                 <div class="ai-box-content">
                     <p>{network_interp.get('summary', '')}</p>
-                    <p><strong>Network structure:</strong> {network_interp.get('structure_analysis', '')}</p>
+                    <p><strong>네트워크 구조:</strong> {network_interp.get('structure_analysis', '')}</p>
                 </div>
             </div>
             '''
@@ -1541,48 +1616,48 @@ class ReportAgent(BaseAgent):
             hub_table = f'''
             <div class="table-wrapper">
                 <div class="table-header">
-                    <span class="table-title">Top Hub Genes</span>
+                    <span class="table-title">상위 Hub 유전자</span>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Gene</th>
+                            <th>유전자</th>
                             <th>log2FC</th>
-                            <th>Connections</th>
-                            <th>Targets</th>
-                            <th>Hub Score</th>
+                            <th>연결 수</th>
+                            <th>조절 대상</th>
+                            <th>Hub 점수</th>
                         </tr>
                     </thead>
                     <tbody>{hub_rows}</tbody>
                 </table>
             </div>
             <div class="ai-box orange" style="margin-top: 16px;">
-                <div class="ai-box-header">Hub Genes 해석</div>
+                <div class="ai-box-header">Hub 유전자 해석</div>
                 <div class="ai-box-content">
                     <p><strong>Hub Gene이란?</strong> 네트워크에서 많은 유전자와 연결된 중심 유전자로, 주요 조절자 역할을 할 가능성이 높습니다.</p>
-                    <p><strong>Connections:</strong> 연결된 유전자 수 (높을수록 영향력 큼)</p>
-                    <p><strong>Targets:</strong> 조절 대상 유전자 수</p>
-                    <p><strong>Hub Score:</strong> 네트워크 중심성 종합 점수 (0-1, 높을수록 중요)</p>
+                    <p><strong>연결 수:</strong> 연결된 유전자 수 (높을수록 영향력 큼)</p>
+                    <p><strong>조절 대상:</strong> 조절 대상 유전자 수</p>
+                    <p><strong>Hub 점수:</strong> 네트워크 중심성 종합 점수 (0-1, 높을수록 중요)</p>
                 </div>
             </div>
             '''
 
         return f'''
         <section class="network-section" id="network-analysis">
-            <h2>6. Network Analysis</h2>
+            <h2>6. 네트워크 분석</h2>
 
             <div class="figure-grid">
-                <div class="figure-panel">
-                    <div class="figure-header">Gene Co-expression Network</div>
+                <div class="figure-panel network-container">
+                    <div class="figure-header">유전자 공발현 네트워크</div>
                     <div class="figure-container">
-                        {network_html if network_html else '<p class="no-data">Network visualization not available</p>'}
+                        {network_html if network_html else '<p class="no-data">네트워크 시각화를 사용할 수 없음</p>'}
                     </div>
                     <div class="figure-caption">DEG 기반 공발현 네트워크. 연결선은 유전자 간 발현 상관관계를 나타냄.</div>
                     {network_ai_section}
                 </div>
 
                 <div>
-                    {hub_table if hub_table else '<p class="no-data">No hub genes identified</p>'}
+                    {hub_table if hub_table else '<p class="no-data">Hub 유전자가 확인되지 않음</p>'}
                 </div>
             </div>
         </section>
@@ -1732,7 +1807,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="clinical-section" id="clinical-implications">
-            <h2>8. Clinical Implications</h2>
+            <h2>8. 임상적 시사점</h2>
 
             <div class="ai-box orange" style="margin-bottom: 20px;">
                 <div class="ai-box-header">임상적 의미 요약</div>
@@ -1745,15 +1820,15 @@ class ReportAgent(BaseAgent):
 
             <div class="table-wrapper">
                 <div class="table-header">
-                    <span class="table-title">8.1 바이오마커 후보 (Biomarker Candidates)</span>
+                    <span class="table-title">8.1 바이오마커 후보</span>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Gene</th>
-                            <th>Type</th>
-                            <th>Evidence</th>
-                            <th>Rationale</th>
+                            <th>유전자</th>
+                            <th>유형</th>
+                            <th>근거</th>
+                            <th>근거 설명</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1764,16 +1839,16 @@ class ReportAgent(BaseAgent):
 
             <div class="table-wrapper" style="margin-top: 24px;">
                 <div class="table-header">
-                    <span class="table-title">8.2 치료 표적 (Therapeutic Targets)</span>
+                    <span class="table-title">8.2 치료 표적</span>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Gene</th>
-                            <th>Class</th>
-                            <th>Priority</th>
-                            <th>Existing Drugs</th>
-                            <th>Rationale</th>
+                            <th>유전자</th>
+                            <th>분류</th>
+                            <th>우선순위</th>
+                            <th>기존 약물</th>
+                            <th>근거 설명</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1785,16 +1860,16 @@ class ReportAgent(BaseAgent):
             {f"""
             <div class="table-wrapper" style="margin-top: 24px;">
                 <div class="table-header">
-                    <span class="table-title">8.3 약물 재목적화 후보 (Drug Repurposing)</span>
+                    <span class="table-title">8.3 약물 재목적화 후보</span>
                 </div>
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Drug</th>
-                            <th>Target Gene</th>
-                            <th>Original Indication</th>
-                            <th>Status</th>
-                            <th>Rationale</th>
+                            <th>약물</th>
+                            <th>표적 유전자</th>
+                            <th>기존 적응증</th>
+                            <th>상태</th>
+                            <th>근거 설명</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1805,7 +1880,7 @@ class ReportAgent(BaseAgent):
             """ if repurposing_rows else ''}
 
             <div class="disclaimer-box" style="margin-top: 24px;">
-                <strong>⚠️ Important Note:</strong> 모든 임상적 의미는 계산적 예측이며, 진단 또는 치료 적용 전에
+                <strong>⚠️ 중요 안내:</strong> 모든 임상적 의미는 계산적 예측이며, 진단 또는 치료 적용 전에
                 반드시 실험적·임상적 검증이 필요합니다. 본 분석은 연구 참고용이며 의학적 조언이 아닙니다.
             </div>
         </section>
@@ -2429,42 +2504,42 @@ class ReportAgent(BaseAgent):
         """Generate Level 4: Methods & Appendix."""
         return '''
         <section class="methods-section" id="methods">
-            <h2>10. Methods & Parameters</h2>
+            <h2>10. 분석 방법 및 파라미터</h2>
 
             <div class="methods-grid">
                 <div class="method-card">
-                    <h4>🧬 DEG Analysis</h4>
+                    <h4>🧬 차등발현 분석</h4>
                     <ul>
-                        <li>Tool: DESeq2</li>
-                        <li>Cutoff: |log2FC| > 1, padj < 0.05</li>
-                        <li>Normalization: Median of ratios</li>
+                        <li>도구: DESeq2</li>
+                        <li>기준값: |log2FC| > 1, padj < 0.05</li>
+                        <li>정규화: Median of ratios</li>
                     </ul>
                 </div>
 
                 <div class="method-card">
-                    <h4>🕸️ Network Analysis</h4>
+                    <h4>🕸️ 네트워크 분석</h4>
                     <ul>
-                        <li>Tool: NetworkX</li>
-                        <li>Correlation: Spearman > 0.7</li>
-                        <li>Hub: Top 20 by centrality</li>
+                        <li>도구: NetworkX</li>
+                        <li>상관계수: Spearman > 0.7</li>
+                        <li>Hub: 중심성 기준 상위 20개</li>
                     </ul>
                 </div>
 
                 <div class="method-card">
-                    <h4>📊 Pathway Enrichment</h4>
+                    <h4>📊 경로 농축 분석</h4>
                     <ul>
-                        <li>Tool: gseapy (Enrichr)</li>
+                        <li>도구: gseapy (Enrichr)</li>
                         <li>DB: GO (BP/MF/CC), KEGG</li>
-                        <li>Cutoff: padj < 0.05</li>
+                        <li>기준값: padj < 0.05</li>
                     </ul>
                 </div>
 
                 <div class="method-card">
-                    <h4>✅ DB Validation</h4>
+                    <h4>✅ DB 검증</h4>
                     <ul>
-                        <li>COSMIC Tier 1 genes</li>
-                        <li>OncoKB annotated</li>
-                        <li>Cancer-type specific</li>
+                        <li>COSMIC Tier 1 유전자</li>
+                        <li>OncoKB 주석</li>
+                        <li>암종 특이적</li>
                     </ul>
                 </div>
             </div>
@@ -2475,8 +2550,8 @@ class ReportAgent(BaseAgent):
                     <tr><td>DEG 통계 유의성 (padj < 0.05)</td><td>+1점</td></tr>
                     <tr><td>TCGA 패턴 일치</td><td>+1점</td></tr>
                     <tr><td>문헌 검증 (DB match)</td><td>+1점</td></tr>
-                    <tr><td>Hub gene status</td><td>+1점</td></tr>
-                    <tr><td>Cancer-type specific</td><td>+1점</td></tr>
+                    <tr><td>Hub 유전자 여부</td><td>+1점</td></tr>
+                    <tr><td>암종 특이적</td><td>+1점</td></tr>
                 </table>
 
                 <div class="confidence-legend">
@@ -4171,6 +4246,29 @@ class ReportAgent(BaseAgent):
                 padding: 12px 16px;
             }
 
+            .gene-function {
+                display: flex;
+                align-items: flex-start;
+                gap: 8px;
+                padding: 10px 12px;
+                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+                border-radius: 8px;
+                margin-bottom: 12px;
+                border-left: 3px solid #0ea5e9;
+            }
+
+            .function-icon {
+                font-size: 14px;
+                flex-shrink: 0;
+                margin-top: 1px;
+            }
+
+            .function-text {
+                font-size: 12px;
+                color: #0c4a6e;
+                line-height: 1.5;
+            }
+
             .driver-evidence {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
@@ -4881,6 +4979,29 @@ class ReportAgent(BaseAgent):
                     buttons[1].classList.add('active');
                 }}
             }}
+
+            // PCA view toggle
+            function showPcaView(view) {{
+                const interactiveView = document.getElementById('pca-interactive');
+                const staticView = document.getElementById('pca-static');
+                const buttons = document.querySelectorAll('.pca-container .view-toggle .toggle-btn');
+
+                if (view === 'interactive') {{
+                    interactiveView.classList.add('active');
+                    staticView.classList.remove('active');
+                    interactiveView.style.display = 'block';
+                    staticView.style.display = 'none';
+                    buttons[0].classList.add('active');
+                    buttons[1].classList.remove('active');
+                }} else {{
+                    interactiveView.classList.remove('active');
+                    staticView.classList.add('active');
+                    interactiveView.style.display = 'none';
+                    staticView.style.display = 'block';
+                    buttons[0].classList.remove('active');
+                    buttons[1].classList.add('active');
+                }}
+            }}
         </script>
         '''
 
@@ -4903,33 +5024,33 @@ class ReportAgent(BaseAgent):
         return f'''
         <section class="cover-page">
             <div class="cover-content">
-                <div class="cover-badge">RNA-seq Differential Expression Analysis</div>
+                <div class="cover-badge">RNA-seq 차등발현 분석</div>
                 <h1 class="cover-title">{cancer_type_kr} 전사체 분석 보고서</h1>
-                <p class="cover-subtitle">Comprehensive Transcriptomic Profiling and Pathway Analysis</p>
+                <p class="cover-subtitle">포괄적 전사체 프로파일링 및 경로 분석</p>
 
                 <div class="cover-stats">
                     <div class="cover-stat">
                         <span class="stat-number">{deg_count:,}</span>
-                        <span class="stat-label">Differentially Expressed Genes</span>
+                        <span class="stat-label">차등발현 유전자</span>
                     </div>
                     <div class="cover-stat">
                         <span class="stat-number">{hub_count}</span>
-                        <span class="stat-label">Hub Genes Identified</span>
+                        <span class="stat-label">Hub 유전자</span>
                     </div>
                     <div class="cover-stat">
                         <span class="stat-number">{pathway_count}</span>
-                        <span class="stat-label">Enriched Pathways</span>
+                        <span class="stat-label">농축 경로</span>
                     </div>
                 </div>
 
                 <div class="cover-meta">
-                    <p><strong>Analysis Date:</strong> {datetime.now().strftime("%B %d, %Y")}</p>
-                    <p><strong>Pipeline:</strong> BioInsight AI RNA-seq Pipeline v2.0</p>
-                    <p><strong>Methods:</strong> DESeq2, WGCNA Network Analysis, GO/KEGG Enrichment</p>
+                    <p><strong>분석 일자:</strong> {datetime.now().strftime("%Y년 %m월 %d일")}</p>
+                    <p><strong>파이프라인:</strong> BioInsight AI RNA-seq Pipeline v2.0</p>
+                    <p><strong>분석 방법:</strong> DESeq2, WGCNA 네트워크 분석, GO/KEGG 농축 분석</p>
                 </div>
             </div>
             <div class="cover-footer">
-                <p>This report was generated using AI-assisted analysis. All findings require experimental validation.</p>
+                <p>본 보고서는 AI 지원 분석을 통해 생성되었습니다. 모든 발견은 실험적 검증이 필요합니다.</p>
             </div>
         </section>
         '''
@@ -5004,7 +5125,7 @@ class ReportAgent(BaseAgent):
 
             return f'''
         <section class="abstract-section" id="abstract">
-            <h2>Extended Abstract</h2>
+            <h2>확장 초록</h2>
             <div class="abstract-box extended">
                 {title_html}
                 <div class="abstract-content">
@@ -5233,17 +5354,17 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
     <!-- Navigation -->
     <nav class="nav-bar">
         <div class="nav-container">
-            <span class="nav-brand">BioInsight Report</span>
+            <span class="nav-brand">BioInsight 보고서</span>
             <div class="nav-links">
-                <a href="#study-overview">Overview</a>
+                <a href="#study-overview">개요</a>
                 <a href="#qc-section">QC</a>
                 <a href="#deg-analysis">DEG</a>
-                <a href="#pathway-section">Pathway</a>
+                <a href="#pathway-section">경로</a>
                 <a href="#driver-analysis">Driver</a>
-                <a href="#network-section">Network</a>
-                <a href="#clinical-implications">Clinical</a>
-                <a href="#research-recommendations">Research</a>
-                <a href="#methods">Methods</a>
+                <a href="#network-section">네트워크</a>
+                <a href="#clinical-implications">임상</a>
+                <a href="#research-recommendations">연구</a>
+                <a href="#methods">방법</a>
             </div>
         </div>
     </nav>
@@ -5284,16 +5405,16 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 
         <!-- 12. Appendix / Supplementary Data -->
         <section class="data-section" id="detailed-table">
-            <h2>12. Appendix: Supplementary Data</h2>
+            <h2>12. 부록: 보충 데이터</h2>
             {self._generate_detailed_table_html(data)}
         </section>
     </main>
 
     <footer class="paper-footer">
         <div class="footer-content">
-            <p><strong>Disclaimer:</strong> This report is generated by AI-assisted analysis pipeline.
-            All findings are preliminary and require experimental validation before clinical application.</p>
-            <p class="footer-credit">Generated by BioInsight AI RNA-seq Pipeline v2.0 | {datetime.now().strftime("%Y-%m-%d")}</p>
+            <p><strong>면책조항:</strong> 본 보고서는 AI 지원 분석 파이프라인에 의해 생성되었습니다.
+            모든 발견은 예비적이며, 임상 적용 전 실험적 검증이 필요합니다.</p>
+            <p class="footer-credit">BioInsight AI RNA-seq Pipeline v2.0 생성 | {datetime.now().strftime("%Y-%m-%d")}</p>
         </div>
     </footer>
 

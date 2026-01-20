@@ -419,39 +419,7 @@ class VisualizationAgent(BaseAgent):
         fig.add_vline(x=log2fc_cutoff, line_dash="dash", line_color="gray")
         fig.add_vline(x=-log2fc_cutoff, line_dash="dash", line_color="gray")
 
-        # Add annotations for top genes - SORT BY |log2FC| to match Top DEGs bar chart
-        if self.deg_sig is not None and len(self.deg_sig) > 0:
-            # Sort by absolute log2FC to match the Top DEGs bar chart
-            deg_sorted = self.deg_sig.copy()
-            deg_sorted['abs_log2FC'] = deg_sorted['log2FC'].abs()
-            deg_sorted = deg_sorted.sort_values('abs_log2FC', ascending=False)
-
-            top_up = deg_sorted[deg_sorted['direction'] == 'up'].head(10)
-            top_down = deg_sorted[deg_sorted['direction'] == 'down'].head(10)
-            top_genes = pd.concat([top_up, top_down])
-
-            for _, row in top_genes.iterrows():
-                gene_row = df[df['gene_id'] == row['gene_id']]
-                if len(gene_row) > 0:
-                    x = gene_row['log2FC'].values[0]
-                    y = gene_row['neg_log10_padj'].values[0]
-                    symbol = gene_row['gene_symbol'].values[0]
-
-                    fig.add_annotation(
-                        x=x, y=y,
-                        text=f"<b>{symbol}</b>",
-                        showarrow=True,
-                        arrowhead=2,
-                        arrowsize=1,
-                        arrowwidth=1,
-                        arrowcolor='gray',
-                        ax=20 if x > 0 else -20,
-                        ay=-20,
-                        font=dict(size=10, color='black'),
-                        bgcolor='rgba(255,255,255,0.8)',
-                        bordercolor='gray',
-                        borderwidth=1
-                    )
+        # Note: Labels removed to avoid overlap - gene names shown on hover only
 
         # Update layout
         n_up = (df['significance'] == 'Upregulated').sum()
@@ -800,8 +768,12 @@ class VisualizationAgent(BaseAgent):
                 metadata_path = path
                 break
 
+        # First, use pre-loaded sample_to_condition from validate_inputs
         sample_conditions = {}
-        if metadata_path and metadata_path.exists():
+        if self.sample_to_condition:
+            sample_conditions = self.sample_to_condition.copy()
+            self.logger.info(f"Using pre-loaded conditions: {len(sample_conditions)} samples")
+        elif metadata_path and metadata_path.exists():
             try:
                 metadata_df = pd.read_csv(metadata_path)
                 for _, row in metadata_df.iterrows():
@@ -987,12 +959,12 @@ class VisualizationAgent(BaseAgent):
                 hovertemplate='<b>%{text}</b><br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<extra></extra>'
             ))
 
-        # Layout
+        # Layout - compact size to fit report width
         fig.update_layout(
             title=dict(
-                text=f'<b>Interactive PCA Plot</b><br><sup>Hover to see sample IDs</sup>',
+                text=f'<b>PCA: 샘플 분포</b><br><sup>마우스를 올리면 샘플 ID 확인</sup>',
                 x=0.5,
-                font=dict(size=16)
+                font=dict(size=14)
             ),
             xaxis_title=f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)',
             yaxis_title=f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)',
@@ -1000,11 +972,13 @@ class VisualizationAgent(BaseAgent):
                 yanchor="top", y=0.99,
                 xanchor="right", x=0.99,
                 bgcolor='rgba(255,255,255,0.9)',
-                bordercolor='#ddd', borderwidth=1
+                bordercolor='#ddd', borderwidth=1,
+                font=dict(size=11)
             ),
             hovermode='closest',
             template='plotly_white',
-            width=800, height=600
+            width=700, height=400,
+            margin=dict(l=50, r=30, t=60, b=50)
         )
 
         # Add zero lines
