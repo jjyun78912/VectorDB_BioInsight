@@ -2,7 +2,7 @@
 RNA-seq Pipeline Orchestrator
 
 Coordinates the execution of RNA-seq analysis pipelines.
-Automatically detects data type (bulk vs single-cell) and routes to appropriate pipeline.
+Automatically detects data type and routes to appropriate pipeline.
 
 Usage:
     from rnaseq_pipeline import RNAseqPipeline
@@ -13,21 +13,31 @@ Usage:
         config={"cancer_type": "lung_cancer"}
     )
 
-    # Run full pipeline (auto-detect bulk vs single-cell)
+    # Run full pipeline (auto-detect data type)
     results = pipeline.run()
 
     # Force specific pipeline type
-    pipeline = RNAseqPipeline(..., pipeline_type="bulk")  # or "singlecell"
+    pipeline = RNAseqPipeline(..., pipeline_type="bulk")  # or "singlecell", "multiomic"
 
     # Or run specific agents (bulk only)
     pipeline.run_agent("agent1_deg")
     pipeline.run_from("agent3_pathway")  # Resume from agent 3
 
-Bulk RNA-seq (2-Step, 6 Agents):
-    DEG → Network → Pathway → Visualization → (ML Prediction) → Validation → Report
+Pipeline Types:
+================
 
-Single-cell RNA-seq (1-Step):
-    SingleCellAgent (QC → Clustering → Annotation → DEG → Report)
+1. Bulk RNA-seq (1-Step, Expression Only):
+   DEG → Network → Pathway → Validation → Visualization → Report
+   => Driver gene PREDICTION only (DB matching)
+
+2. Bulk + WGS/WES (2-Step, Multi-omic):
+   Step 1: Bulk RNA-seq pipeline
+   Step 2: Variant Analysis → Integrated Driver Analysis
+   => Driver gene IDENTIFICATION (mutation + expression)
+
+3. Single-cell RNA-seq (1-Step):
+   SingleCellAgent (QC → Clustering → Annotation → DEG) → Report
+   => Cell type specific expression
 """
 
 import json
@@ -44,7 +54,10 @@ from .agents import (
     ValidationAgent,
     VisualizationAgent,
     ReportAgent,
-    SingleCellAgent
+    SingleCellAgent,
+    SingleCellReportAgent,
+    VariantAgent,
+    IntegratedDriverAgent,
 )
 from .utils.data_type_detector import DataTypeDetector, detect_data_type
 
@@ -52,10 +65,10 @@ from .utils.data_type_detector import DataTypeDetector, detect_data_type
 class RNAseqPipeline:
     """Orchestrator for the RNA-seq analysis pipeline."""
 
-    # Bulk RNA-seq pipeline (7 agents with 2-stage validation)
-    # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
-    # - Validation1: Validates DEG, Network, Pathway results (before visualization)
-    # - Validation2: Validates ML prediction results (before report)
+    # =========================================================================
+    # Pipeline Type 1: Bulk RNA-seq (1-Step, Expression Only)
+    # => Driver gene PREDICTION only (no mutation data)
+    # =========================================================================
     BULK_AGENT_ORDER = [
         "agent1_deg",
         "agent2_network",
@@ -76,16 +89,49 @@ class RNAseqPipeline:
         "agent6_report": ReportAgent
     }
 
-    # Single-cell pipeline (1 agent)
-    SINGLECELL_AGENT_ORDER = ["singlecell"]
-    SINGLECELL_AGENT_CLASSES = {"singlecell": SingleCellAgent}
+    # =========================================================================
+    # Pipeline Type 2: Bulk + WGS/WES (2-Step, Multi-omic)
+    # => Driver gene IDENTIFICATION (mutation + expression evidence)
+    # =========================================================================
+    MULTIOMIC_AGENT_ORDER = [
+        # Step 1: Bulk RNA-seq analysis
+        "agent1_deg",
+        "agent2_network",
+        "agent3_pathway",
+        "agent4_validation",
+        "agent5_visualization",
+        # Step 2: Variant analysis + Integration
+        "agent_variant",
+        "agent_integrated_driver",
+        # Final report
+        "agent6_report"
+    ]
+
+    MULTIOMIC_AGENT_CLASSES = {
+        "agent1_deg": DEGAgent,
+        "agent2_network": NetworkAgent,
+        "agent3_pathway": PathwayAgent,
+        "agent4_validation": ValidationAgent,
+        "agent5_visualization": VisualizationAgent,
+        "agent_variant": VariantAgent,
+        "agent_integrated_driver": IntegratedDriverAgent,
+        "agent6_report": ReportAgent
+    }
+
+    # =========================================================================
+    # Pipeline Type 3: Single-cell RNA-seq (1-Step)
+    # =========================================================================
+    SINGLECELL_AGENT_ORDER = ["singlecell", "singlecell_report"]
+    SINGLECELL_AGENT_CLASSES = {
+        "singlecell": SingleCellAgent,
+        "singlecell_report": SingleCellReportAgent
+    }
 
     # Legacy compatibility
     AGENT_ORDER = BULK_AGENT_ORDER
     AGENT_CLASSES = BULK_AGENT_CLASSES
 
     # Define which outputs each agent needs from previous agents
-    # Order: DEG → Network → Pathway → Validation1 → Visualization → ML → Validation2 → Report
     AGENT_DEPENDENCIES = {
         "agent1_deg": [],
         "agent2_network": ["normalized_counts.csv", "deg_significant.csv"],
@@ -96,9 +142,12 @@ class RNAseqPipeline:
             "hub_genes.csv", "network_edges.csv", "pathway_summary.csv",
             "integrated_gene_table.csv"
         ],
-        "agent4_validation_ml": ["cancer_prediction.json", "integrated_gene_table.csv"],  # ML validation
+        "agent4_validation_ml": ["cancer_prediction.json", "integrated_gene_table.csv"],
+        "agent_variant": [],  # Uses VCF/MAF from input
+        "agent_integrated_driver": ["deg_significant.csv", "hub_genes.csv", "driver_mutations.csv"],
         "agent6_report": ["*"],  # All outputs
-        "singlecell": []  # Single-cell is self-contained
+        "singlecell": [],
+        "singlecell_report": ["cluster_markers.csv", "cell_composition.csv"]
     }
 
     def __init__(
@@ -106,7 +155,7 @@ class RNAseqPipeline:
         input_dir: Path,
         output_dir: Path,
         config: Optional[Dict[str, Any]] = None,
-        pipeline_type: Optional[Literal["bulk", "singlecell", "auto"]] = "auto"
+        pipeline_type: Optional[Literal["bulk", "singlecell", "multiomic", "auto"]] = "auto"
     ):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
@@ -161,13 +210,38 @@ class RNAseqPipeline:
         return logger
 
     def _determine_pipeline_type(self) -> str:
-        """Determine pipeline type based on data or override."""
+        """Determine pipeline type based on data or override.
+
+        Pipeline Types:
+        - bulk: Expression-only analysis, driver gene PREDICTION
+        - multiomic: Bulk + WGS/WES, driver gene IDENTIFICATION
+        - singlecell: Single-cell analysis
+        """
         # If explicitly specified
         if self.pipeline_type_override and self.pipeline_type_override != "auto":
             self.logger.info(f"Pipeline type override: {self.pipeline_type_override}")
             return self.pipeline_type_override
 
-        # Auto-detect
+        # Check for VCF/MAF files (indicates multi-omic data)
+        vcf_files = list(self.input_dir.glob("*.vcf")) + list(self.input_dir.glob("*.vcf.gz"))
+        maf_files = list(self.input_dir.glob("*.maf")) + list(self.input_dir.glob("*.maf.gz"))
+
+        has_variant_data = len(vcf_files) > 0 or len(maf_files) > 0
+
+        if has_variant_data:
+            self.logger.info(f"Detected variant data files:")
+            for f in vcf_files + maf_files:
+                self.logger.info(f"  - {f.name}")
+            self.logger.info("Selecting MULTIOMIC pipeline (Bulk + WGS/WES)")
+            self.detection_result = {
+                "data_type": "multiomic",
+                "vcf_files": [str(f) for f in vcf_files],
+                "maf_files": [str(f) for f in maf_files],
+                "confidence": 1.0
+            }
+            return "multiomic"
+
+        # Auto-detect bulk vs single-cell
         try:
             self.detection_result = detect_data_type(self.input_dir)
             detected_type = self.detection_result.get("data_type", "bulk")
@@ -185,12 +259,16 @@ class RNAseqPipeline:
         """Get agent order based on pipeline type."""
         if self.pipeline_type == "singlecell":
             return self.SINGLECELL_AGENT_ORDER
+        elif self.pipeline_type == "multiomic":
+            return self.MULTIOMIC_AGENT_ORDER
         return self.BULK_AGENT_ORDER
 
     def get_agent_classes(self) -> Dict:
         """Get agent classes based on pipeline type."""
         if self.pipeline_type == "singlecell":
             return self.SINGLECELL_AGENT_CLASSES
+        elif self.pipeline_type == "multiomic":
+            return self.MULTIOMIC_AGENT_CLASSES
         return self.BULK_AGENT_CLASSES
 
     def _get_agent_input_dir(self, agent_name: str) -> Path:
@@ -201,6 +279,10 @@ class RNAseqPipeline:
 
         # Bulk: first agent uses input
         if agent_name == "agent1_deg":
+            return self.input_dir
+
+        # Variant agent needs access to original VCF/MAF files from input
+        if agent_name == "agent_variant":
             return self.input_dir
 
         # For subsequent agents, use accumulated outputs
@@ -299,16 +381,18 @@ class RNAseqPipeline:
         This is called at the START of the pipeline to:
         1. Classify the tumor samples into one of 17 cancer types
         2. Store prediction results for Driver analysis and Report
-        3. Update config with predicted cancer_type
+        3. Update config with predicted cancer_type (or validate user-specified type)
 
         Returns:
             Prediction results dict or None if prediction fails
         """
-        # Skip if cancer_type is already specified and not "unknown"
-        current_cancer = self.config.get('cancer_type', 'unknown')
-        if current_cancer and current_cancer.lower() != 'unknown':
-            self.logger.info(f"Cancer type already specified: {current_cancer}")
-            return None
+        # Check if cancer_type is already specified by user
+        user_specified_cancer = self.config.get('cancer_type', 'unknown')
+        is_user_specified = user_specified_cancer and user_specified_cancer.lower() != 'unknown'
+
+        if is_user_specified:
+            self.logger.info(f"User-specified cancer type: {user_specified_cancer}")
+            self.logger.info("Running ML prediction for validation...")
 
         try:
             from .ml.pancancer_classifier import PanCancerClassifier
@@ -407,14 +491,36 @@ class RNAseqPipeline:
                         'all_results': [r.to_dict() for r in results]  # All samples for condition inference
                     }
 
-                    # Update config with predicted cancer type
-                    self.config['cancer_type'] = predicted_cancer
-                    self.config['cancer_type_korean'] = korean_name
-                    self.config['cancer_prediction'] = prediction_result
+                    # Handle user-specified vs ML-predicted cancer type
+                    if is_user_specified:
+                        # Keep user-specified cancer type but record ML prediction for validation
+                        prediction_result['user_specified_cancer'] = user_specified_cancer
+                        prediction_result['ml_predicted_cancer'] = predicted_cancer
+                        prediction_result['prediction_matches_user'] = (
+                            user_specified_cancer.upper() == predicted_cancer.upper()
+                        )
 
-                    self.logger.info(f"🎯 Predicted Cancer Type: {predicted_cancer} ({korean_name})")
-                    self.logger.info(f"   Confidence: {avg_confidence:.2%}")
-                    self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
+                        # Don't override user-specified cancer type
+                        self.config['cancer_prediction'] = prediction_result
+
+                        if prediction_result['prediction_matches_user']:
+                            self.logger.info(f"✅ ML Prediction MATCHES user-specified: {predicted_cancer} ({korean_name})")
+                        else:
+                            self.logger.warning(f"⚠️ ML Prediction DIFFERS from user-specified!")
+                            self.logger.warning(f"   User specified: {user_specified_cancer}")
+                            self.logger.warning(f"   ML predicted: {predicted_cancer} ({korean_name})")
+
+                        self.logger.info(f"   Confidence: {avg_confidence:.2%}")
+                        self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
+                    else:
+                        # Update config with predicted cancer type (no user specification)
+                        self.config['cancer_type'] = predicted_cancer
+                        self.config['cancer_type_korean'] = korean_name
+                        self.config['cancer_prediction'] = prediction_result
+
+                        self.logger.info(f"🎯 Predicted Cancer Type: {predicted_cancer} ({korean_name})")
+                        self.logger.info(f"   Confidence: {avg_confidence:.2%}")
+                        self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
 
                     # Save prediction results
                     prediction_file = self.run_dir / "cancer_prediction.json"
@@ -514,6 +620,27 @@ class RNAseqPipeline:
         self.pipeline_type = "singlecell"
         return self.run()
 
+    def run_multiomic(self) -> Dict[str, Any]:
+        """Run multi-omic pipeline explicitly (Bulk RNA-seq + WGS/WES).
+
+        This pipeline combines:
+        1. Bulk RNA-seq analysis (DEG, Network, Pathway, Validation, Visualization)
+        2. WGS/WES variant analysis (VCF/MAF parsing, driver mutation detection)
+        3. Integrated driver identification (mutation + expression evidence)
+
+        Returns:
+            Execution state with integrated driver analysis results
+        """
+        self.pipeline_type = "multiomic"
+        self.logger.info("=" * 60)
+        self.logger.info("MULTI-OMIC PIPELINE: Bulk RNA-seq + WGS/WES Integration")
+        self.logger.info("=" * 60)
+        self.logger.info("Step 1: Bulk RNA-seq analysis (Expression-based)")
+        self.logger.info("Step 2: Variant analysis (Mutation-based)")
+        self.logger.info("Step 3: Integrated driver identification")
+        self.logger.info("=" * 60)
+        return self.run()
+
     def _save_execution_state(self) -> None:
         """Save execution state to JSON."""
         state_file = self.run_dir / "pipeline_summary.json"
@@ -603,6 +730,8 @@ if __name__ == "__main__":
     parser.add_argument("--input", "-i", required=True, help="Input directory")
     parser.add_argument("--output", "-o", required=True, help="Output directory")
     parser.add_argument("--cancer-type", "-c", default="lung_cancer", help="Cancer type")
+    parser.add_argument("--pipeline", "-p", choices=["auto", "bulk", "singlecell", "multiomic"],
+                       default="auto", help="Pipeline type (auto-detected by default)")
     parser.add_argument("--create-sample", action="store_true", help="Create sample data")
     parser.add_argument("--agent", help="Run specific agent only")
     parser.add_argument("--from-agent", help="Resume from specific agent")
@@ -616,7 +745,8 @@ if __name__ == "__main__":
         pipeline = RNAseqPipeline(
             input_dir=Path(args.input),
             output_dir=Path(args.output),
-            config=config
+            config=config,
+            pipeline_type=args.pipeline
         )
 
         if args.agent:

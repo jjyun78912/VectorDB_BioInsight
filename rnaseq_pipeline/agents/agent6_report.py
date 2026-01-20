@@ -86,7 +86,13 @@ class ReportAgent(BaseAgent):
             "network_nodes.csv",
             "pathway_summary.csv",
             "integrated_gene_table.csv",
-            "db_matched_genes.csv"
+            "db_matched_genes.csv",
+            # Multi-omic integration files
+            "integrated_drivers.csv",
+            "confirmed_drivers.csv",
+            "actionable_targets.csv",
+            "driver_mutations.csv",
+            "annotated_variants.csv"
         ]
 
         json_files = [
@@ -862,12 +868,23 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_driver_analysis_html(self, data: Dict) -> str:
-        """Generate Driver Gene Analysis section (Known + Candidate Regulator tracks)."""
+        """Generate Driver Gene Analysis section (Known + Candidate Regulator tracks).
+
+        Now includes Multi-omic Integration section when WGS/WES data is available.
+        """
         driver_known = data.get('driver_known', [])
         driver_novel = data.get('driver_novel', [])
         driver_summary = data.get('driver_summary', {})
 
-        if not driver_known and not driver_novel:
+        # Multi-omic integration data (from WGS/WES pipeline)
+        integrated_drivers_df = data.get('integrated_drivers_df')
+        confirmed_drivers_df = data.get('confirmed_drivers_df')
+        actionable_targets_df = data.get('actionable_targets_df')
+        driver_mutations_df = data.get('driver_mutations_df')
+
+        has_multiomic = integrated_drivers_df is not None and len(integrated_drivers_df) > 0
+
+        if not driver_known and not driver_novel and not has_multiomic:
             return ""
 
         # Known drivers cards
@@ -1071,6 +1088,7 @@ class ReportAgent(BaseAgent):
                 </div>
             </div>
 
+            {self._generate_multiomic_section_html(data) if has_multiomic else '''
             <div class="driver-disclaimer">
                 <span class="disclaimer-icon">⚠️</span>
                 <div class="disclaimer-text">
@@ -1079,7 +1097,259 @@ class ReportAgent(BaseAgent):
                     실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
                 </div>
             </div>
+            '''}
         </section>
+        '''
+
+    def _generate_multiomic_section_html(self, data: Dict) -> str:
+        """Generate Multi-omic Integration section (WGS/WES + RNA-seq).
+
+        This section shows CONFIRMED driver genes with both mutation AND expression evidence.
+        """
+        integrated_drivers_df = data.get('integrated_drivers_df')
+        confirmed_drivers_df = data.get('confirmed_drivers_df')
+        actionable_targets_df = data.get('actionable_targets_df')
+        driver_mutations_df = data.get('driver_mutations_df')
+
+        if integrated_drivers_df is None or len(integrated_drivers_df) == 0:
+            return ""
+
+        # Count by classification
+        n_confirmed = len(integrated_drivers_df[integrated_drivers_df['classification'] == 'confirmed_driver']) if 'classification' in integrated_drivers_df.columns else 0
+        n_high_conf = len(integrated_drivers_df[integrated_drivers_df['classification'] == 'high_confidence']) if 'classification' in integrated_drivers_df.columns else 0
+        n_candidates = len(integrated_drivers_df[integrated_drivers_df['classification'] == 'candidate']) if 'classification' in integrated_drivers_df.columns else 0
+        n_actionable = len(actionable_targets_df) if actionable_targets_df is not None else 0
+        n_mutations = len(driver_mutations_df) if driver_mutations_df is not None else 0
+
+        # Count validated genes
+        n_validated = 0
+        n_hotspot_validated = 0
+        if 'db_validated' in integrated_drivers_df.columns:
+            n_validated = int(integrated_drivers_df['db_validated'].sum())
+        if 'hotspot_validated' in integrated_drivers_df.columns:
+            n_hotspot_validated = int(integrated_drivers_df['hotspot_validated'].sum())
+
+        # Confirmed drivers cards
+        confirmed_cards_html = ""
+        if confirmed_drivers_df is not None and len(confirmed_drivers_df) > 0:
+            for idx, row in confirmed_drivers_df.head(10).iterrows():
+                gene = row.get('gene_symbol', 'Unknown')
+                score = row.get('confidence_score', 0)
+                log2fc = row.get('log2fc', 0)
+                direction = "↑" if log2fc > 0 else "↓"
+                dir_class = "up" if log2fc > 0 else "down"
+                mutation_score = row.get('mutation_driver_score', 0)
+                is_hotspot = row.get('is_hotspot', False)
+                drugs = row.get('actionable_drugs', '')
+
+                # Validation status
+                db_validated = row.get('db_validated', False)
+                hotspot_validated = row.get('hotspot_validated', False)
+                drug_validated = row.get('drug_validated', False)
+                validation_sources = row.get('validation_sources', [])
+                oncokb_level = row.get('oncokb_level', '')
+                cosmic_tier = row.get('cosmic_tier', '')
+
+                # Parse validation_sources if string
+                if isinstance(validation_sources, str):
+                    validation_sources = [s.strip() for s in validation_sources.split(',') if s.strip()]
+
+                # Build validation badges
+                validation_badges = ""
+                if db_validated:
+                    if hotspot_validated:
+                        validation_badges += f'<span class="validation-badge validated">✓ Hotspot 검증됨</span>'
+                    if cosmic_tier:
+                        validation_badges += f'<span class="validation-badge cosmic">COSMIC {cosmic_tier}</span>'
+                    if oncokb_level:
+                        validation_badges += f'<span class="validation-badge oncokb">OncoKB Lv{oncokb_level}</span>'
+                    if drug_validated:
+                        validation_badges += f'<span class="validation-badge dgidb">DGIdb ✓</span>'
+                else:
+                    validation_badges = '<span class="validation-badge unvalidated">⚠️ 외부 검증 필요</span>'
+
+                confirmed_cards_html += f'''
+                <div class="driver-card confirmed-driver {'validated' if db_validated else 'needs-validation'}">
+                    <div class="driver-header">
+                        <div class="driver-title">
+                            <span class="driver-gene">{gene}</span>
+                            <span class="confirmed-badge">✓ CONFIRMED</span>
+                            {'<span class="hotspot-badge">🔥 Hotspot</span>' if is_hotspot else ''}
+                        </div>
+                        <span class="driver-score high">{score:.0f}/100</span>
+                    </div>
+                    <div class="validation-row">
+                        {validation_badges}
+                    </div>
+                    <div class="driver-body">
+                        <div class="evidence-grid">
+                            <div class="evidence-item mutation">
+                                <span class="evidence-icon">🧬</span>
+                                <span class="evidence-label">Mutation</span>
+                                <span class="evidence-value">{mutation_score:.0f}점</span>
+                            </div>
+                            <div class="evidence-item expression">
+                                <span class="evidence-icon">📊</span>
+                                <span class="evidence-label">Expression</span>
+                                <span class="evidence-value {dir_class}">{direction} {abs(log2fc):.2f}</span>
+                            </div>
+                        </div>
+                        {f'<div class="drug-info"><span class="drug-icon">💊</span><span class="drug-list">{drugs}</span></div>' if drugs else ''}
+                    </div>
+                </div>
+                '''
+
+        # Actionable targets table
+        actionable_table_html = ""
+        if actionable_targets_df is not None and len(actionable_targets_df) > 0:
+            rows_html = ""
+            for idx, row in actionable_targets_df.head(10).iterrows():
+                gene = row.get('gene_symbol', 'Unknown')
+                classification = row.get('classification', '')
+                drugs = row.get('actionable_drugs', '')
+                score = row.get('confidence_score', 0)
+                drug_validated = row.get('drug_validated', False)
+                db_validated = row.get('db_validated', False)
+
+                class_badge = "confirmed" if "confirmed" in classification else "candidate"
+                validation_icon = "✓" if drug_validated else ("△" if db_validated else "⚠️")
+                validation_class = "validated" if drug_validated else ("partial" if db_validated else "unvalidated")
+
+                rows_html += f'''
+                <tr class="{validation_class}">
+                    <td><strong>{gene}</strong></td>
+                    <td><span class="class-badge {class_badge}">{classification}</span></td>
+                    <td>{score:.0f}</td>
+                    <td class="drug-cell">{drugs}</td>
+                    <td class="validation-cell"><span class="validation-icon {validation_class}">{validation_icon}</span></td>
+                </tr>
+                '''
+
+            actionable_table_html = f'''
+            <div class="actionable-targets">
+                <h4>💊 Actionable 치료 표적</h4>
+                <p class="table-note">✓ = DGIdb 검증됨, △ = DB 부분 검증, ⚠️ = 검증 필요</p>
+                <table class="actionable-table">
+                    <thead>
+                        <tr>
+                            <th>유전자</th>
+                            <th>분류</th>
+                            <th>점수</th>
+                            <th>표적 약물</th>
+                            <th>검증</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows_html}
+                    </tbody>
+                </table>
+            </div>
+            '''
+
+        # Mutation summary
+        mutation_summary_html = ""
+        if driver_mutations_df is not None and len(driver_mutations_df) > 0:
+            mutation_list = ""
+            for idx, row in driver_mutations_df.head(8).iterrows():
+                gene = row.get('gene', 'Unknown')
+                aa_change = row.get('amino_acid_change', '')
+                vaf = row.get('vaf', 0)
+                is_hotspot = row.get('is_hotspot', False)
+
+                mutation_list += f'''
+                <div class="mutation-item {'hotspot' if is_hotspot else ''}">
+                    <span class="mutation-gene">{gene}</span>
+                    <span class="mutation-change">{aa_change}</span>
+                    <span class="mutation-vaf">VAF: {vaf:.1%}</span>
+                    {'<span class="hotspot-marker">🔥</span>' if is_hotspot else ''}
+                </div>
+                '''
+
+            mutation_summary_html = f'''
+            <div class="mutation-summary">
+                <h4>🔬 검출된 Driver Mutations</h4>
+                <div class="mutation-list">
+                    {mutation_list}
+                </div>
+            </div>
+            '''
+
+        return f'''
+        <div class="multiomic-integration">
+            <div class="multiomic-header">
+                <h3>🧬 Multi-omic 통합 분석 (RNA-seq + WGS/WES)</h3>
+                <p class="multiomic-subtitle">
+                    <span class="highlight">✓ 실제 변이 데이터 기반</span> -
+                    RNA-seq 발현 변화와 WGS/WES 변이 데이터를 통합하여
+                    <strong>확정된 Driver 유전자</strong>를 식별했습니다.
+                    <span class="validation-highlight">외부 DB 검증 완료: {n_validated}개</span>
+                </p>
+            </div>
+
+            <div class="multiomic-stats">
+                <div class="stat-card confirmed">
+                    <span class="stat-icon">✓</span>
+                    <span class="stat-value">{n_confirmed}</span>
+                    <span class="stat-label">Confirmed Driver</span>
+                    <span class="stat-desc">변이 + 발현 + DB검증</span>
+                </div>
+                <div class="stat-card high-conf">
+                    <span class="stat-icon">★</span>
+                    <span class="stat-value">{n_high_conf}</span>
+                    <span class="stat-label">High Confidence</span>
+                    <span class="stat-desc">강한 증거 1개 이상</span>
+                </div>
+                <div class="stat-card validated">
+                    <span class="stat-icon">🔬</span>
+                    <span class="stat-value">{n_validated}</span>
+                    <span class="stat-label">DB 검증됨</span>
+                    <span class="stat-desc">COSMIC/OncoKB/DGIdb</span>
+                </div>
+                <div class="stat-card actionable">
+                    <span class="stat-icon">💊</span>
+                    <span class="stat-value">{n_actionable}</span>
+                    <span class="stat-label">Actionable</span>
+                    <span class="stat-desc">표적 약물 존재</span>
+                </div>
+            </div>
+
+            <div class="validation-info-box">
+                <h5>🔍 외부 데이터베이스 검증</h5>
+                <p>Driver 유전자와 약물 정보는 다음 데이터베이스에서 검증됩니다:</p>
+                <ul>
+                    <li><strong>COSMIC</strong>: 암 체세포 변이 데이터베이스 (Tier 1 암 유전자)</li>
+                    <li><strong>OncoKB</strong>: 정밀 종양학 지식 베이스 (Level 1-4 근거 수준)</li>
+                    <li><strong>DGIdb</strong>: 약물-유전자 상호작용 데이터베이스 (FDA 승인 약물)</li>
+                    <li><strong>ClinVar</strong>: 임상 변이 해석 데이터베이스</li>
+                </ul>
+                <p class="validation-note">⚠️ "Confirmed Driver"는 반드시 외부 DB 검증이 필요합니다. 검증되지 않은 경우 "High Confidence"로 분류됩니다.</p>
+            </div>
+
+            <div class="confirmed-drivers-section">
+                <h4>✅ Confirmed Driver 유전자</h4>
+                <p class="section-desc">변이(Mutation), 발현(Expression), 그리고 <strong>외부 DB 검증</strong>이 모두 확인된 Driver 유전자입니다.</p>
+                <div class="confirmed-cards-grid">
+                    {confirmed_cards_html if confirmed_cards_html else '<p class="no-data">외부 DB 검증이 완료된 Confirmed driver가 없습니다. High Confidence 섹션을 확인하세요.</p>'}
+                </div>
+            </div>
+
+            {mutation_summary_html}
+
+            {actionable_table_html}
+
+            <div class="multiomic-note">
+                <span class="note-icon">ℹ️</span>
+                <div class="note-text">
+                    <strong>Multi-omic + DB 검증의 중요성:</strong>
+                    <ul>
+                        <li>RNA-seq만: Driver 유전자를 "예측"만 가능</li>
+                        <li>RNA-seq + WGS/WES: 체세포 변이 "확인" 가능</li>
+                        <li><strong>RNA-seq + WGS/WES + 외부 DB 검증</strong>: 임상적으로 의미있는 Driver "확정"</li>
+                    </ul>
+                    Hotspot 변이는 COSMIC/OncoKB에서, 표적 약물은 DGIdb에서 검증되어야 신뢰할 수 있습니다.
+                </div>
+            </div>
+        </div>
         '''
 
     def _generate_study_overview_html(self, data: Dict) -> str:
@@ -1092,28 +1362,48 @@ class ReportAgent(BaseAgent):
         # Determine cancer type display
         if cancer_prediction:
             predicted_cancer = cancer_prediction.get('predicted_cancer', 'Unknown')
-            cancer_korean = cancer_prediction.get('cancer_korean', '')
+            cancer_korean = cancer_prediction.get('predicted_cancer_korean', cancer_prediction.get('cancer_korean', ''))
             confidence = cancer_prediction.get('confidence', 0)
             agreement_ratio = cancer_prediction.get('agreement_ratio', 0)
 
-            # Format cancer type display with Korean name and confidence
-            if cancer_korean:
-                cancer_type_display = f"{predicted_cancer} ({cancer_korean})"
-            else:
-                cancer_type_display = predicted_cancer
+            # Check if this was a user-specified validation case
+            user_specified = cancer_prediction.get('user_specified_cancer')
+            ml_predicted = cancer_prediction.get('ml_predicted_cancer')
+            prediction_matches = cancer_prediction.get('prediction_matches_user')
 
-            # Confidence badge styling
-            if confidence >= 0.8:
-                confidence_badge = f'<span class="confidence-badge high">신뢰도: {confidence:.1%}</span>'
-            elif confidence >= 0.6:
-                confidence_badge = f'<span class="confidence-badge medium">신뢰도: {confidence:.1%}</span>'
-            else:
-                confidence_badge = f'<span class="confidence-badge low">신뢰도: {confidence:.1%}</span>'
+            if user_specified:
+                # User specified + ML validation case
+                cancer_type_display = self.config.get('cancer_type_korean', user_specified)
 
-            prediction_method = "🤖 ML 예측 (Pan-Cancer Classifier)"
-            prediction_note = f"<small>샘플 일치율: {agreement_ratio:.1%}</small>"
+                # Confidence badge based on ML match
+                if prediction_matches:
+                    confidence_badge = f'<span class="confidence-badge high">✅ ML 검증 일치 ({confidence:.1%})</span>'
+                    prediction_method = "사용자 지정 + ML 검증"
+                    prediction_note = f"<small>ML 예측: {ml_predicted} (샘플 일치율: {agreement_ratio:.1%})</small>"
+                else:
+                    confidence_badge = f'<span class="confidence-badge low">⚠️ ML 불일치</span>'
+                    prediction_method = "사용자 지정 (ML 검증 불일치)"
+                    ml_korean = cancer_prediction.get('predicted_cancer_korean', ml_predicted)
+                    prediction_note = f"<small>⚠️ ML 예측: {ml_predicted} ({ml_korean}) - 신뢰도: {confidence:.1%}</small>"
+            else:
+                # ML prediction only (no user specification)
+                if cancer_korean:
+                    cancer_type_display = f"{predicted_cancer} ({cancer_korean})"
+                else:
+                    cancer_type_display = predicted_cancer
+
+                # Confidence badge styling
+                if confidence >= 0.8:
+                    confidence_badge = f'<span class="confidence-badge high">신뢰도: {confidence:.1%}</span>'
+                elif confidence >= 0.6:
+                    confidence_badge = f'<span class="confidence-badge medium">신뢰도: {confidence:.1%}</span>'
+                else:
+                    confidence_badge = f'<span class="confidence-badge low">신뢰도: {confidence:.1%}</span>'
+
+                prediction_method = "🤖 ML 예측 (Pan-Cancer Classifier)"
+                prediction_note = f"<small>샘플 일치율: {agreement_ratio:.1%}</small>"
         else:
-            # Fallback to config-specified cancer type
+            # Fallback to config-specified cancer type (no ML prediction available)
             cancer_type_display = self.config.get('cancer_type_korean', self.config.get('cancer_type', 'Unknown'))
             if cancer_type_display.lower() == 'unknown':
                 cancer_type_display = '암종 미확인'
@@ -1122,7 +1412,7 @@ class ReportAgent(BaseAgent):
                 prediction_note = "<small>count matrix 확인 필요</small>"
             else:
                 confidence_badge = '<span class="confidence-badge medium">사용자 지정</span>'
-                prediction_method = "사용자 지정"
+                prediction_method = "사용자 지정 (ML 검증 없음)"
                 prediction_note = ""
 
         # Get sample info from config
@@ -1539,22 +1829,41 @@ class ReportAgent(BaseAgent):
         viz_interpretations = data.get('visualization_interpretations', {})
 
         network_fig = figures.get('network_graph', figures.get('network_plot', figures.get('network_2d', '')))
-        network_interactive = interactive_figures.get('network_3d_interactive', '')
+        network_3d_interactive = interactive_figures.get('network_3d_interactive', '')
+        network_2d_interactive = interactive_figures.get('network_2d_interactive', '')
 
-        # Network with interactive toggle
-        if network_interactive:
-            escaped_html = network_interactive.replace('"', '&quot;')
+        # Network with interactive toggle (2D default, 3D optional)
+        if network_3d_interactive and network_2d_interactive:
+            escaped_3d = network_3d_interactive.replace('"', '&quot;')
+            escaped_2d = network_2d_interactive.replace('"', '&quot;')
             network_html = f'''
-            <div class="view-toggle">
-                <button class="toggle-btn active" onclick="showNetworkView('interactive')">Interactive 3D</button>
-                <button class="toggle-btn" onclick="showNetworkView('static')">Static 2D</button>
+            <div class="network-toggle-container">
+                <button class="network-toggle-btn" onclick="toggleNetworkView(this, '2d')">2D (Hover)</button>
+                <button class="network-toggle-btn" onclick="toggleNetworkView(this, '3d')">3D (회전)</button>
             </div>
-            <div id="network-interactive" class="network-view active" style="display:flex; flex-direction:column; align-items:center;">
-                <iframe id="network-iframe" srcdoc="{escaped_html}" style="width:720px; max-width:100%; height:520px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능. 노드를 클릭하면 유전자 정보 확인.</p>
+            <div id="network-2d-view" style="display:flex; flex-direction:column; align-items:center;">
+                <iframe id="network-2d-iframe" srcdoc="{escaped_2d}" style="width:100%; max-width:800px; height:570px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스를 올리면 유전자 정보 확인</p>
             </div>
-            <div id="network-static" class="network-view" style="display:none; text-align:center;">
-                <img src="{network_fig}" alt="Network" class="figure-img" style="max-width:100%;">
+            <div id="network-3d-view" style="display:none; flex-direction:column; align-items:center;">
+                <iframe id="network-3d-iframe" srcdoc="{escaped_3d}" style="width:100%; max-width:800px; height:600px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능</p>
+            </div>
+            '''
+        elif network_3d_interactive:
+            escaped_html = network_3d_interactive.replace('"', '&quot;')
+            network_html = f'''
+            <div style="display:flex; flex-direction:column; align-items:center;">
+                <iframe srcdoc="{escaped_html}" style="width:100%; max-width:800px; height:600px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능</p>
+            </div>
+            '''
+        elif network_2d_interactive:
+            escaped_html = network_2d_interactive.replace('"', '&quot;')
+            network_html = f'''
+            <div style="display:flex; flex-direction:column; align-items:center;">
+                <iframe srcdoc="{escaped_html}" style="width:100%; max-width:800px; height:570px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스를 올리면 유전자 정보 확인</p>
             </div>
             '''
         elif network_fig:
@@ -3141,6 +3450,36 @@ class ReportAgent(BaseAgent):
 
             .volcano-view, .network-view { display: none; }
             .volcano-view.active, .network-view.active { display: block; }
+
+            /* Network Toggle Buttons */
+            .network-toggle-container {
+                display: flex;
+                justify-content: center;
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            .network-toggle-btn {
+                padding: 8px 16px;
+                border: 1px solid var(--gray-300);
+                border-radius: 4px;
+                background: white;
+                color: var(--gray-600);
+                font-size: 13px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+
+            .network-toggle-btn:hover {
+                background: var(--gray-100);
+            }
+
+            .network-toggle-btn.active {
+                background: var(--npj-blue);
+                color: white;
+                border-color: var(--npj-blue);
+            }
 
             /* ========== GENE BARS (Bar Chart Style) ========== */
             .gene-bars {
@@ -4958,27 +5297,29 @@ class ReportAgent(BaseAgent):
                 }}
             }}
 
-            function showNetworkView(view) {{
-                const interactiveView = document.getElementById('network-interactive');
-                const staticView = document.getElementById('network-static');
-                const buttons = document.querySelectorAll('.network-container .view-toggle .toggle-btn');
+            function toggleNetworkView(btn, view) {{
+                const view2d = document.getElementById('network-2d-view');
+                const view3d = document.getElementById('network-3d-view');
+                const buttons = document.querySelectorAll('.network-toggle-btn');
 
-                if (view === 'interactive') {{
-                    interactiveView.classList.add('active');
-                    staticView.classList.remove('active');
-                    interactiveView.style.display = 'block';
-                    staticView.style.display = 'none';
-                    buttons[0].classList.add('active');
-                    buttons[1].classList.remove('active');
+                // Reset all buttons
+                buttons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                if (view === '3d') {{
+                    if (view3d) view3d.style.display = 'flex';
+                    if (view2d) view2d.style.display = 'none';
                 }} else {{
-                    interactiveView.classList.remove('active');
-                    staticView.classList.add('active');
-                    interactiveView.style.display = 'none';
-                    staticView.style.display = 'block';
-                    buttons[0].classList.remove('active');
-                    buttons[1].classList.add('active');
+                    if (view2d) view2d.style.display = 'flex';
+                    if (view3d) view3d.style.display = 'none';
                 }}
             }}
+
+            // Initialize network toggle (2D default)
+            document.addEventListener('DOMContentLoaded', function() {{
+                const firstBtn = document.querySelector('.network-toggle-btn');
+                if (firstBtn) firstBtn.classList.add('active');
+            }});
 
             // PCA view toggle
             function showPcaView(view) {{

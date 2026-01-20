@@ -1763,3 +1763,484 @@ body {
     .toggle-btn, .filter-btn, .download-btn { display: none; }
     body { background: white; }
 }
+
+/* ============================================================
+   MULTI-OMIC INTEGRATION SECTION
+   ============================================================ */
+.multiomic-integration {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #0284c7;
+    border-radius: 12px;
+    padding: var(--sp-6);
+    margin-top: var(--sp-6);
+}
+
+.multiomic-header h3 {
+    font-size: 20px;
+    color: #0369a1;
+    margin-bottom: var(--sp-2);
+}
+
+.multiomic-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: var(--sp-4);
+}
+
+.multiomic-subtitle .highlight {
+    background: #dcfce7;
+    color: #166534;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.multiomic-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-6);
+}
+
+.multiomic-stats .stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: var(--sp-4);
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 4px solid;
+}
+
+.stat-card.confirmed { border-left-color: #16a34a; }
+.stat-card.high-conf { border-left-color: #eab308; }
+.stat-card.candidate { border-left-color: #6b7280; }
+.stat-card.actionable { border-left-color: #8b5cf6; }
+
+.stat-card .stat-icon {
+    font-size: 24px;
+    display: block;
+    margin-bottom: var(--sp-1);
+}
+
+.stat-card .stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: block;
+}
+
+.stat-card .stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+}
+
+.stat-card .stat-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: var(--sp-1);
+}
+
+.confirmed-drivers-section {
+    margin-bottom: var(--sp-6);
+}
+
+.confirmed-drivers-section h4 {
+    font-size: 16px;
+    color: #166534;
+    margin-bottom: var(--sp-2);
+}
+
+.section-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: var(--sp-4);
+}
+
+.confirmed-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--sp-4);
+}
+
+.driver-card.confirmed-driver {
+    background: white;
+    border: 2px solid #16a34a;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.confirmed-driver .driver-header {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    padding: var(--sp-3) var(--sp-4);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.confirmed-badge {
+    background: #16a34a;
+    color: white;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.hotspot-badge {
+    background: #fef3c7;
+    color: #d97706;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+}
+
+.evidence-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+}
+
+.evidence-item {
+    background: var(--bg-secondary);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: 6px;
+    text-align: center;
+}
+
+.evidence-item .evidence-icon {
+    font-size: 16px;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.evidence-item .evidence-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+}
+
+.evidence-item .evidence-value {
+    font-size: 14px;
+    font-weight: 600;
+    display: block;
+}
+
+.drug-info {
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.drug-icon { font-size: 16px; }
+.drug-list { font-size: 12px; color: #7c3aed; }
+
+/* Mutation Summary */
+.mutation-summary {
+    background: white;
+    border-radius: 8px;
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+}
+
+.mutation-summary h4 {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-3);
+}
+
+.mutation-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--sp-2);
+}
+
+.mutation-item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.mutation-item.hotspot {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+}
+
+.mutation-gene {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mutation-change {
+    color: #dc2626;
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.mutation-vaf {
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.hotspot-marker { font-size: 12px; }
+
+/* Actionable Targets Table */
+.actionable-targets {
+    background: white;
+    border-radius: 8px;
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+}
+
+.actionable-targets h4 {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-3);
+}
+
+.actionable-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.actionable-table th {
+    background: var(--bg-secondary);
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.actionable-table td {
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.class-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.class-badge.confirmed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.class-badge.candidate {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.drug-cell {
+    font-size: 12px;
+    color: #7c3aed;
+}
+
+/* Multi-omic Note */
+.multiomic-note {
+    display: flex;
+    gap: var(--sp-3);
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: var(--sp-4);
+}
+
+.note-icon { font-size: 20px; }
+.note-text { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+@media (max-width: 768px) {
+    .multiomic-stats { grid-template-columns: repeat(2, 1fr); }
+    .confirmed-cards-grid { grid-template-columns: 1fr; }
+    .mutation-list { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   VALIDATION STYLES
+   ============================================================ */
+
+/* Validation highlight in subtitle */
+.validation-highlight {
+    background: #22c55e;
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+/* Validation info box */
+.validation-info-box {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+}
+
+.validation-info-box h5 {
+    font-size: 14px;
+    color: #166534;
+    margin-bottom: var(--sp-2);
+}
+
+.validation-info-box p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--sp-2);
+}
+
+.validation-info-box ul {
+    margin: 0;
+    padding-left: var(--sp-4);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.validation-info-box li {
+    margin-bottom: 4px;
+}
+
+.validation-note {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-top: var(--sp-3);
+    font-size: 12px;
+    color: #92400e;
+}
+
+/* Validation row in driver card */
+.validation-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+/* Validation badges */
+.validation-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.validation-badge.validated {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.validation-badge.cosmic {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.validation-badge.oncokb {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+.validation-badge.dgidb {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.validation-badge.unvalidated {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* Driver card validation states */
+.driver-card.needs-validation {
+    border-left: 4px solid #fbbf24;
+}
+
+.driver-card.validated {
+    border-left: 4px solid #22c55e;
+}
+
+/* Stat card for validated */
+.stat-card.validated {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+}
+
+.stat-card.validated .stat-icon {
+    background: #22c55e;
+}
+
+/* Table validation styling */
+.table-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: var(--sp-2);
+}
+
+.validation-cell {
+    text-align: center;
+    width: 60px;
+}
+
+.validation-icon {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.validation-icon.validated {
+    color: #22c55e;
+}
+
+.validation-icon.partial {
+    color: #f59e0b;
+}
+
+.validation-icon.unvalidated {
+    color: #ef4444;
+}
+
+tr.validated {
+    background: #f0fdf4;
+}
+
+tr.partial {
+    background: #fffbeb;
+}
+
+tr.unvalidated {
+    background: #fef2f2;
+}
+
+/* Note list styling */
+.note-text ul {
+    margin: var(--sp-2) 0;
+    padding-left: var(--sp-4);
+}
+
+.note-text li {
+    margin-bottom: 4px;
+}
