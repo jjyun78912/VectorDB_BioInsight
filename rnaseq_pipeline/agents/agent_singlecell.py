@@ -1104,9 +1104,8 @@ class SingleCellAgent(BaseAgent):
         self._generate_celltype_composition_plot(figures_dir)
 
     def _generate_celltype_composition_plot(self, figures_dir: Path):
-        """Generate combined UMAP and cell type composition bar chart."""
+        """Generate cell type composition bar chart only (UMAP is separate)."""
         import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
 
         try:
             # Get cell type counts and sort by frequency
@@ -1115,62 +1114,36 @@ class SingleCellAgent(BaseAgent):
             counts = cell_type_counts.values
             percentages = counts / counts.sum() * 100
 
-            # Create a consistent color palette
+            # Create a consistent color palette (same as UMAP for consistency)
             n_types = len(cell_types)
             cmap = plt.cm.get_cmap('tab20' if n_types <= 20 else 'tab20b')
-            colors = {ct: cmap(i % 20) for i, ct in enumerate(cell_types)}
+            colors = [cmap(i % 20) for i in range(n_types)]
 
-            # Create figure with two subplots
-            fig, axes = plt.subplots(1, 2, figsize=(16, 7), gridspec_kw={'width_ratios': [1.2, 1]})
+            # Create figure with single bar chart
+            fig, ax = plt.subplots(figsize=(10, max(6, n_types * 0.4)))
 
-            # Left: UMAP with cell types
-            ax_umap = axes[0]
-            umap_coords = self.adata.obsm['X_umap']
-
-            for ct in cell_types:
-                mask = self.adata.obs['cell_type'] == ct
-                ax_umap.scatter(
-                    umap_coords[mask, 0],
-                    umap_coords[mask, 1],
-                    c=[colors[ct]],
-                    label=ct,
-                    s=3,
-                    alpha=0.7,
-                    rasterized=True
-                )
-
-            ax_umap.set_xlabel('UMAP1', fontsize=12)
-            ax_umap.set_ylabel('UMAP2', fontsize=12)
-            ax_umap.set_title('Cell Types (UMAP)', fontsize=14, fontweight='bold')
-            ax_umap.set_xticks([])
-            ax_umap.set_yticks([])
-
-            # Right: Horizontal bar chart
-            ax_bar = axes[1]
             y_pos = range(len(cell_types))
-            bar_colors = [colors[ct] for ct in cell_types]
-
-            bars = ax_bar.barh(y_pos, percentages, color=bar_colors, edgecolor='white', linewidth=0.5)
+            bars = ax.barh(y_pos, percentages, color=colors, edgecolor='white', linewidth=0.5)
 
             # Add percentage labels
             for i, (bar, pct, cnt) in enumerate(zip(bars, percentages, counts)):
-                ax_bar.text(
+                ax.text(
                     bar.get_width() + 0.5,
                     bar.get_y() + bar.get_height() / 2,
                     f'{pct:.1f}% ({cnt:,})',
                     va='center',
                     ha='left',
-                    fontsize=9
+                    fontsize=10
                 )
 
-            ax_bar.set_yticks(y_pos)
-            ax_bar.set_yticklabels(cell_types, fontsize=10)
-            ax_bar.set_xlabel('Percentage (%)', fontsize=12)
-            ax_bar.set_title('Cell Type Composition', fontsize=14, fontweight='bold')
-            ax_bar.set_xlim(0, max(percentages) * 1.3)  # Leave room for labels
-            ax_bar.invert_yaxis()  # Largest on top
-            ax_bar.spines['top'].set_visible(False)
-            ax_bar.spines['right'].set_visible(False)
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(cell_types, fontsize=11)
+            ax.set_xlabel('Percentage (%)', fontsize=12)
+            ax.set_title('Cell Type Composition', fontsize=14, fontweight='bold')
+            ax.set_xlim(0, max(percentages) * 1.35)  # Leave room for labels
+            ax.invert_yaxis()  # Largest on top
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
 
             plt.tight_layout()
             save_path = figures_dir / 'celltype_barchart.png'
