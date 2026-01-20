@@ -1,0 +1,33 @@
+============================================================
+Pan-Cancer Classifier - Robust Validation Summary
+============================================================
+
+Date: 2026-01-20T10:21:47.179198
+Note: Quick validation with synthetic data
+
+[1. Repeated Cross-Validation]
+  Accuracy: 1.0000 ± 0.0000
+  F1 Macro: 1.0000 ± 0.0000
+  MCC:      1.0000 ± 0.0000
+  95% CI:   [1.0000, 1.0000]
+
+[2. Leave-One-Institution-Out]
+  Mean Accuracy: 1.0000 ± 0.0000
+  Performance Drop: 0.0000
+
+[3. External Validation (Noise Robustness)]
+  Internal Accuracy: 1.0000
+  Noise 0.0: 1.0000
+  Noise 0.1: 1.0000
+  Noise 0.2: 1.0000
+  Noise 0.3: 1.0000
+  Noise 0.5: 1.0000
+  Noise 0.7: 1.0000
+  Noise 1.0: 1.0000
+
+[4. Confusable Cancer Pairs]
+  LUAD-LUSC: 0.0000
+  HNSC-LUSC: 0.0000
+  COAD-STAD: 0.0000
+  OV-UCEC: 0.0000
+  GBM-LGG: 0.0000
