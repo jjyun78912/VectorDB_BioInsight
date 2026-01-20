@@ -1173,11 +1173,11 @@ class SingleCellAgent(BaseAgent):
             ax_bar.spines['right'].set_visible(False)
 
             plt.tight_layout()
-            save_path = figures_dir / 'celltype_composition.png'
+            save_path = figures_dir / 'celltype_barchart.png'
             plt.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='white')
             plt.close()
 
-            self.logger.info("  Saved celltype_composition.png")
+            self.logger.info("  Saved celltype_barchart.png")
 
         except Exception as e:
             self.logger.warning(f"  Failed to generate composition plot: {e}")
