@@ -383,17 +383,81 @@ User Data → Gene ID Mapping → CatBoost Predict → SHAP Waterfall → Output
 
 파이프라인에서 식별하는 Hub Gene과 암 Driver Gene은 **근본적으로 다른 개념**입니다:
 
-| 구분 | Hub Gene (파이프라인) | Driver Gene (COSMIC/OncoKB) |
-|------|----------------------|----------------------------|
+| 구분 | Hub Gene (발현 기반) | Driver Gene (변이 기반) |
+|------|----------------------|------------------------|
 | **정의** | DEG 기반 발현 변화 큰 유전자 | 암 발생/진행 유발 유전자 |
-| **데이터** | RNA-seq (mRNA 발현) | DNA 변이 (mutation) |
-| **산출 방식** | |log2FC| × -log10(p) | 체세포 변이 빈도 + 기능적 증거 |
+| **데이터** | RNA-seq (mRNA 발현) | DNA 변이 (WGS/WES) |
+| **산출 방식** | \|log2FC\| × -log10(p) | 체세포 변이 빈도 + 기능적 증거 |
 | **의미** | 발현 수준 변화 반영 | 단백질 기능 변화 유발 |
 
 **Hub Gene ≠ Driver Gene인 이유**:
 - Driver gene은 변이(mutation)를 통해 작용하며, mRNA 발현 변화가 없을 수 있음
 - 예: TP53 변이는 단백질 기능 상실을 유발하지만 mRNA 수준은 정상일 수 있음
 - Hub gene은 암의 "결과"를, driver gene은 암의 "원인"을 반영
+
+### Driver Gene 식별 파이프라인
+
+**파이프라인별 Driver Gene 분석 수준**:
+
+| 파이프라인 | 입력 데이터 | Driver Gene 분석 | 신뢰도 |
+|-----------|------------|-----------------|--------|
+| **Bulk RNA-seq (1-Step)** | count_matrix.csv | PREDICTION (DB 매칭) | 낮음 |
+| **Bulk + WGS/WES (2-Step)** | count_matrix.csv + VCF/MAF | IDENTIFICATION (변이 검증) | 높음 |
+| **Single-cell (1-Step)** | 10X/h5ad | Cell type별 마커 | 중간 |
+
+**Multi-omic 2-Step Pipeline (Bulk + WGS/WES)**:
+
+```
+Step 1: RNA-seq Analysis
+├── Agent 1 (DEG): DESeq2 통계 분석
+├── Agent 2 (Network): Hub gene 식별
+├── Agent 3 (Pathway): GO/KEGG 경로 분석
+├── Agent 4 (Validation): 발현 기반 DB 검증
+└── Agent 5 (Visualization): 시각화
+
+Step 2: Variant Analysis + Integration
+├── Agent Variant: VCF/MAF 파싱 → Driver mutation 식별
+│   ├── Hotspot mutation 검출 (KRAS G12C, BRAF V600E 등)
+│   ├── LOF/GOF 효과 예측
+│   └── VAF/Depth 품질 필터링
+│
+├── Agent Integrated Driver: 통합 드라이버 분석
+│   ├── Mutation + Expression 증거 통합
+│   ├── Actionability 평가 (OncoKB)
+│   └── Druggable target 식별
+│
+└── Agent 6 (Report): 통합 리포트 생성
+```
+
+**Integrated Driver 분류 체계**:
+
+| 분류 | 점수 | 근거 |
+|------|------|------|
+| **confirmed_driver** | ≥80 | Mutation + Expression 모두 존재 |
+| **high_confidence** | ≥60 | 강한 증거 (hotspot 또는 높은 발현 변화) |
+| **candidate** | ≥40 | 일부 증거 존재 |
+| **mutation_only** | <40 | 변이만 있고 발현 변화 없음 |
+| **expression_only** | <40 | 발현 변화만 있고 변이 없음 |
+
+**VCF/MAF 입력 형식**:
+
+```bash
+# VCF 파일 (WGS/WES calling 결과)
+input_dir/
+├── count_matrix.csv
+├── metadata.csv
+└── somatic_variants.vcf  # 또는 .vcf.gz
+
+# MAF 파일 (TCGA 형식)
+input_dir/
+├── count_matrix.csv
+├── metadata.csv
+└── mutations.maf  # 또는 .maf.gz
+```
+
+**파이프라인 자동 선택**:
+- VCF/MAF 파일이 있으면 → "multiomic" 파이프라인 자동 선택
+- 없으면 → "bulk" 파이프라인 (발현 기반 예측만 수행)
 
 ### RAG Interpretation Module
 
@@ -563,14 +627,18 @@ VectorDB_BioInsight/
 │   └── services/client.ts               # API client
 │
 ├── rnaseq_pipeline/
-│   ├── orchestrator.py                  # Pipeline controller
+│   ├── orchestrator.py                  # Pipeline controller (3 types)
 │   ├── agents/
 │   │   ├── agent1_deg.py                # DESeq2 analysis
 │   │   ├── agent2_network.py            # Network/Hub genes
 │   │   ├── agent3_pathway.py            # GO/KEGG enrichment
 │   │   ├── agent4_validation.py         # DB validation
 │   │   ├── agent5_visualization.py      # Plots generation
-│   │   └── agent6_report.py             # HTML report
+│   │   ├── agent6_report.py             # HTML report
+│   │   ├── agent_singlecell.py          # Single-cell (Scanpy)
+│   │   ├── agent_singlecell_report.py   # Single-cell report
+│   │   ├── agent_variant.py             # WGS/WES variant analysis
+│   │   └── agent_integrated_driver.py   # Multi-omic driver ID
 │   ├── ml/
 │   │   ├── trainer.py                   # CatBoost training
 │   │   ├── predictor.py                 # Prediction service

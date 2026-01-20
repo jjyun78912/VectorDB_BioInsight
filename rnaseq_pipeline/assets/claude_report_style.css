@@ -1396,6 +1396,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: fixed;  /* Fixed layout for consistent column widths */
 }
 
 .rec-table thead { background: var(--bg-tertiary); }
@@ -1410,9 +1411,24 @@ body {
     text-transform: uppercase;
 }
 
+/* Column widths for therapeutic targets table */
+.rec-table th:nth-child(1),
+.rec-table td:nth-child(1) { width: 12%; }  /* 유전자 */
+.rec-table th:nth-child(2),
+.rec-table td:nth-child(2) { width: 45%; }  /* 추천 근거 - wider */
+.rec-table th:nth-child(3),
+.rec-table td:nth-child(3) { width: 25%; }  /* 기존 약물 */
+.rec-table th:nth-child(4),
+.rec-table td:nth-child(4) { width: 18%; }  /* 타겟 분류 */
+
 .rec-table td {
     padding: var(--sp-3) var(--sp-4);
     border-bottom: 1px solid var(--border-light);
+    word-wrap: break-word;      /* Allow word wrapping */
+    overflow-wrap: break-word;  /* Modern browsers */
+    white-space: normal;        /* Allow text to wrap */
+    vertical-align: top;        /* Align to top when text wraps */
+    line-height: 1.5;           /* Better readability for wrapped text */
 }
 
 .rec-table tbody tr:hover { background: var(--bg-tertiary); }

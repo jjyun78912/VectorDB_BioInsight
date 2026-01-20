@@ -7,6 +7,7 @@ Input:
 - deg_all_results.csv: From Agent 1
 - deg_significant.csv: From Agent 1
 - normalized_counts.csv: From Agent 1
+- counts_for_pca.csv: From Agent 1 (variance-stabilized for PCA)
 - hub_genes.csv: From Agent 2
 - network_edges.csv: From Agent 2
 - pathway_summary.csv: From Agent 3
@@ -165,6 +166,13 @@ class VisualizationAgent(BaseAgent):
         self.deg_all = self.load_csv("deg_all_results.csv", required=False)
         self.deg_sig = self.load_csv("deg_significant.csv", required=False)
         self.norm_counts = self.load_csv("normalized_counts.csv", required=False)
+
+        # Variance-stabilized counts for PCA (preferred over raw normalized counts)
+        self.pca_counts = self.load_csv("counts_for_pca.csv", required=False)
+        if self.pca_counts is not None:
+            self.logger.info("Loaded variance-stabilized counts for PCA (counts_for_pca.csv)")
+        else:
+            self.logger.info("counts_for_pca.csv not found, will use normalized_counts.csv with log2 transform")
 
         # Optional files (from later agents)
         self.hub_genes = self.load_csv("hub_genes.csv", required=False)
@@ -729,9 +737,21 @@ class VisualizationAgent(BaseAgent):
         return saved_files
 
     def _plot_pca(self) -> Optional[List[str]]:
-        """Generate PCA plot with condition-based coloring."""
-        if self.norm_counts is None:
-            self.logger.warning("Skipping PCA - no normalized counts")
+        """Generate PCA plot with condition-based coloring.
+
+        Uses variance-stabilized counts (vst) for better PCA results.
+        VST/rlog transformation stabilizes variance across mean expression levels,
+        preventing high-expression genes from dominating PCA.
+        """
+        # Use variance-stabilized counts if available, otherwise fall back to normalized
+        if self.pca_counts is not None:
+            counts_for_pca = self.pca_counts
+            self.logger.info("Using variance-stabilized counts for PCA")
+        elif self.norm_counts is not None:
+            counts_for_pca = self.norm_counts
+            self.logger.info("Using normalized counts with log2 transform for PCA")
+        else:
+            self.logger.warning("Skipping PCA - no counts data available")
             return None
 
         self.logger.info("Generating PCA plot...")
@@ -740,13 +760,19 @@ class VisualizationAgent(BaseAgent):
         from sklearn.preprocessing import StandardScaler
 
         # Prepare data
-        gene_col = self.norm_counts.columns[0]
-        expr_df = self.norm_counts.set_index(gene_col)
+        gene_col = counts_for_pca.columns[0]
+        expr_df = counts_for_pca.set_index(gene_col)
+
+        # If using raw normalized counts (not vst), apply log2 transform
+        if self.pca_counts is None:
+            self.logger.info("Applying log2(x+1) transformation for PCA")
+            expr_df = np.log2(expr_df + 1)
 
         # Transpose (samples x genes)
         expr_t = expr_df.T
 
-        # Scale and PCA
+        # StandardScaler centers and scales: z = (x - mean) / std
+        # This is appropriate after vst/log transform
         scaler = StandardScaler()
         expr_scaled = scaler.fit_transform(expr_t)
 
@@ -1147,6 +1173,182 @@ class VisualizationAgent(BaseAgent):
 
         plt.tight_layout()
         return self._save_figure(fig, "network_graph")
+
+    def _plot_network_2d_interactive(self) -> Optional[str]:
+        """Generate 2D interactive network visualization with Plotly (hover for gene names)."""
+        if not HAS_PLOTLY:
+            self.logger.warning("Plotly not installed - skipping interactive 2D network")
+            return None
+
+        if self.network_edges is None or len(self.network_edges) == 0:
+            self.logger.warning("Skipping interactive 2D network - no edges")
+            return None
+
+        if self.hub_genes is None or len(self.hub_genes) == 0:
+            self.logger.warning("Skipping interactive 2D network - no hub genes")
+            return None
+
+        self.logger.info("Generating interactive 2D network (Plotly)...")
+
+        try:
+            import networkx as nx
+        except ImportError:
+            return None
+
+        colors = self.config["colors"]
+
+        # Build gene mappings
+        gene_id_to_symbol = {}
+        gene_id_to_direction = {}
+        gene_id_to_log2fc = {}
+        if self.integrated_table is not None:
+            for _, row in self.integrated_table.iterrows():
+                gid = row['gene_id']
+                if pd.notna(row.get('gene_symbol')) and row['gene_symbol']:
+                    gene_id_to_symbol[gid] = row['gene_symbol']
+                gene_id_to_direction[gid] = row.get('direction', 'none')
+                gene_id_to_log2fc[gid] = row.get('log2FC', 0)
+
+        def get_gene_label(gene_id: str) -> str:
+            if gene_id in gene_id_to_symbol:
+                return gene_id_to_symbol[gene_id]
+            if gene_id.startswith('ENSG'):
+                return gene_id.split('.')[0][-6:]
+            return gene_id
+
+        # Build graph
+        G = nx.Graph()
+        for _, row in self.network_edges.iterrows():
+            label1 = get_gene_label(row['gene1'])
+            label2 = get_gene_label(row['gene2'])
+            G.add_edge(label1, label2, weight=row['abs_correlation'])
+            G.nodes[label1]['gene_id'] = row['gene1']
+            G.nodes[label2]['gene_id'] = row['gene2']
+
+        if G.number_of_nodes() == 0:
+            return None
+
+        # Hub gene info
+        hub_set_ids = set(self.hub_genes['gene_id'].tolist())
+        hub_set_labels = {get_gene_label(h) for h in hub_set_ids}
+
+        # Limit to hub-centered subgraph
+        if G.number_of_nodes() > 80:
+            nodes_to_keep = set()
+            for hub_label in hub_set_labels:
+                if hub_label in G:
+                    nodes_to_keep.add(hub_label)
+                    nodes_to_keep.update(list(G.neighbors(hub_label))[:8])
+            G = G.subgraph(nodes_to_keep).copy()
+
+        # Layout
+        pos = nx.kamada_kawai_layout(G)
+
+        # Create edge traces
+        edge_x, edge_y = [], []
+        for edge in G.edges():
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.extend([x0, x1, None])
+            edge_y.extend([y0, y1, None])
+
+        edge_trace = go.Scatter(
+            x=edge_x, y=edge_y,
+            line=dict(width=0.5, color='#bdbdbd'),
+            hoverinfo='none',
+            mode='lines'
+        )
+
+        # Create node traces by direction
+        fig = go.Figure()
+        fig.add_trace(edge_trace)
+
+        # Group nodes by direction
+        nodes_by_direction = {'up': [], 'down': [], 'other': []}
+        for node in G.nodes():
+            gene_id = G.nodes[node].get('gene_id', '')
+            direction = gene_id_to_direction.get(gene_id, 'none')
+            if direction == 'up':
+                nodes_by_direction['up'].append(node)
+            elif direction == 'down':
+                nodes_by_direction['down'].append(node)
+            else:
+                nodes_by_direction['other'].append(node)
+
+        # Add traces for each direction
+        direction_config = {
+            'up': {'color': colors['up'], 'name': 'Upregulated'},
+            'down': {'color': colors['down'], 'name': 'Downregulated'},
+            'other': {'color': colors['ns'], 'name': 'Other'}
+        }
+
+        for direction, nodes in nodes_by_direction.items():
+            if not nodes:
+                continue
+
+            node_x, node_y, node_text, node_sizes = [], [], [], []
+            for node in nodes:
+                x, y = pos[node]
+                node_x.append(x)
+                node_y.append(y)
+
+                gene_id = G.nodes[node].get('gene_id', '')
+                log2fc = gene_id_to_log2fc.get(gene_id, 0)
+                degree = G.degree(node)
+                is_hub = node in hub_set_labels
+
+                hover_text = f"<b>{node}</b><br>log2FC: {log2fc:.2f}<br>Connections: {degree}"
+                if is_hub:
+                    hover_text += "<br><b>★ Hub Gene</b>"
+                node_text.append(hover_text)
+
+                # Size by hub status
+                if is_hub:
+                    node_sizes.append(25)
+                else:
+                    node_sizes.append(12)
+
+            fig.add_trace(go.Scatter(
+                x=node_x, y=node_y,
+                mode='markers',
+                name=direction_config[direction]['name'],
+                marker=dict(
+                    size=node_sizes,
+                    color=direction_config[direction]['color'],
+                    line=dict(width=1, color='white')
+                ),
+                text=node_text,
+                hoverinfo='text',
+                hovertemplate='%{text}<extra></extra>'
+            ))
+
+        # Layout
+        fig.update_layout(
+            title=dict(
+                text=f'<b>Gene Co-expression Network</b><br><sup>{G.number_of_nodes()} genes | {G.number_of_edges()} edges | Hover for details</sup>',
+                x=0.5
+            ),
+            showlegend=True,
+            legend=dict(
+                yanchor="top", y=0.99,
+                xanchor="right", x=0.99,
+                bgcolor='rgba(255,255,255,0.9)'
+            ),
+            hovermode='closest',
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            plot_bgcolor='white',
+            width=750,
+            height=550,
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+
+        # Save
+        html_path = self.figures_dir / "network_2d_interactive.html"
+        fig.write_html(str(html_path), include_plotlyjs='cdn')
+        self.logger.info(f"Saved interactive 2D network: {html_path.name}")
+
+        return str(html_path)
 
     def _plot_pathway_barplot(self) -> Optional[List[str]]:
         """Generate npj-style pathway enrichment barplot.
@@ -1939,6 +2141,15 @@ class VisualizationAgent(BaseAgent):
                     self.logger.info("Interactive 3D network generated successfully")
             except Exception as e:
                 self.logger.error(f"Error generating 3D network: {e}")
+
+            # Interactive 2D network (hover-only labels)
+            try:
+                network_2d_result = self._plot_network_2d_interactive()
+                if network_2d_result:
+                    interactive_files.append(network_2d_result)
+                    self.logger.info("Interactive 2D network generated successfully")
+            except Exception as e:
+                self.logger.error(f"Error generating 2D network: {e}")
 
         self.logger.info(f"Visualization Complete:")
         self.logger.info(f"  Static figures: {len(generated_figures)} files")

@@ -12,6 +12,7 @@ Output:
 - deg_all_results.csv: Full DESeq2 results
 - deg_significant.csv: Filtered significant DEGs
 - normalized_counts.csv: DESeq2 normalized counts
+- counts_for_pca.csv: Variance-stabilized counts (vst) for PCA/clustering
 - meta_agent1.json: Execution metadata
 """
 
@@ -281,10 +282,28 @@ class DEGAgent(BaseAgent):
         bioc_generics = importr('BiocGenerics')
         norm_counts = bioc_generics.counts(dds, normalized=True)
 
+        # Get variance-stabilized transformation (vst) for PCA
+        # vst is more efficient than rlog for large datasets (>30 samples)
+        self.logger.info("Applying variance stabilizing transformation (vst) for PCA...")
+        try:
+            # Import SummarizedExperiment for assay() function
+            se = importr('SummarizedExperiment')
+            vst_data = deseq2.vst(dds, blind=True)  # blind=True for unsupervised analysis
+            vst_counts = se.assay(vst_data)
+            self.logger.info("VST transformation completed successfully")
+        except Exception as e:
+            self.logger.warning(f"VST failed: {e}. Falling back to log2(norm+1) transformation.")
+            vst_counts = None
+
         # Convert back to pandas
         with localconverter(ro.default_converter + pandas2ri.converter):
             results_df = ro.conversion.rpy2py(base.as_data_frame(res))
             norm_counts_df = ro.conversion.rpy2py(base.as_data_frame(norm_counts))
+            if vst_counts is not None:
+                vst_counts_df = ro.conversion.rpy2py(base.as_data_frame(vst_counts))
+            else:
+                # Fallback: log2(normalized_counts + 1)
+                vst_counts_df = np.log2(norm_counts_df.set_index(norm_counts_df.columns[0]) + 1).reset_index()
 
         # Log original columns for debugging
         self.logger.info(f"DESeq2 result columns: {list(results_df.columns)}")
@@ -313,15 +332,19 @@ class DEGAgent(BaseAgent):
         results_df.insert(0, 'gene_id', count_df.index)
         norm_counts_df.insert(0, 'gene_id', count_df.index)
 
+        # Add gene_id to vst counts if not already present
+        if 'gene_id' not in vst_counts_df.columns:
+            vst_counts_df.insert(0, 'gene_id', count_df.index)
+
         # Ensure consistent column order
         expected_cols = ['gene_id', 'baseMean', 'log2FC', 'lfcSE', 'stat', 'pvalue', 'padj']
         results_df = results_df[expected_cols]
 
         self.logger.info(f"Final result shape: {results_df.shape}")
 
-        return results_df, norm_counts_df
+        return results_df, norm_counts_df, vst_counts_df
 
-    def _run_synthetic_deg(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _run_synthetic_deg(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Generate synthetic DEG results (fallback when DESeq2 fails)."""
         self.logger.warning("Using synthetic DEG analysis (DESeq2 unavailable)")
 
@@ -414,22 +437,29 @@ class DEGAgent(BaseAgent):
         norm_counts_df = count_df.div(total_counts, axis=1) * 1e6
         norm_counts_df.insert(0, 'gene_id', count_df.index)
 
-        return results_df, norm_counts_df
+        # Log2 transformation for PCA (approximates vst for synthetic method)
+        # Use log2(CPM + 1) which is common for visualization
+        vst_counts_df = np.log2(norm_counts_df.set_index('gene_id') + 1)
+        vst_counts_df = vst_counts_df.reset_index()
+        vst_counts_df = vst_counts_df.rename(columns={'index': 'gene_id'})
+        self.logger.info("Created log2(CPM+1) transformed counts for PCA")
+
+        return results_df, norm_counts_df, vst_counts_df
 
     def run(self) -> Dict[str, Any]:
         """Execute DEG analysis."""
         # Try DESeq2 first, fallback to synthetic
         try:
             if HAS_RPY2:
-                results_df, norm_counts_df = self._run_deseq2()
+                results_df, norm_counts_df, vst_counts_df = self._run_deseq2()
                 method_used = "DESeq2"
             else:
-                results_df, norm_counts_df = self._run_synthetic_deg()
+                results_df, norm_counts_df, vst_counts_df = self._run_synthetic_deg()
                 method_used = "synthetic_ttest"
         except Exception as e:
             self.logger.warning(f"DESeq2 failed: {e}")
             if self.config["use_synthetic_fallback"]:
-                results_df, norm_counts_df = self._run_synthetic_deg()
+                results_df, norm_counts_df, vst_counts_df = self._run_synthetic_deg()
                 method_used = "synthetic_ttest_fallback"
             else:
                 raise
@@ -469,6 +499,10 @@ class DEGAgent(BaseAgent):
         # Save normalized counts
         self.save_csv(norm_counts_df, "normalized_counts.csv")
 
+        # Save variance-stabilized counts for PCA/clustering
+        self.save_csv(vst_counts_df, "counts_for_pca.csv")
+        self.logger.info(f"Saved variance-stabilized counts for PCA: {vst_counts_df.shape}")
+
         # Calculate statistics
         up_count = (significant['direction'] == 'up').sum()
         down_count = (significant['direction'] == 'down').sum()
@@ -495,7 +529,8 @@ class DEGAgent(BaseAgent):
         required_files = [
             "deg_all_results.csv",
             "deg_significant.csv",
-            "normalized_counts.csv"
+            "normalized_counts.csv",
+            "counts_for_pca.csv"
         ]
 
         for filename in required_files:

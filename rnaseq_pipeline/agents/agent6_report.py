@@ -1462,6 +1462,133 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _generate_brief_abstract_html(self, data: Dict) -> str:
+        """Generate a brief abstract section right after study overview."""
+        extended_abstract = data.get('abstract_extended', {})
+
+        if not extended_abstract:
+            return ''
+
+        # Get key information
+        title = extended_abstract.get('title', '')
+        title_en = extended_abstract.get('title_en', '')
+        key_findings = extended_abstract.get('key_findings', [])
+        abstract_text = extended_abstract.get('abstract_extended', '')
+
+        # Extract just the background and conclusion for brief version
+        brief_parts = []
+        if abstract_text:
+            paragraphs = abstract_text.split('\n\n')
+            for p in paragraphs:
+                p_stripped = p.strip()
+                if p_stripped.startswith('배경:') or p_stripped.startswith('결론:'):
+                    brief_parts.append(p_stripped)
+
+        brief_text = '\n\n'.join(brief_parts) if brief_parts else abstract_text[:500] + '...'
+
+        # Format key findings as list
+        findings_html = ''
+        if key_findings:
+            findings_items = ''.join([f'<li>{f}</li>' for f in key_findings[:5]])
+            findings_html = f'''
+            <div class="key-findings">
+                <h4>📌 핵심 발견</h4>
+                <ul>{findings_items}</ul>
+            </div>
+            '''
+
+        # Title section
+        title_html = ''
+        if title:
+            title_html = f'''
+            <div class="abstract-title-box">
+                <h3>{title}</h3>
+                {f'<p class="title-en">{title_en}</p>' if title_en else ''}
+            </div>
+            '''
+
+        return f'''
+        <section class="brief-abstract-section" id="brief-abstract">
+            <h2>1.5 연구 요약 (Abstract)</h2>
+
+            {title_html}
+
+            <div class="brief-abstract-content">
+                <div class="abstract-text">
+                    {brief_text.replace(chr(10)+chr(10), '</p><p>')}
+                </div>
+
+                {findings_html}
+            </div>
+
+            <style>
+                .brief-abstract-section {{
+                    margin-bottom: var(--sp-6);
+                }}
+                .abstract-title-box {{
+                    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+                    padding: var(--sp-4) var(--sp-5);
+                    border-radius: var(--radius-md);
+                    border-left: 4px solid var(--accent-blue);
+                    margin-bottom: var(--sp-4);
+                }}
+                .abstract-title-box h3 {{
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: var(--text-primary);
+                    margin: 0 0 var(--sp-2) 0;
+                }}
+                .abstract-title-box .title-en {{
+                    font-size: 13px;
+                    color: var(--text-secondary);
+                    font-style: italic;
+                    margin: 0;
+                }}
+                .brief-abstract-content {{
+                    display: grid;
+                    grid-template-columns: 2fr 1fr;
+                    gap: var(--sp-4);
+                }}
+                .abstract-text {{
+                    font-size: 14px;
+                    line-height: 1.7;
+                    color: var(--text-primary);
+                    text-align: justify;
+                }}
+                .abstract-text p {{
+                    margin-bottom: var(--sp-3);
+                }}
+                .key-findings {{
+                    background: var(--bg-tertiary);
+                    padding: var(--sp-4);
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--border-light);
+                }}
+                .key-findings h4 {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: var(--accent-blue);
+                    margin: 0 0 var(--sp-3) 0;
+                }}
+                .key-findings ul {{
+                    margin: 0;
+                    padding-left: var(--sp-4);
+                }}
+                .key-findings li {{
+                    font-size: 13px;
+                    line-height: 1.5;
+                    color: var(--text-primary);
+                    margin-bottom: var(--sp-2);
+                }}
+                @media (max-width: 768px) {{
+                    .brief-abstract-content {{
+                        grid-template-columns: 1fr;
+                    }}
+                }}
+            </style>
+        </section>
+        '''
+
     def _generate_qc_section_html(self, data: Dict) -> str:
         """Generate Data Quality Control section with PCA and correlation heatmap."""
         figures = data.get('figures', {})
@@ -5713,6 +5840,9 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
     <main class="paper-content">
         <!-- 1. Study Overview -->
         {self._generate_study_overview_html(data)}
+
+        <!-- 1.5 Brief Abstract -->
+        {self._generate_brief_abstract_html(data)}
 
         <!-- 2. Data Quality Control -->
         {self._generate_qc_section_html(data)}
