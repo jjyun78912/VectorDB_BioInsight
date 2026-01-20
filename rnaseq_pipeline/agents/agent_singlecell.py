@@ -1660,92 +1660,737 @@ class SingleCellAgent(BaseAgent):
             self._run_simple_lr_analysis()
 
     def _run_simple_lr_analysis(self):
-        """Simple ligand-receptor analysis without LIANA."""
-        self.logger.info("  Running simple ligand-receptor analysis...")
+        """Enhanced ligand-receptor analysis with CellChat-style approach."""
+        self.logger.info("  Running enhanced ligand-receptor analysis...")
 
-        # Common ligand-receptor pairs (curated list)
-        lr_pairs = [
-            # Immune checkpoints
-            ('CD274', 'PDCD1'),      # PD-L1 - PD-1
-            ('CD80', 'CD28'),        # CD80 - CD28
-            ('CD80', 'CTLA4'),       # CD80 - CTLA4
-            ('CD86', 'CD28'),        # CD86 - CD28
-            ('LGALS9', 'HAVCR2'),    # Galectin-9 - TIM-3
+        # Comprehensive ligand-receptor database (CellChat/CellPhoneDB style)
+        lr_database = {
+            # =====================================================
+            # IMMUNE CHECKPOINTS (Critical for Immunotherapy)
+            # =====================================================
+            'immune_checkpoint': [
+                ('CD274', 'PDCD1', 'PD-L1_PD-1', 'inhibitory'),      # PD-L1 - PD-1
+                ('PDCD1LG2', 'PDCD1', 'PD-L2_PD-1', 'inhibitory'),   # PD-L2 - PD-1
+                ('CD80', 'CTLA4', 'CD80_CTLA4', 'inhibitory'),       # CD80 - CTLA4
+                ('CD86', 'CTLA4', 'CD86_CTLA4', 'inhibitory'),       # CD86 - CTLA4
+                ('CD80', 'CD28', 'CD80_CD28', 'stimulatory'),        # CD80 - CD28
+                ('CD86', 'CD28', 'CD86_CD28', 'stimulatory'),        # CD86 - CD28
+                ('LGALS9', 'HAVCR2', 'Galectin9_TIM3', 'inhibitory'),# Galectin-9 - TIM-3
+                ('TNFRSF14', 'BTLA', 'HVEM_BTLA', 'inhibitory'),     # HVEM - BTLA
+                ('CD274', 'CD80', 'PD-L1_CD80', 'inhibitory'),       # PD-L1 - CD80 (cis)
+                ('TIGIT', 'PVR', 'TIGIT_PVR', 'inhibitory'),         # TIGIT - PVR
+                ('CD96', 'PVR', 'CD96_PVR', 'inhibitory'),           # CD96 - PVR
+                ('LAG3', 'HLA-DRA', 'LAG3_MHCII', 'inhibitory'),     # LAG-3 - MHC-II
+                ('SIGLEC10', 'CD24', 'SIGLEC10_CD24', 'inhibitory'), # Don't eat me signal
+            ],
 
-            # Growth factors
-            ('VEGFA', 'KDR'),        # VEGF - VEGFR2
-            ('VEGFA', 'FLT1'),       # VEGF - VEGFR1
-            ('EGF', 'EGFR'),         # EGF - EGFR
-            ('HGF', 'MET'),          # HGF - MET
-            ('TGFB1', 'TGFBR1'),     # TGF-β - TGF-βR
+            # =====================================================
+            # GROWTH FACTORS & RECEPTORS
+            # =====================================================
+            'growth_factor': [
+                ('VEGFA', 'KDR', 'VEGFA_VEGFR2', 'angiogenesis'),
+                ('VEGFA', 'FLT1', 'VEGFA_VEGFR1', 'angiogenesis'),
+                ('VEGFB', 'FLT1', 'VEGFB_VEGFR1', 'angiogenesis'),
+                ('VEGFC', 'FLT4', 'VEGFC_VEGFR3', 'lymphangiogenesis'),
+                ('EGF', 'EGFR', 'EGF_EGFR', 'proliferation'),
+                ('TGFA', 'EGFR', 'TGFA_EGFR', 'proliferation'),
+                ('AREG', 'EGFR', 'AREG_EGFR', 'proliferation'),
+                ('HGF', 'MET', 'HGF_MET', 'invasion'),
+                ('TGFB1', 'TGFBR1', 'TGFB1_TGFBR1', 'immunosuppression'),
+                ('TGFB1', 'TGFBR2', 'TGFB1_TGFBR2', 'immunosuppression'),
+                ('TGFB2', 'TGFBR1', 'TGFB2_TGFBR1', 'immunosuppression'),
+                ('PDGFA', 'PDGFRA', 'PDGFA_PDGFRA', 'fibrosis'),
+                ('PDGFB', 'PDGFRB', 'PDGFB_PDGFRB', 'fibrosis'),
+                ('FGF2', 'FGFR1', 'FGF2_FGFR1', 'angiogenesis'),
+                ('IGF1', 'IGF1R', 'IGF1_IGF1R', 'survival'),
+                ('IGF2', 'IGF1R', 'IGF2_IGF1R', 'survival'),
+                ('WNT5A', 'FZD5', 'WNT5A_FZD5', 'invasion'),
+            ],
 
-            # Chemokines
-            ('CXCL12', 'CXCR4'),     # SDF-1 - CXCR4
-            ('CCL2', 'CCR2'),        # MCP-1 - CCR2
-            ('CCL5', 'CCR5'),        # RANTES - CCR5
-            ('CXCL8', 'CXCR1'),      # IL-8 - CXCR1
+            # =====================================================
+            # CHEMOKINES & RECEPTORS (TME recruitment)
+            # =====================================================
+            'chemokine': [
+                ('CXCL12', 'CXCR4', 'CXCL12_CXCR4', 'homing'),       # SDF-1 - CXCR4
+                ('CXCL12', 'CXCR7', 'CXCL12_CXCR7', 'homing'),       # SDF-1 - ACKR3
+                ('CCL2', 'CCR2', 'CCL2_CCR2', 'monocyte_recruitment'),
+                ('CCL5', 'CCR5', 'CCL5_CCR5', 'T_cell_recruitment'),
+                ('CXCL8', 'CXCR1', 'CXCL8_CXCR1', 'neutrophil_recruitment'),
+                ('CXCL8', 'CXCR2', 'CXCL8_CXCR2', 'neutrophil_recruitment'),
+                ('CXCL9', 'CXCR3', 'CXCL9_CXCR3', 'T_cell_recruitment'),
+                ('CXCL10', 'CXCR3', 'CXCL10_CXCR3', 'T_cell_recruitment'),
+                ('CXCL11', 'CXCR3', 'CXCL11_CXCR3', 'T_cell_recruitment'),
+                ('CCL19', 'CCR7', 'CCL19_CCR7', 'DC_migration'),
+                ('CCL21', 'CCR7', 'CCL21_CCR7', 'DC_migration'),
+                ('CCL3', 'CCR1', 'CCL3_CCR1', 'macrophage_recruitment'),
+                ('CCL4', 'CCR5', 'CCL4_CCR5', 'macrophage_recruitment'),
+                ('CCL17', 'CCR4', 'CCL17_CCR4', 'Treg_recruitment'),
+                ('CCL22', 'CCR4', 'CCL22_CCR4', 'Treg_recruitment'),
+                ('CX3CL1', 'CX3CR1', 'CX3CL1_CX3CR1', 'NK_recruitment'),
+            ],
 
-            # TNF family
-            ('TNFSF10', 'TNFRSF10A'),  # TRAIL - DR4
-            ('FASLG', 'FAS'),        # FasL - Fas
+            # =====================================================
+            # CYTOKINES & INTERLEUKINS
+            # =====================================================
+            'cytokine': [
+                ('IL6', 'IL6R', 'IL6_IL6R', 'inflammation'),
+                ('IL6', 'IL6ST', 'IL6_gp130', 'inflammation'),
+                ('IL10', 'IL10RA', 'IL10_IL10R', 'immunosuppression'),
+                ('IL1B', 'IL1R1', 'IL1B_IL1R', 'inflammation'),
+                ('IL1A', 'IL1R1', 'IL1A_IL1R', 'inflammation'),
+                ('IFNG', 'IFNGR1', 'IFNG_IFNGR', 'antitumor'),
+                ('TNF', 'TNFRSF1A', 'TNF_TNFR1', 'apoptosis'),
+                ('TNF', 'TNFRSF1B', 'TNF_TNFR2', 'survival'),
+                ('IL2', 'IL2RA', 'IL2_IL2R', 'T_cell_activation'),
+                ('IL15', 'IL15RA', 'IL15_IL15R', 'NK_activation'),
+                ('IL4', 'IL4R', 'IL4_IL4R', 'Th2_polarization'),
+                ('IL13', 'IL13RA1', 'IL13_IL13R', 'Th2_polarization'),
+                ('IL17A', 'IL17RA', 'IL17_IL17R', 'inflammation'),
+                ('IL23A', 'IL23R', 'IL23_IL23R', 'Th17_polarization'),
+                ('CSF1', 'CSF1R', 'CSF1_CSF1R', 'macrophage_polarization'),
+                ('CSF2', 'CSF2RA', 'GMCSF_GMCSFR', 'DC_maturation'),
+            ],
 
-            # Interleukins
-            ('IL6', 'IL6R'),         # IL-6 - IL-6R
-            ('IL10', 'IL10RA'),      # IL-10 - IL-10R
-            ('IL1B', 'IL1R1'),       # IL-1β - IL-1R
+            # =====================================================
+            # DEATH RECEPTOR SIGNALING
+            # =====================================================
+            'death_receptor': [
+                ('TNFSF10', 'TNFRSF10A', 'TRAIL_DR4', 'apoptosis'),
+                ('TNFSF10', 'TNFRSF10B', 'TRAIL_DR5', 'apoptosis'),
+                ('FASLG', 'FAS', 'FASL_FAS', 'apoptosis'),
+                ('TNFSF14', 'TNFRSF14', 'LIGHT_HVEM', 'apoptosis'),
+            ],
 
-            # Notch signaling
-            ('DLL1', 'NOTCH1'),      # DLL1 - Notch1
-            ('JAG1', 'NOTCH1'),      # Jagged1 - Notch1
+            # =====================================================
+            # NOTCH SIGNALING
+            # =====================================================
+            'notch': [
+                ('DLL1', 'NOTCH1', 'DLL1_NOTCH1', 'differentiation'),
+                ('DLL4', 'NOTCH1', 'DLL4_NOTCH1', 'angiogenesis'),
+                ('JAG1', 'NOTCH1', 'JAG1_NOTCH1', 'stemness'),
+                ('JAG1', 'NOTCH2', 'JAG1_NOTCH2', 'differentiation'),
+                ('JAG2', 'NOTCH1', 'JAG2_NOTCH1', 'differentiation'),
+            ],
 
-            # Adhesion
-            ('ICAM1', 'ITGAL'),      # ICAM-1 - LFA-1
-            ('VCAM1', 'ITGA4'),      # VCAM-1 - VLA-4
-        ]
+            # =====================================================
+            # CELL ADHESION & MIGRATION
+            # =====================================================
+            'adhesion': [
+                ('ICAM1', 'ITGAL', 'ICAM1_LFA1', 'adhesion'),        # LFA-1 = CD11a/CD18
+                ('VCAM1', 'ITGA4', 'VCAM1_VLA4', 'adhesion'),        # VLA-4 = α4β1
+                ('SELE', 'SELPLG', 'ESELECTIN_PSGL1', 'rolling'),
+                ('SELP', 'SELPLG', 'PSELECTIN_PSGL1', 'rolling'),
+                ('CD44', 'SPP1', 'CD44_OPN', 'invasion'),
+                ('CD44', 'HAS1', 'CD44_HA', 'invasion'),
+                ('ITGAV', 'THBS1', 'INTEGRIN_TSP1', 'adhesion'),
+                ('CDH1', 'CDH1', 'ECAD_ECAD', 'homophilic'),         # E-cadherin
+            ],
 
-        # Check which pairs are expressed
+            # =====================================================
+            # MHC & ANTIGEN PRESENTATION
+            # =====================================================
+            'antigen_presentation': [
+                ('HLA-A', 'CD8A', 'MHCI_CD8', 'T_cell_recognition'),
+                ('HLA-B', 'CD8A', 'MHCI_CD8', 'T_cell_recognition'),
+                ('HLA-C', 'CD8A', 'MHCI_CD8', 'T_cell_recognition'),
+                ('HLA-DRA', 'CD4', 'MHCII_CD4', 'T_cell_recognition'),
+                ('HLA-A', 'KIR2DL1', 'MHCI_KIR', 'NK_inhibition'),
+                ('HLA-A', 'KIR3DL1', 'MHCI_KIR', 'NK_inhibition'),
+                ('B2M', 'LILRB1', 'B2M_LILRB1', 'NK_inhibition'),
+            ],
+
+            # =====================================================
+            # COSTIMULATORY MOLECULES
+            # =====================================================
+            'costimulatory': [
+                ('CD40LG', 'CD40', 'CD40L_CD40', 'APC_activation'),
+                ('TNFSF4', 'TNFRSF4', 'OX40L_OX40', 'T_cell_survival'),
+                ('TNFSF9', 'TNFRSF9', '4-1BBL_4-1BB', 'T_cell_survival'),
+                ('CD70', 'CD27', 'CD70_CD27', 'T_cell_activation'),
+                ('ICOS', 'ICOSLG', 'ICOS_ICOSL', 'T_cell_activation'),
+            ],
+        }
+
+        # Convert to simple list format
+        lr_pairs = []
+        lr_categories = {}
+        for category, pairs in lr_database.items():
+            for pair_info in pairs:
+                ligand, receptor, name, function = pair_info
+                lr_pairs.append((ligand, receptor))
+                lr_categories[(ligand, receptor)] = {
+                    'category': category,
+                    'name': name,
+                    'function': function
+                }
+
+        # Calculate mean expression per cell type for all genes at once
+        cell_types = self.adata.obs['cell_type'].unique().tolist()
+        self.logger.info(f"  Analyzing {len(lr_pairs)} ligand-receptor pairs across {len(cell_types)} cell types...")
+
+        # Pre-compute mean expression per cell type
+        expr_by_celltype = {}
+        for ct in cell_types:
+            mask = self.adata.obs['cell_type'] == ct
+            subset = self.adata[mask]
+            if hasattr(subset.X, 'toarray'):
+                expr_by_celltype[ct] = pd.Series(
+                    np.asarray(subset.X.mean(axis=0)).flatten(),
+                    index=self.adata.var_names
+                )
+            else:
+                expr_by_celltype[ct] = pd.Series(
+                    subset.X.mean(axis=0).flatten(),
+                    index=self.adata.var_names
+                )
+
+        # Calculate interactions
         interactions = []
         for ligand, receptor in lr_pairs:
-            if ligand in self.adata.var_names and receptor in self.adata.var_names:
-                # Calculate expression per cell type
-                for source_type in self.adata.obs['cell_type'].unique():
-                    source_mask = self.adata.obs['cell_type'] == source_type
-                    ligand_expr = self.adata[source_mask, ligand].X.mean() if hasattr(self.adata[source_mask, ligand].X, 'mean') else np.mean(self.adata[source_mask, ligand].X.toarray())
+            if ligand not in self.adata.var_names or receptor not in self.adata.var_names:
+                continue
 
-                    for target_type in self.adata.obs['cell_type'].unique():
-                        target_mask = self.adata.obs['cell_type'] == target_type
-                        receptor_expr = self.adata[target_mask, receptor].X.mean() if hasattr(self.adata[target_mask, receptor].X, 'mean') else np.mean(self.adata[target_mask, receptor].X.toarray())
+            pair_info = lr_categories.get((ligand, receptor), {})
+            category = pair_info.get('category', 'unknown')
+            name = pair_info.get('name', f'{ligand}_{receptor}')
+            function = pair_info.get('function', 'unknown')
 
-                        # Calculate interaction score (product of expressions)
-                        score = float(ligand_expr) * float(receptor_expr)
+            for source_type in cell_types:
+                ligand_expr = float(expr_by_celltype[source_type].get(ligand, 0))
+                if ligand_expr < 0.1:  # Minimum ligand expression threshold
+                    continue
 
-                        if score > 0.01:  # Threshold for minimum expression
-                            interactions.append({
-                                'source': source_type,
-                                'target': target_type,
-                                'ligand': ligand,
-                                'receptor': receptor,
-                                'ligand_expr': float(ligand_expr),
-                                'receptor_expr': float(receptor_expr),
-                                'interaction_score': score,
-                            })
+                for target_type in cell_types:
+                    receptor_expr = float(expr_by_celltype[target_type].get(receptor, 0))
+                    if receptor_expr < 0.1:  # Minimum receptor expression threshold
+                        continue
+
+                    # CellChat-style score: geometric mean
+                    score = np.sqrt(ligand_expr * receptor_expr)
+
+                    # Specificity: how specific is this interaction?
+                    # (expression in this pair vs overall mean)
+                    all_ligand_expr = np.mean([expr_by_celltype[ct].get(ligand, 0) for ct in cell_types])
+                    all_receptor_expr = np.mean([expr_by_celltype[ct].get(receptor, 0) for ct in cell_types])
+                    specificity = score / (np.sqrt(all_ligand_expr * all_receptor_expr) + 0.01)
+
+                    interactions.append({
+                        'source': source_type,
+                        'target': target_type,
+                        'ligand': ligand,
+                        'receptor': receptor,
+                        'interaction_name': name,
+                        'category': category,
+                        'function': function,
+                        'ligand_expr': ligand_expr,
+                        'receptor_expr': receptor_expr,
+                        'interaction_score': score,
+                        'specificity': specificity,
+                    })
 
         if interactions:
             interaction_df = pd.DataFrame(interactions)
             interaction_df = interaction_df.sort_values('interaction_score', ascending=False)
-            self.save_csv(interaction_df.head(200), "cell_interactions.csv")
+
+            # Save full results
+            self.save_csv(interaction_df, "cell_interactions.csv")
+
+            # Summarize by category
+            category_summary = interaction_df.groupby('category').agg({
+                'interaction_score': ['count', 'mean', 'max']
+            }).round(3)
+            category_summary.columns = ['n_interactions', 'mean_score', 'max_score']
+            category_summary = category_summary.sort_values('n_interactions', ascending=False)
+
+            # Top interactions per category
+            top_by_category = {}
+            for cat in interaction_df['category'].unique():
+                cat_df = interaction_df[interaction_df['category'] == cat]
+                top_by_category[cat] = cat_df.nlargest(5, 'interaction_score')[
+                    ['source', 'target', 'interaction_name', 'interaction_score']
+                ].to_dict('records')
 
             self.interaction_results = {
-                'method': 'simple_lr',
+                'method': 'cellchat_style',
                 'n_interactions': len(interaction_df),
                 'n_pairs_checked': len(lr_pairs),
-                'top_interactions': interaction_df.head(20).to_dict('records'),
+                'n_pairs_expressed': len(interaction_df[['ligand', 'receptor']].drop_duplicates()),
+                'category_summary': category_summary.to_dict(),
+                'top_by_category': top_by_category,
+                'top_interactions': interaction_df.head(30).to_dict('records'),
             }
 
-            self.logger.info(f"  Found {len(interaction_df)} ligand-receptor interactions")
+            self.logger.info(f"  Found {len(interaction_df)} interactions from {self.interaction_results['n_pairs_expressed']} L-R pairs")
+            self.logger.info(f"  Categories: {list(category_summary.index)}")
         else:
             self.logger.info("  No significant interactions found")
-            self.interaction_results = {'method': 'simple_lr', 'n_interactions': 0}
+            self.interaction_results = {'method': 'cellchat_style', 'n_interactions': 0}
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # NEW STEP 15: TME (Tumor Microenvironment) Analysis
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    def _analyze_tme(self):
+        """Analyze tumor microenvironment composition and immune infiltration scores."""
+        if not self.config.get("enable_tme_analysis", True):
+            self.logger.info("  TME analysis disabled, skipping...")
+            return
+
+        self.logger.info("Step 15: TME (Tumor Microenvironment) Analysis")
+
+        # TME cell type categories
+        tme_categories = {
+            # Immune cells - Anti-tumor
+            'cytotoxic': ['CD8_T', 'CD8A', 'NK_cells', 'NKT'],
+            'helper': ['CD4_T', 'T_cells', 'Th1', 'Th2'],
+            'antigen_presenting': ['Dendritic_cells', 'cDC1', 'cDC2', 'pDC', 'B_cells'],
+
+            # Immune cells - Pro-tumor / Immunosuppressive
+            'immunosuppressive': ['Treg', 'MDSC', 'M2_Macro'],
+            'myeloid': ['Monocytes', 'Macrophages', 'Classical_Mono', 'Non_classical_Mono', 'Kupffer_cells'],
+
+            # Stromal cells
+            'stromal': ['Fibroblasts', 'CAF', 'Myofibroblast', 'Stellate_cells', 'Pericytes'],
+            'endothelial': ['Endothelial', 'Vascular_EC', 'Lymphatic_EC', 'LSECs'],
+
+            # Tumor/Epithelial cells (varies by cancer type)
+            'epithelial': ['Epithelial', 'Hepatocytes', 'Colonocytes', 'Alveolar_type2',
+                          'Luminal_epithelial', 'Ductal_cells', 'Acinar_cells'],
+        }
+
+        # Immune signature genes (CIBERSORT-style markers)
+        immune_signatures = {
+            'T_cell_activation': ['CD3D', 'CD3E', 'CD28', 'LCK', 'ZAP70', 'ITK'],
+            'Cytotoxic_activity': ['GZMA', 'GZMB', 'GZMK', 'PRF1', 'GNLY', 'NKG7', 'IFNG'],
+            'Exhaustion': ['PDCD1', 'CTLA4', 'LAG3', 'HAVCR2', 'TIGIT', 'TOX'],
+            'Treg_signature': ['FOXP3', 'IL2RA', 'CTLA4', 'IKZF2', 'IL10'],
+            'M1_macrophage': ['CD80', 'CD86', 'IL1B', 'TNF', 'NOS2', 'CXCL9', 'CXCL10'],
+            'M2_macrophage': ['CD163', 'MRC1', 'MSR1', 'IL10', 'TGFB1', 'CCL18'],
+            'Inflammatory': ['IL1B', 'IL6', 'TNF', 'CXCL8', 'CCL2', 'PTGS2'],
+            'Angiogenesis': ['VEGFA', 'VEGFB', 'VEGFC', 'FGF2', 'ANGPT1', 'ANGPT2'],
+            'Hypoxia': ['HIF1A', 'LDHA', 'SLC2A1', 'PGK1', 'VEGFA', 'CA9'],
+            'Antigen_presentation': ['HLA-A', 'HLA-B', 'HLA-C', 'HLA-DRA', 'B2M', 'TAP1', 'TAP2'],
+            'IFN_response': ['STAT1', 'IRF1', 'IRF7', 'MX1', 'OAS1', 'ISG15', 'IFIT1'],
+        }
+
+        # Calculate TME composition based on cell type annotations
+        tme_composition = {}
+        total_cells = len(self.adata.obs)
+
+        for category, cell_types in tme_categories.items():
+            count = 0
+            for ct in cell_types:
+                # Match cell types (handling suffixes like _2, _3)
+                matches = self.adata.obs['cell_type'].str.startswith(ct).sum()
+                count += matches
+            tme_composition[category] = {
+                'count': int(count),
+                'percentage': count / total_cells * 100
+            }
+
+        # Calculate immune signature scores per cell type
+        signature_scores = {}
+        cell_types = self.adata.obs['cell_type'].unique()
+
+        for sig_name, genes in immune_signatures.items():
+            valid_genes = [g for g in genes if g in self.adata.var_names]
+            if len(valid_genes) >= 2:  # Need at least 2 genes
+                # Score using scanpy
+                score_name = f'score_{sig_name}'
+                sc.tl.score_genes(self.adata, valid_genes, score_name=score_name)
+
+                # Calculate mean score per cell type
+                scores_by_ct = {}
+                for ct in cell_types:
+                    mask = self.adata.obs['cell_type'] == ct
+                    mean_score = float(self.adata.obs.loc[mask, score_name].mean())
+                    scores_by_ct[ct] = mean_score
+                signature_scores[sig_name] = scores_by_ct
+
+        # Calculate immune infiltration score (overall)
+        immune_cell_types = ['T_cells', 'NK_cells', 'B_cells', 'Monocytes', 'Macrophages',
+                            'Dendritic_cells', 'Plasma_cells', 'Mast_cells', 'Neutrophils']
+        immune_count = 0
+        for ct in immune_cell_types:
+            immune_count += self.adata.obs['cell_type'].str.startswith(ct).sum()
+
+        # Calculate stromal score
+        stromal_types = ['Fibroblasts', 'CAF', 'Endothelial', 'Pericytes', 'Stellate']
+        stromal_count = 0
+        for ct in stromal_types:
+            stromal_count += self.adata.obs['cell_type'].str.startswith(ct).sum()
+
+        # Calculate tumor purity (non-immune, non-stromal)
+        tumor_purity = (total_cells - immune_count - stromal_count) / total_cells * 100
+
+        # Immune score: ratio of immune cells
+        immune_score = immune_count / total_cells * 100
+
+        # Stromal score: ratio of stromal cells
+        stromal_score = stromal_count / total_cells * 100
+
+        # Hot vs Cold tumor classification
+        # Hot: high immune infiltration (>30%) with cytotoxic markers
+        # Cold: low immune infiltration (<10%)
+        cytotoxic_present = any(self.adata.obs['cell_type'].str.contains('CD8|NK|cytotoxic', case=False))
+        if immune_score > 30 and cytotoxic_present:
+            tumor_phenotype = 'Hot (Inflamed)'
+        elif immune_score > 15:
+            tumor_phenotype = 'Immune-Altered'
+        else:
+            tumor_phenotype = 'Cold (Desert)'
+
+        self.tme_results = {
+            'composition': tme_composition,
+            'signature_scores': signature_scores,
+            'immune_score': immune_score,
+            'stromal_score': stromal_score,
+            'tumor_purity': tumor_purity,
+            'tumor_phenotype': tumor_phenotype,
+            'total_cells': total_cells,
+            'immune_cells': immune_count,
+            'stromal_cells': stromal_count,
+        }
+
+        # Save TME results
+        tme_df = pd.DataFrame([
+            {'category': k, 'count': v['count'], 'percentage': v['percentage']}
+            for k, v in tme_composition.items()
+        ])
+        self.save_csv(tme_df, "tme_composition.csv")
+
+        # Save signature scores
+        if signature_scores:
+            sig_df = pd.DataFrame(signature_scores).T
+            sig_df.index.name = 'signature'
+            self.save_csv(sig_df.reset_index(), "tme_signature_scores.csv")
+
+        self.logger.info(f"  Tumor phenotype: {tumor_phenotype}")
+        self.logger.info(f"  Immune score: {immune_score:.1f}%")
+        self.logger.info(f"  Stromal score: {stromal_score:.1f}%")
+        self.logger.info(f"  Tumor purity: {tumor_purity:.1f}%")
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # NEW STEP 16: Gene Regulatory Network Analysis (Cell Type-specific)
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    def _analyze_grn(self):
+        """Infer gene regulatory networks per cell type (SCENIC-style approach)."""
+        if not self.config.get("enable_grn_analysis", True):
+            self.logger.info("  GRN analysis disabled, skipping...")
+            return
+
+        self.logger.info("Step 16: Gene Regulatory Network Analysis")
+
+        try:
+            # Define key transcription factors for cancer biology
+            key_tfs = {
+                # Master regulators
+                'TP53', 'MYC', 'MYCN', 'JUN', 'FOS', 'STAT3', 'STAT1',
+                'NFE2L2', 'HIF1A', 'NFKB1', 'RELA', 'SP1', 'E2F1',
+                # Lineage TFs
+                'GATA3', 'FOXA1', 'FOXA2', 'HNF4A', 'SOX2', 'SOX9',
+                'PAX8', 'CDX2', 'NKX2-1', 'RUNX1', 'PU.1',
+                # Immune TFs
+                'FOXP3', 'TBX21', 'GATA3', 'RORC', 'BCL6', 'IRF4',
+                'BATF', 'IRF8', 'SPI1', 'TCF7', 'LEF1',
+                # EMT TFs
+                'SNAI1', 'SNAI2', 'TWIST1', 'TWIST2', 'ZEB1', 'ZEB2',
+                # Stemness TFs
+                'NANOG', 'POU5F1', 'SOX2', 'KLF4', 'BMI1',
+            }
+
+            # Get available TFs in the data
+            available_tfs = [tf for tf in key_tfs if tf in self.adata.var_names]
+            self.logger.info(f"  Found {len(available_tfs)}/{len(key_tfs)} key TFs in data")
+
+            if len(available_tfs) < 5:
+                self.logger.warning("  Too few TFs found, skipping GRN analysis")
+                self.grn_results = None
+                return
+
+            # Get expression data
+            if hasattr(self.adata.X, 'toarray'):
+                expr_matrix = pd.DataFrame(
+                    self.adata.X.toarray(),
+                    index=self.adata.obs_names,
+                    columns=self.adata.var_names
+                )
+            else:
+                expr_matrix = pd.DataFrame(
+                    self.adata.X,
+                    index=self.adata.obs_names,
+                    columns=self.adata.var_names
+                )
+
+            # Get top variable genes for target genes (exclude TFs)
+            hvg_mask = self.adata.var.get('highly_variable', pd.Series(True, index=self.adata.var_names))
+            target_genes = [g for g in self.adata.var_names[hvg_mask] if g not in available_tfs][:500]
+
+            grn_results = {}
+            tf_activity_scores = {}
+
+            # Analyze GRN per cell type
+            cell_types = self.adata.obs['cell_type'].unique()
+
+            for cell_type in cell_types:
+                cell_mask = self.adata.obs['cell_type'] == cell_type
+                n_cells = cell_mask.sum()
+
+                if n_cells < 20:  # Need enough cells for correlation
+                    continue
+
+                cell_expr = expr_matrix.loc[cell_mask]
+
+                # Calculate TF-target correlations
+                tf_target_corrs = []
+
+                for tf in available_tfs:
+                    if tf not in cell_expr.columns:
+                        continue
+
+                    tf_expr = cell_expr[tf]
+                    if tf_expr.std() < 0.1:  # Skip low-variance TFs
+                        continue
+
+                    # Calculate Spearman correlation with top targets
+                    for target in target_genes[:100]:  # Top 100 targets per TF
+                        if target not in cell_expr.columns or target == tf:
+                            continue
+
+                        target_expr = cell_expr[target]
+                        if target_expr.std() < 0.1:
+                            continue
+
+                        try:
+                            from scipy.stats import spearmanr
+                            corr, pval = spearmanr(tf_expr, target_expr)
+
+                            if abs(corr) > 0.3 and pval < 0.05:
+                                tf_target_corrs.append({
+                                    'TF': tf,
+                                    'target': target,
+                                    'correlation': corr,
+                                    'p_value': pval,
+                                    'regulation': 'activation' if corr > 0 else 'repression'
+                                })
+                        except:
+                            continue
+
+                if tf_target_corrs:
+                    grn_df = pd.DataFrame(tf_target_corrs)
+                    grn_df = grn_df.sort_values('correlation', key=abs, ascending=False)
+                    grn_results[cell_type] = grn_df.head(50).to_dict('records')
+
+                # Calculate TF activity score (mean expression z-score)
+                tf_scores = {}
+                for tf in available_tfs:
+                    if tf in cell_expr.columns:
+                        tf_scores[tf] = float(cell_expr[tf].mean())
+                tf_activity_scores[cell_type] = tf_scores
+
+            # Identify master regulators (TFs with most targets)
+            master_regulators = {}
+            for cell_type, edges in grn_results.items():
+                tf_counts = {}
+                for edge in edges:
+                    tf = edge['TF']
+                    tf_counts[tf] = tf_counts.get(tf, 0) + 1
+
+                if tf_counts:
+                    sorted_tfs = sorted(tf_counts.items(), key=lambda x: x[1], reverse=True)
+                    master_regulators[cell_type] = sorted_tfs[:5]
+
+            self.grn_results = {
+                'n_tfs': len(available_tfs),
+                'tfs_found': available_tfs,
+                'n_cell_types': len(grn_results),
+                'grn_edges': grn_results,
+                'tf_activity': tf_activity_scores,
+                'master_regulators': master_regulators,
+            }
+
+            # Save results
+            all_edges = []
+            for cell_type, edges in grn_results.items():
+                for edge in edges:
+                    edge['cell_type'] = cell_type
+                    all_edges.append(edge)
+
+            if all_edges:
+                self.save_csv(pd.DataFrame(all_edges), "grn_edges.csv")
+
+            # Save TF activity
+            tf_activity_df = pd.DataFrame(tf_activity_scores).T
+            tf_activity_df.index.name = 'cell_type'
+            self.save_csv(tf_activity_df.reset_index(), "tf_activity_scores.csv")
+
+            # Save master regulators
+            mr_rows = []
+            for cell_type, regulators in master_regulators.items():
+                for rank, (tf, count) in enumerate(regulators, 1):
+                    mr_rows.append({
+                        'cell_type': cell_type,
+                        'rank': rank,
+                        'TF': tf,
+                        'n_targets': count
+                    })
+            if mr_rows:
+                self.save_csv(pd.DataFrame(mr_rows), "master_regulators.csv")
+
+            self.logger.info(f"  Analyzed {len(grn_results)} cell types")
+            self.logger.info(f"  Total GRN edges: {len(all_edges)}")
+
+            # Log top master regulators per cell type
+            for cell_type, regulators in list(master_regulators.items())[:3]:
+                top_tf = regulators[0] if regulators else ('N/A', 0)
+                self.logger.info(f"  {cell_type}: Top TF = {top_tf[0]} ({top_tf[1]} targets)")
+
+        except Exception as e:
+            self.logger.error(f"  GRN analysis failed: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            self.grn_results = None
+
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # NEW STEP 17: CNV Inference (Malignant Cell Detection)
+    # ═══════════════════════════════════════════════════════════════════════════════
+
+    def _infer_cnv(self):
+        """Infer copy number variations to distinguish malignant from normal cells."""
+        if not self.config.get("enable_cnv_inference", True):
+            self.logger.info("  CNV inference disabled, skipping...")
+            return
+
+        self.logger.info("Step 16: CNV Inference (Malignant Cell Detection)")
+
+        try:
+            # Simple CNV inference using chromosome arm expression
+            # Based on inferCNV approach but simplified
+
+            # Load gene chromosome positions (simplified - using gene name patterns)
+            # In real implementation, would use GTF file
+            # For now, score based on known amplified/deleted regions in cancer
+
+            # Common cancer CNV signatures by gene
+            cnv_signatures = {
+                # Commonly amplified oncogenes
+                'amplified': {
+                    'MYC': 8,      # 8q24 - amplified in many cancers
+                    'ERBB2': 17,   # 17q12 - breast cancer
+                    'EGFR': 7,     # 7p11 - lung, GBM
+                    'CCND1': 11,   # 11q13 - various
+                    'CDK4': 12,    # 12q14 - various
+                    'MDM2': 12,    # 12q15 - various
+                    'FGFR1': 8,    # 8p11 - lung, breast
+                    'MET': 7,      # 7q31 - various
+                    'PIK3CA': 3,   # 3q26 - various
+                },
+                # Commonly deleted tumor suppressors
+                'deleted': {
+                    'TP53': 17,    # 17p13
+                    'RB1': 13,     # 13q14
+                    'CDKN2A': 9,   # 9p21
+                    'CDKN2B': 9,   # 9p21
+                    'PTEN': 10,    # 10q23
+                    'BRCA1': 17,   # 17q21
+                    'BRCA2': 13,   # 13q13
+                    'APC': 5,      # 5q22
+                    'SMAD4': 18,   # 18q21
+                }
+            }
+
+            # Calculate CNV score per cell based on expression of these genes
+            cell_cnv_scores = []
+
+            # Get expression data
+            if hasattr(self.adata.X, 'toarray'):
+                expr_matrix = self.adata.X.toarray()
+            else:
+                expr_matrix = self.adata.X
+
+            # Calculate reference (normal cells) - use immune cells as reference
+            immune_mask = self.adata.obs['cell_type'].str.contains(
+                'T_cells|NK_cells|B_cells|Monocytes|Macrophages|Dendritic',
+                case=False, na=False
+            )
+
+            if immune_mask.sum() > 50:  # Need enough reference cells
+                reference_expr = expr_matrix[immune_mask].mean(axis=0)
+            else:
+                # Use all cells as reference if not enough immune cells
+                reference_expr = expr_matrix.mean(axis=0)
+
+            # Calculate amplification and deletion scores
+            amp_genes = [g for g in cnv_signatures['amplified'].keys() if g in self.adata.var_names]
+            del_genes = [g for g in cnv_signatures['deleted'].keys() if g in self.adata.var_names]
+
+            amp_scores = np.zeros(len(self.adata))
+            del_scores = np.zeros(len(self.adata))
+
+            for gene in amp_genes:
+                gene_idx = self.adata.var_names.get_loc(gene)
+                ref_val = reference_expr[gene_idx] if reference_expr[gene_idx] > 0 else 0.01
+                cell_expr = expr_matrix[:, gene_idx]
+                # Log ratio compared to reference
+                amp_scores += np.log2((cell_expr + 0.01) / (ref_val + 0.01))
+
+            for gene in del_genes:
+                gene_idx = self.adata.var_names.get_loc(gene)
+                ref_val = reference_expr[gene_idx] if reference_expr[gene_idx] > 0 else 0.01
+                cell_expr = expr_matrix[:, gene_idx]
+                # Negative log ratio for deletions (lower expression = higher score)
+                del_scores -= np.log2((cell_expr + 0.01) / (ref_val + 0.01))
+
+            # Normalize scores
+            if len(amp_genes) > 0:
+                amp_scores = amp_scores / len(amp_genes)
+            if len(del_genes) > 0:
+                del_scores = del_scores / len(del_genes)
+
+            # Combined CNV score (higher = more likely malignant)
+            cnv_scores = amp_scores + del_scores
+
+            # Add to adata
+            self.adata.obs['cnv_score'] = cnv_scores
+            self.adata.obs['amp_score'] = amp_scores
+            self.adata.obs['del_score'] = del_scores
+
+            # Classify cells as likely malignant or normal
+            # Use threshold based on distribution
+            threshold = np.percentile(cnv_scores, 75)  # Top 25% as likely malignant
+            self.adata.obs['malignancy'] = np.where(
+                cnv_scores > threshold, 'Likely_Malignant', 'Likely_Normal'
+            )
+
+            # Calculate per cell type
+            cnv_by_celltype = self.adata.obs.groupby('cell_type').agg({
+                'cnv_score': ['mean', 'std'],
+                'malignancy': lambda x: (x == 'Likely_Malignant').sum()
+            })
+            cnv_by_celltype.columns = ['cnv_mean', 'cnv_std', 'n_malignant']
+            cnv_by_celltype['n_total'] = self.adata.obs.groupby('cell_type').size()
+            cnv_by_celltype['pct_malignant'] = cnv_by_celltype['n_malignant'] / cnv_by_celltype['n_total'] * 100
+
+            self.cnv_results = {
+                'n_likely_malignant': int((self.adata.obs['malignancy'] == 'Likely_Malignant').sum()),
+                'n_likely_normal': int((self.adata.obs['malignancy'] == 'Likely_Normal').sum()),
+                'threshold': float(threshold),
+                'amp_genes_found': amp_genes,
+                'del_genes_found': del_genes,
+                'cnv_by_celltype': cnv_by_celltype.to_dict(),
+            }
+
+            # Save results
+            self.save_csv(cnv_by_celltype.reset_index(), "cnv_by_celltype.csv")
+
+            self.logger.info(f"  Likely malignant cells: {self.cnv_results['n_likely_malignant']}")
+            self.logger.info(f"  Likely normal cells: {self.cnv_results['n_likely_normal']}")
+            self.logger.info(f"  CNV threshold: {threshold:.2f}")
+
+        except Exception as e:
+            self.logger.error(f"  CNV inference failed: {e}")
+            self.cnv_results = None
 
     def run(self) -> Dict[str, Any]:
         """Execute the full single-cell analysis pipeline."""
@@ -1813,6 +2458,15 @@ class SingleCellAgent(BaseAgent):
         # NEW Step 14: Cell-Cell Interaction
         self._analyze_cell_interactions()
 
+        # NEW Step 15: Tumor Microenvironment Analysis
+        self._analyze_tme()
+
+        # NEW Step 16: Gene Regulatory Network Analysis
+        self._analyze_grn()
+
+        # NEW Step 17: CNV Inference (Malignant Cell Detection)
+        self._infer_cnv()
+
         # Save outputs
         self._save_outputs()
 
@@ -1836,6 +2490,10 @@ class SingleCellAgent(BaseAgent):
             "n_pathway_terms": len(self.cluster_pathways_df) if self.cluster_pathways_df is not None else 0,
             "trajectory": self.trajectory_results,
             "cell_interactions": self.interaction_results,
+            # Advanced analysis results
+            "tme_analysis": self.tme_results if hasattr(self, 'tme_results') else None,
+            "grn_analysis": self.grn_results if hasattr(self, 'grn_results') else None,
+            "cnv_analysis": self.cnv_results if hasattr(self, 'cnv_results') else None,
         }
 
         self.logger.info("=" * 60)
@@ -1852,6 +2510,15 @@ class SingleCellAgent(BaseAgent):
                            f"({self.cancer_prediction.get('confidence', 0):.1%})")
         self.logger.info(f"  Driver Genes: {results['n_driver_genes']}")
         self.logger.info(f"  Pathway Terms: {results['n_pathway_terms']}")
+
+        # Advanced analysis summary
+        if hasattr(self, 'tme_results') and self.tme_results:
+            self.logger.info(f"  TME Phenotype: {self.tme_results.get('tumor_phenotype', 'N/A')}")
+        if hasattr(self, 'grn_results') and self.grn_results:
+            self.logger.info(f"  GRN: {self.grn_results.get('n_tfs', 0)} TFs, "
+                           f"{self.grn_results.get('n_cell_types', 0)} cell types analyzed")
+        if hasattr(self, 'cnv_results') and self.cnv_results:
+            self.logger.info(f"  CNV: {self.cnv_results.get('n_likely_malignant', 0)} likely malignant cells")
 
         return results
 

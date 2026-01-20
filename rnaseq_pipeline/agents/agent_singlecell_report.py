@@ -77,6 +77,13 @@ class SingleCellReportAgent(BaseAgent):
             "cluster_pathways.csv",
             "trajectory_pseudotime.csv",
             "cell_interactions.csv",
+            # Advanced analysis outputs
+            "tme_composition.csv",
+            "tme_signature_scores.csv",
+            "cnv_by_celltype.csv",
+            "grn_edges.csv",
+            "tf_activity_scores.csv",
+            "master_regulators.csv",
         ]
 
         for csv_name in csv_files:
@@ -434,6 +441,9 @@ tr:hover {
         <a href="#pathways">Pathway</a>
         <a href="#trajectory">Trajectory</a>
         <a href="#interactions">Cell-Cell</a>
+        <a href="#tme">TME</a>
+        <a href="#grn">GRN</a>
+        <a href="#cnv">CNV</a>
         <a href="#qc">QC</a>
     </nav>
 
@@ -516,6 +526,24 @@ tr:hover {
         <section id="interactions" class="section">
             <h2>🔗 Cell-Cell Interaction</h2>
             {self._interactions_html(interactions_df)}
+        </section>
+
+        <!-- NEW: TME Analysis Section -->
+        <section id="tme" class="section">
+            <h2>🏔️ 종양 미세환경 (TME) 분석</h2>
+            {self._tme_analysis_html(data.get('tme_composition'), data.get('tme_signature_scores'))}
+        </section>
+
+        <!-- NEW: Gene Regulatory Network Section -->
+        <section id="grn" class="section">
+            <h2>🧬 유전자 조절 네트워크 (GRN)</h2>
+            {self._grn_analysis_html(data.get('master_regulators'), data.get('tf_activity_scores'))}
+        </section>
+
+        <!-- NEW: CNV Inference Section -->
+        <section id="cnv" class="section">
+            <h2>📊 CNV 추론 (악성세포 감별)</h2>
+            {self._cnv_analysis_html(data.get('cnv_by_celltype'))}
         </section>
 
         <!-- QC Section -->
@@ -1042,6 +1070,271 @@ tr:hover {
             'report_data_path': str(report_data_path),
             **report_data
         }
+
+    def _tme_analysis_html(self, tme_composition: Optional[pd.DataFrame], signature_scores: Optional[pd.DataFrame]) -> str:
+        """Generate HTML for TME analysis section."""
+        if tme_composition is None or tme_composition.empty:
+            return '<p style="color:#999;">TME 분석 데이터가 없습니다.</p>'
+
+        # Build composition table
+        html = '''
+        <div class="content-box">
+            <h3>종양 미세환경 구성</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:16px;">
+                CIBERSORT 스타일의 면역 침윤 분석 결과입니다. 면역세포, 기질세포, 종양세포 비율을 기반으로
+                TME 표현형(Hot/Altered/Cold)을 분류합니다.
+            </p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>세포 카테고리</th>
+                        <th>세포 수</th>
+                        <th>비율 (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        '''
+
+        for _, row in tme_composition.iterrows():
+            category = row.get('category', '')
+            count = row.get('count', 0)
+            pct = row.get('percentage', 0)
+
+            # Color coding based on category
+            if 'immune' in category.lower() or 'T_cells' in category or 'NK' in category or 'B_cells' in category:
+                color = '#059669'  # Green for immune
+            elif 'stromal' in category.lower() or 'fibro' in category.lower():
+                color = '#d97706'  # Orange for stromal
+            elif 'tumor' in category.lower() or 'malign' in category.lower():
+                color = '#dc2626'  # Red for tumor
+            else:
+                color = '#6b7280'  # Gray for others
+
+            html += f'''
+                    <tr>
+                        <td style="color:{color};font-weight:500;">{category}</td>
+                        <td>{count:,}</td>
+                        <td>{pct:.1f}%</td>
+                    </tr>
+            '''
+
+        html += '''
+                </tbody>
+            </table>
+        </div>
+        '''
+
+        # Add signature scores if available
+        if signature_scores is not None and not signature_scores.empty:
+            html += '''
+            <div class="content-box" style="margin-top:16px;">
+                <h3>면역 시그니처 점수</h3>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>시그니처</th>
+                            <th>평균 점수</th>
+                            <th>표준 편차</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+
+            for _, row in signature_scores.iterrows():
+                sig_name = row.get('signature', row.get('index', ''))
+                mean_score = row.get('mean', 0)
+                std_score = row.get('std', 0)
+
+                html += f'''
+                        <tr>
+                            <td>{sig_name}</td>
+                            <td>{mean_score:.3f}</td>
+                            <td>{std_score:.3f}</td>
+                        </tr>
+                '''
+
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+
+        return html
+
+    def _grn_analysis_html(self, master_regulators: Optional[pd.DataFrame], tf_activity: Optional[pd.DataFrame]) -> str:
+        """Generate HTML for GRN analysis section."""
+        if master_regulators is None or master_regulators.empty:
+            return '<p style="color:#999;">GRN 분석 데이터가 없습니다. 충분한 TF가 발현되지 않았을 수 있습니다.</p>'
+
+        html = '''
+        <div class="content-box">
+            <h3>세포 유형별 Master Regulator</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:16px;">
+                SCENIC 스타일의 유전자 조절 네트워크 분석 결과입니다.
+                각 세포 유형에서 가장 많은 타겟 유전자를 조절하는 전사 인자(TF)를 식별합니다.
+            </p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>세포 유형</th>
+                        <th>순위</th>
+                        <th>전사인자 (TF)</th>
+                        <th>타겟 유전자 수</th>
+                    </tr>
+                </thead>
+                <tbody>
+        '''
+
+        for _, row in master_regulators.iterrows():
+            cell_type = row.get('cell_type', '')
+            rank = row.get('rank', 0)
+            tf = row.get('TF', '')
+            n_targets = row.get('n_targets', 0)
+
+            # Highlight top TFs
+            tf_color = '#dc2626' if tf in ['TP53', 'MYC', 'STAT3', 'HIF1A', 'NFKB1'] else '#1e40af'
+
+            html += f'''
+                    <tr>
+                        <td>{cell_type}</td>
+                        <td>#{rank}</td>
+                        <td style="color:{tf_color};font-weight:600;">{tf}</td>
+                        <td>{n_targets}</td>
+                    </tr>
+            '''
+
+        html += '''
+                </tbody>
+            </table>
+        </div>
+        '''
+
+        # Add TF activity heatmap-style visualization (simplified as table)
+        if tf_activity is not None and not tf_activity.empty:
+            html += '''
+            <div class="content-box" style="margin-top:16px;">
+                <h3>전사인자 활성 점수 (세포 유형별)</h3>
+                <p style="font-size:12px;color:#666;margin-bottom:8px;">
+                    높은 값 = 해당 TF가 해당 세포 유형에서 활성화됨
+                </p>
+            '''
+
+            # Convert to proper format if needed
+            if 'cell_type' in tf_activity.columns:
+                tf_activity = tf_activity.set_index('cell_type')
+
+            # Get top TFs by variance
+            top_tfs = tf_activity.var().nlargest(10).index.tolist()
+
+            if top_tfs:
+                html += '''
+                <table class="data-table" style="font-size:11px;">
+                    <thead>
+                        <tr>
+                            <th>세포 유형</th>
+                '''
+                for tf in top_tfs[:8]:
+                    html += f'<th>{tf}</th>'
+                html += '''
+                        </tr>
+                    </thead>
+                    <tbody>
+                '''
+
+                for cell_type in tf_activity.index[:10]:
+                    html += f'<tr><td style="font-weight:500;">{cell_type}</td>'
+                    for tf in top_tfs[:8]:
+                        val = tf_activity.loc[cell_type, tf] if tf in tf_activity.columns else 0
+                        # Color based on value
+                        if val > 1:
+                            bg_color = '#fef3c7'
+                        elif val > 0.5:
+                            bg_color = '#d1fae5'
+                        else:
+                            bg_color = 'transparent'
+                        html += f'<td style="background:{bg_color};">{val:.2f}</td>'
+                    html += '</tr>'
+
+                html += '''
+                    </tbody>
+                </table>
+                '''
+
+            html += '</div>'
+
+        return html
+
+    def _cnv_analysis_html(self, cnv_by_celltype: Optional[pd.DataFrame]) -> str:
+        """Generate HTML for CNV inference section."""
+        if cnv_by_celltype is None or cnv_by_celltype.empty:
+            return '<p style="color:#999;">CNV 분석 데이터가 없습니다.</p>'
+
+        html = '''
+        <div class="content-box">
+            <h3>세포 유형별 CNV 분석</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:16px;">
+                inferCNV 스타일의 복제수 변이(CNV) 추론 결과입니다.
+                MYC, EGFR 등 종양 유전자 증폭과 TP53, CDKN2A 등 종양 억제 유전자 결실을 기반으로
+                악성세포를 감별합니다.
+            </p>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>세포 유형</th>
+                        <th>CNV 점수 (평균)</th>
+                        <th>악성 추정 세포 수</th>
+                        <th>전체 세포 수</th>
+                        <th>악성 비율 (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        '''
+
+        for _, row in cnv_by_celltype.iterrows():
+            cell_type = row.get('cell_type', row.get('index', ''))
+            cnv_mean = row.get('cnv_mean', 0)
+            n_malignant = int(row.get('n_malignant', 0))
+            n_total = int(row.get('n_total', 1))
+            pct_malignant = row.get('pct_malignant', 0)
+
+            # Color code based on malignancy percentage
+            if pct_malignant > 50:
+                row_color = 'background:#fef2f2;'  # Red tint
+                badge = '<span style="background:#dc2626;color:white;padding:2px 6px;border-radius:4px;font-size:10px;">High</span>'
+            elif pct_malignant > 25:
+                row_color = 'background:#fffbeb;'  # Yellow tint
+                badge = '<span style="background:#d97706;color:white;padding:2px 6px;border-radius:4px;font-size:10px;">Med</span>'
+            else:
+                row_color = ''
+                badge = '<span style="background:#059669;color:white;padding:2px 6px;border-radius:4px;font-size:10px;">Low</span>'
+
+            html += f'''
+                    <tr style="{row_color}">
+                        <td style="font-weight:500;">{cell_type}</td>
+                        <td>{cnv_mean:.2f}</td>
+                        <td>{n_malignant:,}</td>
+                        <td>{n_total:,}</td>
+                        <td>{pct_malignant:.1f}% {badge}</td>
+                    </tr>
+            '''
+
+        html += '''
+                </tbody>
+            </table>
+        </div>
+
+        <div class="content-box" style="margin-top:16px;background:#fff7ed;border-left:4px solid #d97706;">
+            <h4 style="color:#92400e;margin-bottom:8px;">⚠️ 해석 주의사항</h4>
+            <ul style="font-size:12px;color:#78350f;margin-left:16px;">
+                <li>CNV 점수가 높다고 반드시 악성세포를 의미하지 않습니다.</li>
+                <li>정상 세포도 체세포 변이를 가질 수 있습니다.</li>
+                <li>최종 판단은 조직학적 검사와 전문가 검토가 필요합니다.</li>
+                <li>면역세포(T, NK, B cells)를 정상 참조군으로 사용하였습니다.</li>
+            </ul>
+        </div>
+        '''
+
+        return html
 
     def validate_outputs(self) -> bool:
         """Validate that required output files were created."""
