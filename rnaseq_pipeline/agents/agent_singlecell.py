@@ -1098,6 +1098,11 @@ class SingleCellAgent(BaseAgent):
                     save='_markers.png',
                     show=False
                 )
+                # Scanpy saves as 'dotplot__markers.png', rename to expected name
+                old_path = figures_dir / 'dotplot__markers.png'
+                new_path = figures_dir / 'dotplot_markers.png'
+                if old_path.exists():
+                    old_path.rename(new_path)
                 self.logger.info("  Saved dotplot_markers.png")
 
         # Combined UMAP + Bar chart visualization
