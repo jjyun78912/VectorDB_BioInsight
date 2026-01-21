@@ -209,10 +209,20 @@ class PanCancerPreprocessor:
         if self.symbol_to_ensembl is None:
             return counts
 
-        # 입력 데이터의 유전자 ID 형식 감지
-        sample_genes = counts.index[:10].tolist()
-        is_ensembl = any(str(g).startswith('ENSG') for g in sample_genes)
-        is_entrez = all(str(g).isdigit() for g in sample_genes if str(g) != 'GeneID')
+        # 입력 데이터의 유전자 ID 형식 감지 (더 많은 샘플로 정확히 판단)
+        sample_genes = counts.index[:100].tolist() if len(counts.index) >= 100 else counts.index.tolist()
+
+        # Count each type
+        ensembl_count = sum(1 for g in sample_genes if str(g).startswith('ENSG'))
+        numeric_count = sum(1 for g in sample_genes if str(g).isdigit())
+        symbol_count = len(sample_genes) - ensembl_count - numeric_count
+
+        # Determine format by majority (allow mixed data)
+        total = len(sample_genes)
+        is_ensembl = ensembl_count / total > 0.7  # >70% must be ENSEMBL to be considered ENSEMBL format
+        is_entrez = numeric_count / total > 0.7  # >70% must be numeric for Entrez
+
+        logger.info(f"Gene ID format detection: ENSEMBL={ensembl_count}, Entrez={numeric_count}, Symbol={symbol_count} (of {total})")
 
         if is_entrez:
             # Entrez ID -> ENSEMBL ID 변환
