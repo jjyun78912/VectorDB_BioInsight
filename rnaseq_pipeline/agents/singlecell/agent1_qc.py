@@ -49,7 +49,7 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
-# Cell cycle genes (Tirosh et al. 2016)
+# Cell cycle genes (Tirosh et al. 2016) # cell cycle을 분류할 수 있는 표준, 핵심 마커 유전자
 S_GENES = [
     'MCM5', 'PCNA', 'TYMS', 'FEN1', 'MCM2', 'MCM4', 'RRM1', 'UNG',
     'GINS2', 'MCM6', 'CDCA7', 'DTL', 'PRIM1', 'UHRF1', 'MLF1IP',

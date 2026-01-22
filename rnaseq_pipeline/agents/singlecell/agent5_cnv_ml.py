@@ -99,6 +99,7 @@ class SingleCellCNVMLAgent(BaseAgent):
         self.cancer_prediction = None
         self.cnv_results = None
         self.malignant_results = None
+        self._pseudobulk_from_raw = False  # Set by _create_pseudobulk()
 
     def validate_inputs(self) -> bool:
         """Validate input files."""
@@ -184,17 +185,42 @@ class SingleCellCNVMLAgent(BaseAgent):
             self.cancer_prediction = {"error": str(e)}
 
     def _create_pseudobulk(self) -> Optional[pd.Series]:
-        """Create pseudo-bulk expression by aggregating cells."""
+        """Create pseudo-bulk expression by aggregating cells.
+
+        Data source priority:
+        1. adata.layers['counts'] - Raw counts (preferred for ML model)
+        2. adata.X - Normalized data (fallback, needs skip_normalization)
+
+        Returns:
+            pseudobulk_series: Aggregated expression per gene
+        """
         self.logger.info("Creating pseudo-bulk expression...")
 
-        method = self.config.get("pseudobulk_method", "mean")
+        method = self.config.get("pseudobulk_method", "sum")  # Changed default to sum for raw counts
 
-        # Get expression matrix
-        X = self.adata.X
+        # Determine data source
+        # Prefer raw counts for proper ML preprocessing
+        if 'counts' in self.adata.layers:
+            X = self.adata.layers['counts']
+            self._pseudobulk_from_raw = True
+            self.logger.info("  Using raw counts from layers['counts']")
+        elif 'raw_counts' in self.adata.layers:
+            X = self.adata.layers['raw_counts']
+            self._pseudobulk_from_raw = True
+            self.logger.info("  Using raw counts from layers['raw_counts']")
+        else:
+            # Fallback to normalized data
+            X = self.adata.X
+            self._pseudobulk_from_raw = False
+            self.logger.warning("  No raw counts found. Using normalized data (adata.X).")
+            self.logger.warning("  → ML model will use skip_normalization=True for pre-normalized data.")
+
         if hasattr(X, 'toarray'):
             X = X.toarray()
 
         # Aggregate
+        # For raw counts, sum is preferred (proper pseudobulk)
+        # For normalized data, mean is preferred
         if method == "mean":
             pseudobulk = np.mean(X, axis=0)
         elif method == "median":
@@ -202,17 +228,26 @@ class SingleCellCNVMLAgent(BaseAgent):
         elif method == "sum":
             pseudobulk = np.sum(X, axis=0)
         else:
-            pseudobulk = np.mean(X, axis=0)
+            pseudobulk = np.sum(X, axis=0) if self._pseudobulk_from_raw else np.mean(X, axis=0)
 
         # Create Series with gene names
         pseudobulk_series = pd.Series(pseudobulk, index=self.adata.var_names)
 
+        # Log statistics
         self.logger.info(f"  Created pseudo-bulk ({method}): {len(pseudobulk_series)} genes")
+        self.logger.info(f"  Data range: min={pseudobulk.min():.2f}, max={pseudobulk.max():.2f}, mean={pseudobulk.mean():.2f}")
 
         return pseudobulk_series
 
     def _predict_with_catboost(self, pseudobulk: pd.Series):
-        """Predict cancer type using pre-trained CatBoost model."""
+        """Predict cancer type using pre-trained CatBoost model.
+
+        Skip options are determined by data source:
+        - Raw counts (layers['counts']): skip_normalization=False, skip_log=False
+          → Model applies CPM + log2 normalization (correct)
+        - Normalized data (adata.X): skip_normalization=True, skip_log=True
+          → Model skips internal normalization (already done)
+        """
         self.logger.info("Predicting with CatBoost model...")
 
         try:
@@ -251,8 +286,28 @@ class SingleCellCNVMLAgent(BaseAgent):
             # Prepare input - predict() expects Gene x Sample format
             input_df = pd.DataFrame(pseudobulk.values, index=pseudobulk.index, columns=["pseudobulk"])
 
+            # Determine skip options based on data source
+            # _pseudobulk_from_raw is set in _create_pseudobulk()
+            from_raw = getattr(self, '_pseudobulk_from_raw', False)
+
+            if from_raw:
+                # Raw counts: model should apply CPM + log2
+                skip_norm = False
+                skip_log = False
+                self.logger.info("  Using raw counts → Standard ML preprocessing (CPM + log2)")
+            else:
+                # Normalized data: skip model's internal normalization
+                skip_norm = True
+                skip_log = True
+                self.logger.info("  Using normalized data → Skipping ML preprocessing")
+
             # Predict - returns List[ClassificationResult]
-            results = classifier.predict(input_df, sample_ids=["pseudobulk"])
+            results = classifier.predict(
+                input_df,
+                sample_ids=["pseudobulk"],
+                skip_normalization=skip_norm,
+                skip_log=skip_log
+            )
 
             if results and len(results) > 0:
                 result = results[0]  # Get first result
@@ -275,13 +330,17 @@ class SingleCellCNVMLAgent(BaseAgent):
                                 'probability': pred.probability
                             })
 
+                # ★ 모델 성능 지표 포함 (v3)
+                model_perf = getattr(result, "model_performance", None)
+
                 self.cancer_prediction = {
                     "method": "catboost",
                     "predicted_type": predicted_cancer if predicted_cancer and not is_unknown else "Unknown",
                     "confidence": float(confidence) if confidence else 0.0,
                     "top_predictions": top_predictions,
                     "is_unknown": is_unknown,
-                    "warning": "예측 결과는 진단이 아니며 참고용입니다."
+                    "warning": "예측 결과는 진단이 아니며 참고용입니다.",
+                    "model_performance": model_perf,  # ★ v3 추가
                 }
 
                 self.logger.info(f"  Predicted: {self.cancer_prediction['predicted_type']} "

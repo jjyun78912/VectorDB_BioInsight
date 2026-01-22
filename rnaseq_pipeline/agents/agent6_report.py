@@ -1426,6 +1426,83 @@ class ReportAgent(BaseAgent):
 
         contrast = self.config.get('contrast', ['tumor', 'normal'])
 
+        # ★ ML 성능 지표 카드 생성 (v3)
+        ml_performance_html = ""
+        model_perf = cancer_prediction.get('model_performance', {}) if cancer_prediction else {}
+
+        if model_perf:
+            overall = model_perf.get('overall', {})
+            per_class = model_perf.get('per_class', {})
+            ci = model_perf.get('confidence_interval', {})
+
+            # Build ML Performance Scorecard
+            ml_performance_html = f'''
+            <div class="ml-performance-card" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;">
+                <h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
+                    <span>📊</span> Pan-Cancer Classifier 성능 지표
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('accuracy', 0)*100:.1f}%</div>
+                        <div style="font-size: 0.8em; opacity: 0.9;">Accuracy</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('f1_macro', 0)*100:.1f}%</div>
+                        <div style="font-size: 0.8em; opacity: 0.9;">F1 (Macro)</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('mcc', 0):.3f}</div>
+                        <div style="font-size: 0.8em; opacity: 0.9;">MCC</div>
+                    </div>
+                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('pr_auc_macro', 0)*100:.1f}%</div>
+                        <div style="font-size: 0.8em; opacity: 0.9;">PR-AUC</div>
+                    </div>
+                </div>'''
+
+            # Per-class metrics if available
+            if per_class:
+                cancer_type = per_class.get('cancer_type', '')
+                ml_performance_html += f'''
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
+                    <div style="font-size: 0.9em; margin-bottom: 8px;">📌 <b>{cancer_type}</b> 분류 성능</div>
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; font-size: 0.85em;">
+                        <div style="text-align: center;">
+                            <div style="font-weight: bold;">{per_class.get('f1', 0)*100:.1f}%</div>
+                            <div style="opacity: 0.8;">F1</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-weight: bold;">{per_class.get('precision', 0)*100:.1f}%</div>
+                            <div style="opacity: 0.8;">Precision</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-weight: bold;">{per_class.get('recall', 0)*100:.1f}%</div>
+                            <div style="opacity: 0.8;">Recall</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-weight: bold;">{per_class.get('pr_auc', 0)*100:.1f}%</div>
+                            <div style="opacity: 0.8;">PR-AUC</div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="font-weight: bold;">{per_class.get('roc_auc', 0)*100:.1f}%</div>
+                            <div style="opacity: 0.8;">ROC-AUC</div>
+                        </div>
+                    </div>
+                </div>'''
+
+            # Confidence intervals if available
+            if ci:
+                acc_ci = ci.get('accuracy', {})
+                f1_ci = ci.get('f1_macro', {})
+                ml_performance_html += f'''
+                <div style="margin-top: 10px; font-size: 0.75em; opacity: 0.85;">
+                    95% CI: Accuracy [{acc_ci.get('lower', 0)*100:.1f}% - {acc_ci.get('upper', 0)*100:.1f}%],
+                    F1 [{f1_ci.get('lower', 0)*100:.1f}% - {f1_ci.get('upper', 0)*100:.1f}%]
+                </div>'''
+
+            ml_performance_html += '''
+            </div>'''
+
         return f'''
         <section class="study-overview-section" id="study-overview">
             <h2>1. 연구 개요</h2>
@@ -1459,6 +1536,8 @@ class ReportAgent(BaseAgent):
                     </table>
                 </div>
             </div>
+
+            {ml_performance_html}
         </section>
         '''
 

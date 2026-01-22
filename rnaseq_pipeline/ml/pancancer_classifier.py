@@ -160,6 +160,8 @@ class ClassificationResult:
     secondary_validation: Optional[Dict[str, Any]] = None
     confidence_gap: float = 0.0  # Top1 - Top2 신뢰도 차이
     is_confusable_pair: bool = False  # 혼동 가능 암종 쌍 여부
+    # ★ 모델 성능 지표 (v3 추가)
+    model_performance: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -175,6 +177,7 @@ class ClassificationResult:
             'secondary_validation': self.secondary_validation,
             'confidence_gap': round(self.confidence_gap, 4),
             'is_confusable_pair': self.is_confusable_pair,
+            'model_performance': self.model_performance,
         }
 
 
@@ -458,22 +461,34 @@ class PanCancerPreprocessor:
 
         return X_train, X_test, y_train, y_test
 
-    def transform(self, counts: pd.DataFrame) -> np.ndarray:
-        """새 데이터 변환"""
+    def transform(self, counts: pd.DataFrame,
+                  skip_normalization: bool = False,
+                  skip_log: bool = False) -> np.ndarray:
+        """
+        새 데이터 변환
+
+        Args:
+            counts: Gene x Sample matrix
+            skip_normalization: True면 CPM 정규화 건너뜀 (이미 TPM/FPKM인 경우)
+            skip_log: True면 log 변환 건너뜀 (이미 log 변환된 경우)
+
+        Returns:
+            변환된 feature matrix
+        """
         if not self.is_fitted:
             raise ValueError("Preprocessor not fitted")
 
         # Gene ID 변환 (Symbol -> ENSEMBL)
         counts = self._convert_gene_ids(counts)
 
-        # 정규화
-        if self.normalize == "cpm":
+        # 정규화 (skip_normalization=True면 건너뜀)
+        if self.normalize == "cpm" and not skip_normalization:
             normalized = self._normalize_cpm(counts)
         else:
             normalized = counts
 
-        # Log 변환
-        if self.log_transform:
+        # Log 변환 (skip_log=True면 건너뜀)
+        if self.log_transform and not skip_log:
             transformed = self._log_transform(normalized)
         else:
             transformed = normalized
@@ -575,16 +590,18 @@ class EnsembleClassifier:
     + Unknown/OOD 탐지
     """
 
-    # Confidence 임계값
+    # Confidence 임계값 (v2.0 - 외부 데이터 적용 개선)
+    # 기존: unknown=0.2 → UNKNOWN 과다 발생
+    # 개선: unknown=0.10으로 낮춰서 예측률 향상
     CONFIDENCE_THRESHOLDS = {
-        'high': 0.7,      # 70% 이상: 높은 신뢰도
-        'medium': 0.4,    # 40-70%: 중간 신뢰도
-        'low': 0.2,       # 20-40%: 낮은 신뢰도
-        'unknown': 0.2,   # 20% 미만: Unknown으로 처리
+        'high': 0.6,      # 60% 이상: 높은 신뢰도 (기존 0.7)
+        'medium': 0.3,    # 30-60%: 중간 신뢰도 (기존 0.4)
+        'low': 0.10,      # 10-30%: 낮은 신뢰도 (기존 0.2)
+        'unknown': 0.10,  # 10% 미만: Unknown으로 처리 (기존 0.2)
     }
 
     # 앙상블 일치도 임계값
-    AGREEMENT_THRESHOLD = 0.5  # 50% 미만 일치: Unknown 가능성
+    AGREEMENT_THRESHOLD = 0.3  # 30% 미만 일치: Unknown 가능성 (기존 0.5)
 
     def __init__(self,
                  n_classes: int,
@@ -891,6 +908,7 @@ class PanCancerClassifier:
     - Unknown/OOD 탐지
     - Ensemble 예측
     - Confidence 기반 경고
+    - 모델 성능 지표 제공 (v3)
     """
 
     def __init__(self, model_dir: str):
@@ -903,6 +921,9 @@ class PanCancerClassifier:
         self.ensemble: Optional[EnsembleClassifier] = None
         self.cancer_info: Dict = {}
         self.is_loaded = False
+        # ★ 모델 성능 지표 (v3 추가)
+        self.training_metrics: Optional[Dict[str, Any]] = None
+        self.evaluation_metrics: Optional[Dict[str, Any]] = None
 
     def load(self):
         """모델 로드"""
@@ -920,13 +941,44 @@ class PanCancerClassifier:
         with open(self.model_dir / "cancer_info.json", 'r') as f:
             self.cancer_info = json.load(f)
 
+        # ★ 성능 지표 로드 (v3)
+        self._load_performance_metrics()
+
         self.is_loaded = True
         logger.info("Model loaded successfully")
+
+    def _load_performance_metrics(self):
+        """
+        모델 성능 지표 로드 (training_results.json & evaluation_report.json)
+        """
+        # Training results 로드
+        training_results_path = self.model_dir / "training_results.json"
+        if training_results_path.exists():
+            try:
+                with open(training_results_path, 'r') as f:
+                    self.training_metrics = json.load(f)
+                logger.info(f"Loaded training metrics (n_samples={self.training_metrics.get('n_samples', 'N/A')})")
+            except Exception as e:
+                logger.warning(f"Failed to load training_results.json: {e}")
+                self.training_metrics = None
+
+        # Evaluation report 로드
+        evaluation_report_path = self.model_dir / "evaluation" / "evaluation_report.json"
+        if evaluation_report_path.exists():
+            try:
+                with open(evaluation_report_path, 'r') as f:
+                    self.evaluation_metrics = json.load(f)
+                logger.info(f"Loaded evaluation metrics (n_samples={self.evaluation_metrics.get('n_samples_evaluated', 'N/A')})")
+            except Exception as e:
+                logger.warning(f"Failed to load evaluation_report.json: {e}")
+                self.evaluation_metrics = None
 
     def predict(self, counts: pd.DataFrame,
                 sample_ids: Optional[List[str]] = None,
                 top_k: int = 5,
-                use_secondary_validation: bool = True) -> List[ClassificationResult]:
+                use_secondary_validation: bool = True,
+                skip_normalization: bool = False,
+                skip_log: bool = False) -> List[ClassificationResult]:
         """
         암종 예측 (v2: 2차 검증 포함)
 
@@ -935,6 +987,8 @@ class PanCancerClassifier:
             sample_ids: 샘플 ID 목록
             top_k: Top-k 예측 결과 포함
             use_secondary_validation: 혼동 가능 암종에 대한 2차 검증 수행
+            skip_normalization: True면 CPM 정규화 건너뜀 (이미 TPM/FPKM인 경우)
+            skip_log: True면 log 변환 건너뜀 (이미 log 변환된 경우)
 
         Returns:
             분류 결과 리스트
@@ -946,7 +1000,9 @@ class PanCancerClassifier:
             sample_ids = counts.columns.tolist()
 
         # 전처리
-        X = self.preprocessor.transform(counts)
+        X = self.preprocessor.transform(counts,
+                                        skip_normalization=skip_normalization,
+                                        skip_log=skip_log)
 
         # 앙상블 예측
         ensemble_proba, individual_preds = self.ensemble.predict_with_individual(X)
@@ -1028,6 +1084,9 @@ class PanCancerClassifier:
                 confidence_gap, is_confusable, secondary_validation
             )
 
+            # ★ 모델 성능 지표 생성 (v3)
+            model_perf = self._get_model_performance(final_cancer if not is_unknown else best_cancer)
+
             result = ClassificationResult(
                 sample_id=sample_id,
                 predicted_cancer=final_cancer if not is_unknown else "UNKNOWN",
@@ -1041,6 +1100,7 @@ class PanCancerClassifier:
                 secondary_validation=secondary_validation,
                 confidence_gap=confidence_gap,
                 is_confusable_pair=is_confusable,
+                model_performance=model_perf,
             )
             results.append(result)
 
@@ -1170,6 +1230,119 @@ class PanCancerClassifier:
         final_score = max(0.0, pos_score - neg_score)
 
         return final_score
+
+    def _get_model_performance(self, cancer_type: str) -> Dict[str, Any]:
+        """
+        예측된 암종에 대한 모델 성능 지표 반환 (v3)
+
+        Args:
+            cancer_type: 예측된 암종 코드
+
+        Returns:
+            모델 성능 지표 딕셔너리:
+            - overall: 전체 모델 성능 (accuracy, f1_macro, mcc 등)
+            - per_class: 해당 암종의 성능 (f1, precision, recall, pr_auc, roc_auc)
+            - training_info: 학습 정보 (n_samples, n_genes, training_date)
+            - confidence_interval: 신뢰구간 (accuracy, f1_macro)
+        """
+        performance = {
+            'model_name': 'Pan-Cancer CatBoost Ensemble',
+            'model_version': 'v3.0',
+        }
+
+        # Evaluation metrics가 있으면 사용 (더 상세한 지표 포함)
+        if self.evaluation_metrics:
+            eval_m = self.evaluation_metrics.get('metrics', {})
+            basic = eval_m.get('basic_metrics', {})
+            pr_auc = eval_m.get('pr_auc', {})
+            roc_auc = eval_m.get('roc_auc', {})
+            ci = eval_m.get('confidence_intervals', {})
+            per_class = basic.get('per_class', {})
+
+            # 전체 성능 지표
+            performance['overall'] = {
+                'accuracy': round(basic.get('accuracy', 0), 4),
+                'f1_macro': round(basic.get('f1_macro', 0), 4),
+                'f1_weighted': round(basic.get('f1_weighted', 0), 4),
+                'mcc': round(basic.get('mcc', 0), 4),
+                'precision_macro': round(basic.get('precision_macro', 0), 4),
+                'recall_macro': round(basic.get('recall_macro', 0), 4),
+                'pr_auc_macro': round(pr_auc.get('macro', 0), 4),
+                'roc_auc_macro': round(roc_auc.get('macro', 0), 4),
+            }
+
+            # 신뢰구간
+            if ci:
+                performance['confidence_interval'] = {
+                    'accuracy': {
+                        'point_estimate': round(ci.get('accuracy', {}).get('point_estimate', 0), 4),
+                        'lower': round(ci.get('accuracy', {}).get('lower', 0), 4),
+                        'upper': round(ci.get('accuracy', {}).get('upper', 0), 4),
+                    },
+                    'f1_macro': {
+                        'point_estimate': round(ci.get('f1_macro', {}).get('point_estimate', 0), 4),
+                        'lower': round(ci.get('f1_macro', {}).get('lower', 0), 4),
+                        'upper': round(ci.get('f1_macro', {}).get('upper', 0), 4),
+                    },
+                    'mcc': {
+                        'point_estimate': round(ci.get('mcc', {}).get('point_estimate', 0), 4),
+                        'lower': round(ci.get('mcc', {}).get('lower', 0), 4),
+                        'upper': round(ci.get('mcc', {}).get('upper', 0), 4),
+                    },
+                }
+
+            # 해당 암종의 성능 지표
+            if cancer_type and cancer_type in per_class:
+                class_metrics = per_class[cancer_type]
+                performance['per_class'] = {
+                    'cancer_type': cancer_type,
+                    'f1': round(class_metrics.get('f1', 0), 4),
+                    'precision': round(class_metrics.get('precision', 0), 4),
+                    'recall': round(class_metrics.get('recall', 0), 4),
+                    'pr_auc': round(pr_auc.get(cancer_type, 0), 4),
+                    'roc_auc': round(roc_auc.get(cancer_type, 0), 4),
+                }
+
+            # 학습 정보
+            performance['training_info'] = {
+                'n_classes': self.evaluation_metrics.get('n_classes', 17),
+                'n_samples_evaluated': self.evaluation_metrics.get('n_samples_evaluated', 0),
+                'evaluation_date': self.evaluation_metrics.get('evaluation_date', ''),
+            }
+
+        # Training metrics 보완 (evaluation이 없을 경우 대비)
+        elif self.training_metrics:
+            train_m = self.training_metrics.get('metrics', {})
+            ensemble = train_m.get('ensemble', {})
+            cls_report = train_m.get('classification_report', {})
+
+            # 전체 성능 지표
+            performance['overall'] = {
+                'accuracy': round(ensemble.get('accuracy', 0), 4),
+                'f1_macro': round(ensemble.get('f1_macro', 0), 4),
+                'top_3_accuracy': round(ensemble.get('top_3_accuracy', 0), 4),
+                'top_5_accuracy': round(ensemble.get('top_5_accuracy', 0), 4),
+            }
+
+            # 해당 암종의 성능 지표
+            if cancer_type and cancer_type in cls_report:
+                class_metrics = cls_report[cancer_type]
+                performance['per_class'] = {
+                    'cancer_type': cancer_type,
+                    'f1': round(class_metrics.get('f1-score', 0), 4),
+                    'precision': round(class_metrics.get('precision', 0), 4),
+                    'recall': round(class_metrics.get('recall', 0), 4),
+                }
+
+            # 학습 정보
+            performance['training_info'] = {
+                'n_classes': self.training_metrics.get('n_classes', 17),
+                'n_samples': self.training_metrics.get('n_samples', 0),
+                'n_genes': self.training_metrics.get('n_genes', 5000),
+                'training_date': self.training_metrics.get('training_date', ''),
+            }
+
+        return performance
 
     def _generate_warnings(self, confidence: float, agreement: float,
                           confidence_level: str, is_unknown: bool,

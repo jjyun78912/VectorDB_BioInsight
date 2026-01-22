@@ -473,6 +473,14 @@ class RNAseqPipeline:
                     cancer_info = classifier.cancer_info.get(predicted_cancer, {})
                     korean_name = cancer_info.get('korean', predicted_cancer)
 
+                    # ★ 모델 성능 지표 포함 (v3)
+                    # 첫 번째 예측 결과에서 model_performance 가져오기
+                    model_perf = None
+                    for r in results:
+                        if r.model_performance:
+                            model_perf = r.model_performance
+                            break
+
                     prediction_result = {
                         'predicted_cancer': predicted_cancer,
                         'predicted_cancer_korean': korean_name,
@@ -488,7 +496,8 @@ class RNAseqPipeline:
                             }
                             for c, cnt in cancer_counts.most_common(5)
                         ],
-                        'all_results': [r.to_dict() for r in results]  # All samples for condition inference
+                        'all_results': [r.to_dict() for r in results],  # All samples for condition inference
+                        'model_performance': model_perf,  # ★ v3 추가: 모델 성능 지표
                     }
 
                     # Handle user-specified vs ML-predicted cancer type
