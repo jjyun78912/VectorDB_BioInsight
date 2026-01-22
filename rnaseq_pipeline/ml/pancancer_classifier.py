@@ -62,6 +62,8 @@ logger = logging.getLogger(__name__)
 
 # 생물학적으로 유사하여 혼동되기 쉬운 암종 쌍
 CONFUSABLE_CANCER_PAIRS = {
+    # ★★★ 폐암 (가장 중요 - LUAD vs LUSC 구분 어려움)
+    frozenset({"LUAD", "LUSC"}): "lung_cancer",        # 폐선암 vs 폐편평 (같은 장기, 다른 조직형)
     # 편평상피암(SCC) 계열 - 같은 조직학적 기원
     frozenset({"HNSC", "LUSC"}): "squamous_cell",      # 두경부 vs 폐편평
     frozenset({"HNSC", "SKCM"}): "skin_mucosal",       # 두경부 vs 흑색종 (점막 흑색종)
@@ -69,6 +71,7 @@ CONFUSABLE_CANCER_PAIRS = {
     frozenset({"SKCM", "HNSC"}): "skin_mucosal",       # 흑색종 vs 두경부
     # 선암(Adenocarcinoma) 계열
     frozenset({"LUAD", "PAAD"}): "adenocarcinoma",     # 폐선암 vs 췌장암
+    frozenset({"LUAD", "BLCA"}): "adenocarcinoma",     # 폐선암 vs 방광 (일부 선암)
     frozenset({"COAD", "STAD"}): "gi_adenocarcinoma",  # 대장 vs 위
     # 부인과 암종
     frozenset({"OV", "UCEC"}): "gynecologic",          # 난소 vs 자궁
@@ -76,14 +79,24 @@ CONFUSABLE_CANCER_PAIRS = {
 
 # 조직 특이적 마커 유전자 (ENSEMBL ID → Symbol 매핑 포함)
 TISSUE_SPECIFIC_MARKERS = {
-    # 폐 특이 마커
+    # ★★★ 폐선암 vs 폐편평 구분 마커 (강화됨)
     "LUAD": {
-        "markers": ["NKX2-1", "NAPSA", "SFTPC", "SFTPB"],  # TTF-1, Napsin A, Surfactant
-        "description": "폐선암 특이 전사인자 및 계면활성제",
+        # TTF-1 (NKX2-1) = 폐선암의 gold standard 마커
+        # NAPSA (Napsin A) = 폐선암 특이
+        # Surfactant proteins = 폐포 II형 세포 기원
+        # MUC1 = 선암 뮤신
+        "markers": ["NKX2-1", "TTF1", "NAPSA", "SFTPC", "SFTPB", "SFTPA1", "MUC1", "CK7", "KRT7"],
+        "negative_markers": ["TP63", "KRT5", "KRT6A", "SOX2"],  # 음성이어야 함
+        "description": "폐선암 특이 전사인자 및 계면활성제 (TTF-1+, Napsin A+, p63-)",
     },
     "LUSC": {
-        "markers": ["TP63", "SOX2", "KRT5", "KRT14"],  # p63, SOX2, 각질
-        "description": "폐편평상피암 각질화 마커",
+        # p63 (TP63) = 편평상피암 gold standard
+        # SOX2 = 편평상피 분화
+        # High-molecular-weight keratins (KRT5, KRT6) = 편평상피 특이
+        # p40 (ΔNp63) = 편평상피암 특이
+        "markers": ["TP63", "SOX2", "KRT5", "KRT6A", "KRT14", "DSG3", "PKP1"],
+        "negative_markers": ["NKX2-1", "TTF1", "NAPSA", "SFTPC"],  # 음성이어야 함
+        "description": "폐편평상피암 각질화 마커 (p63+, CK5/6+, TTF-1-)",
     },
     # 두경부 특이 마커
     "HNSC": {
@@ -1062,11 +1075,13 @@ class PanCancerClassifier:
             'correction_reason': None,
         }
 
-        # 각 암종의 마커 점수 계산
+        # 각 암종의 마커 점수 계산 (positive + negative markers)
         for cancer in [cancer1, cancer2]:
             if cancer in TISSUE_SPECIFIC_MARKERS:
-                markers = TISSUE_SPECIFIC_MARKERS[cancer]['markers']
-                score = self._calculate_marker_score(sample_expr, markers)
+                marker_info = TISSUE_SPECIFIC_MARKERS[cancer]
+                markers = marker_info['markers']
+                negative_markers = marker_info.get('negative_markers', [])
+                score = self._calculate_marker_score(sample_expr, markers, negative_markers)
                 validation['marker_scores'][cancer] = score
 
         # 마커 점수 비교하여 보정 여부 결정
@@ -1074,52 +1089,87 @@ class PanCancerClassifier:
             score1 = validation['marker_scores'].get(cancer1, 0)
             score2 = validation['marker_scores'].get(cancer2, 0)
 
-            # 조건:
-            # - prob 차이가 20% 미만이고
-            # - 마커 점수 차이가 2배 이상이면 보정
-            prob_diff = prob1 - prob2
-            if prob_diff < 0.20 and score2 > score1 * 2 and score2 > 0.3:
-                validation['corrected_prediction'] = cancer2
-                validation['correction_reason'] = (
-                    f"마커 점수 기반 보정: {cancer1}({score1:.2f}) → {cancer2}({score2:.2f})"
-                )
-                logger.info(f"Secondary validation: {cancer1} → {cancer2} "
+            # ★★★ LUAD-LUSC 전용 보정 로직 (더 엄격한 기준)
+            is_lung_cancer_pair = frozenset({cancer1, cancer2}) == frozenset({"LUAD", "LUSC"})
+
+            if is_lung_cancer_pair:
+                # 폐암 쌍은 마커 점수 차이가 1.5배 이상이면 보정 (더 민감하게)
+                prob_diff = prob1 - prob2
+                if prob_diff < 0.25 and score2 > score1 * 1.5 and score2 > 0.2:
+                    validation['corrected_prediction'] = cancer2
+                    validation['correction_reason'] = (
+                        f"폐암 마커 기반 보정: {cancer1}({score1:.2f}) → {cancer2}({score2:.2f})"
+                    )
+                    logger.info(f"Lung cancer secondary validation: {cancer1} → {cancer2} "
+                               f"(marker scores: {score1:.2f} vs {score2:.2f})")
+            else:
+                # 일반 조건: prob 차이가 20% 미만이고 마커 점수 차이가 2배 이상이면 보정
+                prob_diff = prob1 - prob2
+                if prob_diff < 0.20 and score2 > score1 * 2 and score2 > 0.3:
+                    validation['corrected_prediction'] = cancer2
+                    validation['correction_reason'] = (
+                        f"마커 점수 기반 보정: {cancer1}({score1:.2f}) → {cancer2}({score2:.2f})"
+                    )
+                    logger.info(f"Secondary validation: {cancer1} → {cancer2} "
                            f"(marker scores: {score1:.2f} vs {score2:.2f})")
 
         return validation
 
-    def _calculate_marker_score(self, sample_expr: pd.Series, markers: List[str]) -> float:
+    def _calculate_marker_score(self, sample_expr: pd.Series, markers: List[str],
+                                  negative_markers: List[str] = None) -> float:
         """
-        마커 유전자 발현 점수 계산
+        마커 유전자 발현 점수 계산 (positive + negative markers 고려)
 
         높은 발현 = 높은 점수 (정규화된 값 기준)
+        negative_markers가 높으면 점수 차감
         """
         if sample_expr is None or len(sample_expr) == 0:
             return 0.0
 
-        # Gene symbol → 발현값 매핑 (symbol이 index에 있는 경우)
-        # 현재 데이터는 ENSEMBL ID 기준이므로, symbol-to-ensembl 매핑 필요
-        found_expressions = []
-
-        for marker in markers:
+        def get_expression(marker):
+            """마커의 발현값 조회"""
             # Symbol로 직접 찾기
             if marker in sample_expr.index:
-                found_expressions.append(sample_expr[marker])
+                return sample_expr[marker]
             # ENSEMBL 매핑이 있으면 사용
-            elif hasattr(self.preprocessor, 'symbol_to_ensembl') and self.preprocessor.symbol_to_ensembl:
-                ensembl = self.preprocessor.symbol_to_ensembl.get(marker)
+            if hasattr(self, 'symbol_to_ensembl') and self.symbol_to_ensembl:
+                ensembl = self.symbol_to_ensembl.get(marker)
                 if ensembl and ensembl in sample_expr.index:
-                    found_expressions.append(sample_expr[ensembl])
+                    return sample_expr[ensembl]
+            return None
 
-        if not found_expressions:
+        # Positive markers 점수 계산
+        pos_expressions = []
+        for marker in markers:
+            expr = get_expression(marker)
+            if expr is not None:
+                pos_expressions.append(expr)
+
+        if not pos_expressions:
             return 0.0
 
         # 평균 발현량을 0-1 점수로 정규화
-        avg_expr = np.mean(found_expressions)
-        # Log2 CPM 기준 10 이상이면 높은 발현
-        score = min(1.0, avg_expr / 10.0) if avg_expr > 0 else 0.0
+        avg_pos_expr = np.mean(pos_expressions)
+        pos_score = min(1.0, avg_pos_expr / 10.0) if avg_pos_expr > 0 else 0.0
 
-        return score
+        # Negative markers 점수 계산 (높으면 감점)
+        neg_score = 0.0
+        if negative_markers:
+            neg_expressions = []
+            for marker in negative_markers:
+                expr = get_expression(marker)
+                if expr is not None:
+                    neg_expressions.append(expr)
+
+            if neg_expressions:
+                avg_neg_expr = np.mean(neg_expressions)
+                # 음성 마커가 높으면 감점 (최대 0.5점 감점)
+                neg_score = min(0.5, avg_neg_expr / 20.0) if avg_neg_expr > 0 else 0.0
+
+        # 최종 점수 = positive - negative (최소 0)
+        final_score = max(0.0, pos_score - neg_score)
+
+        return final_score
 
     def _generate_warnings(self, confidence: float, agreement: float,
                           confidence_level: str, is_unknown: bool,

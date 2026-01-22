@@ -81,7 +81,7 @@ class SingleCellReportAgent(BaseAgent):
             # Advanced analysis outputs
             "tme_composition.csv",
             "tme_signature_scores.csv",
-            "cnv_by_celltype.csv",
+            "ploidy_by_celltype.csv",
             "grn_edges.csv",
             "tf_activity_scores.csv",
             "master_regulators.csv",
@@ -629,6 +629,78 @@ tr:hover {
     background: var(--bg-tertiary);
     color: var(--text-primary);
 }
+
+/* Clinical & Research Section Styles */
+.cell-gene {
+    font-weight: 600;
+    color: var(--accent-blue);
+}
+
+.evidence-badge, .priority-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.evidence-badge.high, .priority-badge.high {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.evidence-badge.medium, .priority-badge.medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.evidence-badge.low, .priority-badge.low {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.tme-badge.hot {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.tme-badge.altered {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.tme-badge.cold {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.ai-box {
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.ai-box.orange {
+    background: #fff7ed;
+    border-left: 4px solid #d97706;
+}
+
+.ai-box.green {
+    background: #f0fdf4;
+    border-left: 4px solid #059669;
+}
+
+.ai-box.blue {
+    background: #eff6ff;
+    border-left: 4px solid #2563eb;
+}
+
+.rec-intro {
+    padding: 16px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: 24px;
+}
 """
 
     def _generate_html(self, data: Dict[str, Any]) -> str:
@@ -697,7 +769,11 @@ tr:hover {
         <a href="#interactions">Cell-Cell</a>
         <a href="#tme">TME</a>
         <a href="#grn">GRN</a>
-        <a href="#cnv">CNV</a>
+        <a href="#ploidy">Ploidy</a>
+        <a href="#clinical">임상</a>
+        <a href="#followup">검증실험</a>
+        <a href="#methods">방법론</a>
+        <a href="#research">연구추천</a>
         <a href="#qc">QC</a>
     </nav>
 
@@ -849,10 +925,10 @@ tr:hover {
             {self._grn_analysis_html(data.get('master_regulators'), data.get('tf_activity_scores'))}
         </section>
 
-        <!-- NEW: CNV Inference Section -->
-        <section id="cnv" class="section">
-            <h2>📊 CNV 추론 (악성세포 감별)</h2>
-            {self._cnv_analysis_html(data.get('cnv_by_celltype'))}
+        <!-- NEW: Ploidy Inference Section -->
+        <section id="ploidy" class="section">
+            <h2>📊 Ploidy 추론 (악성세포 감별)</h2>
+            {self._ploidy_analysis_html(data.get('ploidy_by_celltype', data.get('cnv_by_celltype')))}
         </section>
 
         <!-- QC Section -->
@@ -863,23 +939,28 @@ tr:hover {
             </div>
         </section>
 
-        <!-- Methods Section -->
-        <section class="section">
-            <h2>분석 방법</h2>
-            <p>본 분석은 Scanpy 기반 single-cell RNA-seq 파이프라인을 사용하였습니다.</p>
-            <ul style="margin-top: 12px; margin-left: 24px;">
-                <li>QC Filtering: min_genes={self.config.get('min_genes_per_cell', 200)}, max_mito={self.config.get('max_mito_percent', 20)}%</li>
-                <li>Normalization: Total count normalization + log1p</li>
-                <li>HVG Selection: Top {self.config.get('n_top_genes', 2000)} genes ({self.config.get('hvg_flavor', 'seurat_v3')})</li>
-                <li>Dimensionality Reduction: PCA ({self.config.get('n_pcs', 50)} components)</li>
-                <li>Clustering: {self.config.get('clustering_method', 'leiden')} (resolution={self.config.get('clustering_resolution', 0.5)})</li>
-                <li>DEG Analysis: {self.config.get('deg_method', 'wilcoxon')}</li>
-                <li>Cancer Prediction: Pan-Cancer CatBoost (Pseudo-bulk aggregation)</li>
-                <li>Driver Matching: COSMIC Tier1 + OncoKB Actionable</li>
-                <li>Pathway: Enrichr (GO, KEGG)</li>
-                <li>Trajectory: PAGA + Diffusion Pseudotime</li>
-                <li>Cell-Cell Interaction: Ligand-Receptor analysis</li>
-            </ul>
+        <!-- Clinical Implications Section -->
+        <section id="clinical" class="section">
+            <h2>💊 임상적 시사점 (Clinical Implications)</h2>
+            {self._clinical_implications_html(data)}
+        </section>
+
+        <!-- Follow-up Experiments Section -->
+        <section id="followup" class="section">
+            <h2>🔬 검증 실험 제안 (Suggested Follow-up Experiments)</h2>
+            {self._followup_experiments_html(data)}
+        </section>
+
+        <!-- Methods Section with Quality Scorecard -->
+        <section id="methods" class="section">
+            <h2>📊 분석 방법 및 품질 점수 (Methods & Quality Scorecard)</h2>
+            {self._methods_scorecard_html(data)}
+        </section>
+
+        <!-- Research Recommendations Section -->
+        <section id="research" class="section">
+            <h2>🔭 후속 연구 추천 (Research Recommendations)</h2>
+            {self._research_recommendations_html(data)}
         </section>
     </div>
 
@@ -1842,24 +1923,24 @@ JSON 형식으로 응답해주세요:
 
         return html
 
-    def _cnv_analysis_html(self, cnv_by_celltype: Optional[pd.DataFrame]) -> str:
-        """Generate HTML for CNV inference section."""
-        if cnv_by_celltype is None or cnv_by_celltype.empty:
-            return '<p style="color:#999;">CNV 분석 데이터가 없습니다.</p>'
+    def _ploidy_analysis_html(self, ploidy_by_celltype: Optional[pd.DataFrame]) -> str:
+        """Generate HTML for InferPloidy-based malignant cell detection section."""
+        if ploidy_by_celltype is None or ploidy_by_celltype.empty:
+            return '<p style="color:#999;">Ploidy 분석 데이터가 없습니다.</p>'
 
         html = '''
         <div class="content-box">
-            <h3>세포 유형별 CNV 분석</h3>
+            <h3>세포 유형별 Ploidy 분석</h3>
             <p style="font-size:12px;color:#666;margin-bottom:16px;">
-                inferCNV 스타일의 복제수 변이(CNV) 추론 결과입니다.
-                MYC, EGFR 등 종양 유전자 증폭과 TP53, CDKN2A 등 종양 억제 유전자 결실을 기반으로
-                악성세포를 감별합니다.
+                InferPloidy 기반의 염색체 배수성(Ploidy) 추론 결과입니다.
+                정상 세포는 2n(diploid)이지만, 암세포는 종종 이수성(aneuploidy)을 보입니다.
+                Ploidy 점수가 높을수록 염색체 불안정성이 높아 악성세포일 가능성이 증가합니다.
             </p>
             <table class="data-table">
                 <thead>
                     <tr>
                         <th>세포 유형</th>
-                        <th>CNV 점수 (평균)</th>
+                        <th>Ploidy 점수 (평균)</th>
                         <th>악성 추정 세포 수</th>
                         <th>전체 세포 수</th>
                         <th>악성 비율 (%)</th>
@@ -1868,9 +1949,10 @@ JSON 형식으로 응답해주세요:
                 <tbody>
         '''
 
-        for _, row in cnv_by_celltype.iterrows():
+        for _, row in ploidy_by_celltype.iterrows():
             cell_type = row.get('cell_type', row.get('index', ''))
-            cnv_mean = row.get('cnv_mean', 0)
+            # Support both old cnv_mean and new ploidy_score column names
+            ploidy_score = row.get('ploidy_score', row.get('cnv_mean', 0))
             n_malignant = int(row.get('n_malignant', 0))
             n_total = int(row.get('n_total', 1))
             pct_malignant = row.get('pct_malignant', 0)
@@ -1889,7 +1971,7 @@ JSON 형식으로 응답해주세요:
             html += f'''
                     <tr style="{row_color}">
                         <td style="font-weight:500;">{cell_type}</td>
-                        <td>{cnv_mean:.2f}</td>
+                        <td>{ploidy_score:.2f}</td>
                         <td>{n_malignant:,}</td>
                         <td>{n_total:,}</td>
                         <td>{pct_malignant:.1f}% {badge}</td>
@@ -1904,15 +1986,509 @@ JSON 형식으로 응답해주세요:
         <div class="content-box" style="margin-top:16px;background:#fff7ed;border-left:4px solid #d97706;">
             <h4 style="color:#92400e;margin-bottom:8px;">⚠️ 해석 주의사항</h4>
             <ul style="font-size:12px;color:#78350f;margin-left:16px;">
-                <li>CNV 점수가 높다고 반드시 악성세포를 의미하지 않습니다.</li>
-                <li>정상 세포도 체세포 변이를 가질 수 있습니다.</li>
+                <li>Ploidy 점수가 높다고 반드시 악성세포를 의미하지 않습니다.</li>
+                <li>정상 세포도 세포주기에 따라 일시적으로 배수성이 변할 수 있습니다.</li>
                 <li>최종 판단은 조직학적 검사와 전문가 검토가 필요합니다.</li>
-                <li>면역세포(T, NK, B cells)를 정상 참조군으로 사용하였습니다.</li>
+                <li>면역세포(T, NK, B cells)를 정상 참조군(diploid reference)으로 사용하였습니다.</li>
             </ul>
         </div>
         '''
 
         return html
+
+    def _clinical_implications_html(self, data: Dict[str, Any]) -> str:
+        """Generate Clinical Implications section for single-cell analysis."""
+        driver_genes_df = data.get('driver_genes')
+        cancer_prediction = data.get('cancer_prediction', {})
+        tme_composition = data.get('tme_composition')
+        cluster_markers = data.get('cluster_markers')
+
+        predicted_cancer = cancer_prediction.get('predicted_cancer', 'Unknown')
+        predicted_cancer_kr = cancer_prediction.get('predicted_cancer_korean', '알 수 없음')
+
+        # Build biomarker candidates from driver genes
+        biomarker_rows = ''
+        if driver_genes_df is not None and len(driver_genes_df) > 0:
+            for _, row in driver_genes_df.head(6).iterrows():
+                gene = row.get('gene', 'N/A')
+                lfc = row.get('logfoldchange', 0)
+                is_cosmic = row.get('is_cosmic_tier1', False)
+                is_oncokb = row.get('is_oncokb_actionable', False)
+                driver_type = row.get('driver_type', '')
+
+                evidence = 'HIGH' if is_cosmic or is_oncokb else 'MEDIUM'
+                evidence_class = 'high' if evidence == 'HIGH' else 'medium'
+                marker_type = '진단/예후' if is_cosmic else '치료 반응'
+
+                rationale = f"{'COSMIC Tier1' if is_cosmic else ''} {'OncoKB' if is_oncokb else ''} {driver_type}"
+                biomarker_rows += f'''
+                <tr>
+                    <td class="cell-gene">{gene}</td>
+                    <td>{marker_type}</td>
+                    <td><span class="evidence-badge {evidence_class}">{evidence}</span></td>
+                    <td>{rationale.strip()}</td>
+                </tr>'''
+
+        # Build therapeutic targets
+        therapeutic_rows = ''
+        if driver_genes_df is not None:
+            actionable = driver_genes_df[driver_genes_df.get('is_oncokb_actionable', False) == True] if 'is_oncokb_actionable' in driver_genes_df.columns else pd.DataFrame()
+            for _, row in actionable.head(4).iterrows():
+                gene = row.get('gene', 'N/A')
+                lfc = row.get('logfoldchange', 0)
+                direction = "↑" if lfc > 0 else "↓"
+
+                therapeutic_rows += f'''
+                <tr>
+                    <td class="cell-gene">{gene}</td>
+                    <td>OncoKB Actionable</td>
+                    <td><span class="priority-badge high">HIGH</span></td>
+                    <td>연구 필요</td>
+                    <td>{direction} {abs(lfc):.2f} 발현 변화</td>
+                </tr>'''
+
+        # TME-based immunotherapy prediction
+        tme_interpretation = ""
+        if tme_composition is not None and len(tme_composition) > 0:
+            immune_cells = tme_composition[tme_composition['category'].str.contains('immune|T_cell|NK|B_cell', case=False, na=False)]
+            immune_pct = immune_cells['percentage'].sum() if len(immune_cells) > 0 else 0
+
+            if immune_pct > 30:
+                tme_class = "hot"
+                tme_label = "Hot (Inflamed)"
+                immunotherapy_pred = "면역관문억제제 반응 가능성 높음"
+            elif immune_pct > 15:
+                tme_class = "altered"
+                tme_label = "Altered"
+                immunotherapy_pred = "면역치료 + 병용요법 고려"
+            else:
+                tme_class = "cold"
+                tme_label = "Cold (Desert)"
+                immunotherapy_pred = "면역치료 저항 가능성, 병용요법 필요"
+
+            tme_interpretation = f'''
+            <div class="tme-immunotherapy" style="margin-top:24px;padding:20px;background:var(--bg-tertiary);border-radius:8px;">
+                <h4 style="margin-bottom:12px;">🛡️ TME 기반 면역치료 반응 예측</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                    <div>
+                        <span style="font-weight:600;">TME 표현형:</span>
+                        <span class="tme-badge {tme_class}" style="padding:4px 12px;border-radius:4px;margin-left:8px;">{tme_label}</span>
+                    </div>
+                    <div>
+                        <span style="font-weight:600;">면역세포 비율:</span>
+                        <span>{immune_pct:.1f}%</span>
+                    </div>
+                </div>
+                <p style="margin-top:12px;font-size:13px;color:var(--text-secondary);">
+                    <strong>예측:</strong> {immunotherapy_pred}
+                </p>
+            </div>
+            '''
+
+        return f'''
+        <div class="ai-box orange" style="margin-bottom:20px;padding:16px;background:#fff7ed;border-left:4px solid #d97706;border-radius:4px;">
+            <div style="font-weight:600;margin-bottom:8px;">임상적 의미 요약</div>
+            <p style="font-size:13px;color:var(--text-secondary);">
+                본 Single-cell 분석에서 식별된 세포 유형과 마커 유전자들은 {predicted_cancer_kr} ({predicted_cancer})의
+                세포 이질성 이해, 치료 반응 예측, 그리고 정밀 의료 전략 수립에 활용될 수 있습니다.
+            </p>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">바이오마커 후보</h3>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr><th>유전자</th><th>유형</th><th>근거</th><th>설명</th></tr>
+                    </thead>
+                    <tbody>
+                        {biomarker_rows if biomarker_rows else '<tr><td colspan="4" style="color:#999;">바이오마커 후보가 없습니다.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">치료 표적 후보</h3>
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr><th>유전자</th><th>분류</th><th>우선순위</th><th>기존 약물</th><th>근거</th></tr>
+                    </thead>
+                    <tbody>
+                        {therapeutic_rows if therapeutic_rows else '<tr><td colspan="5" style="color:#999;">치료 표적 후보가 없습니다.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {tme_interpretation}
+
+        <div style="margin-top:24px;padding:16px;background:#fef3c7;border-radius:8px;font-size:12px;">
+            <strong>⚠️ 중요 안내:</strong> Single-cell 분석 기반 임상적 시사점은 계산적 예측이며,
+            진단 또는 치료 적용 전 반드시 실험적·임상적 검증이 필요합니다.
+            세포 수준의 이질성 분석은 Bulk RNA-seq 대비 해상도가 높으나, 충분한 세포 수 확보가 중요합니다.
+        </div>
+        '''
+
+    def _followup_experiments_html(self, data: Dict[str, Any]) -> str:
+        """Generate Follow-up Experiments section for single-cell analysis."""
+        driver_genes_df = data.get('driver_genes')
+        cluster_markers = data.get('cluster_markers')
+        tme_composition = data.get('tme_composition')
+
+        # Get top genes for validation
+        top_genes = []
+        if driver_genes_df is not None and len(driver_genes_df) > 0:
+            top_genes = driver_genes_df.head(5)['gene'].tolist()
+        elif cluster_markers is not None and len(cluster_markers) > 0:
+            top_genes = cluster_markers.groupby('cluster').head(1)['gene'].tolist()[:5]
+
+        genes_str = ', '.join(top_genes) if top_genes else '분석된 후보 유전자들'
+
+        # Cell type specific validation targets
+        celltype_validation = ""
+        if tme_composition is not None and len(tme_composition) > 0:
+            major_celltypes = tme_composition.nlargest(3, 'count')['category'].tolist()
+            celltype_validation = f'''
+            <div style="margin-top:24px;">
+                <h4 style="margin-bottom:12px;">세포 유형별 FACS 정렬 검증</h4>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+                    주요 세포 유형 ({', '.join(major_celltypes)})을 FACS로 분리 후 개별 검증
+                </p>
+            </div>
+            '''
+
+        return f'''
+        <div class="ai-box green" style="margin-bottom:20px;padding:16px;background:#f0fdf4;border-left:4px solid #059669;border-radius:4px;">
+            <div style="font-weight:600;margin-bottom:8px;">실험 검증 전략 요약</div>
+            <p style="font-size:13px;">
+                본 분석에서 식별된 <strong>{genes_str}</strong>에 대해 아래 단계적 검증 실험을 권장합니다.
+                Single-cell 데이터의 특성상 세포 유형별 분리 검증이 핵심입니다.
+            </p>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">9.1 발현 수준 검증</h3>
+            <table>
+                <thead>
+                    <tr><th>Method</th><th>Target</th><th>Purpose</th><th>Sample Type</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>scRNA-seq 재현</strong></td>
+                        <td>{genes_str[:30]}...</td>
+                        <td>독립 샘플에서 클러스터 마커 재현성 확인</td>
+                        <td>신선 조직 (10X Genomics)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Spatial Transcriptomics</strong></td>
+                        <td>주요 마커 유전자</td>
+                        <td>조직 내 공간적 발현 패턴 검증</td>
+                        <td>FFPE/신선 조직</td>
+                    </tr>
+                    <tr>
+                        <td><strong>FACS + qRT-PCR</strong></td>
+                        <td>세포 유형별 마커</td>
+                        <td>세포 분리 후 마커 발현 확인</td>
+                        <td>단일 세포 현탁액</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Multiplex IF/IHC</strong></td>
+                        <td>단백질 마커 패널</td>
+                        <td>단백질 수준 발현 및 공동 발현 확인</td>
+                        <td>FFPE 조직</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">9.2 기능 연구</h3>
+            <table>
+                <thead>
+                    <tr><th>Experiment</th><th>Target</th><th>Method</th><th>Readout</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Organoid Culture</strong></td>
+                        <td>종양 세포 클러스터</td>
+                        <td>3D organoid 배양</td>
+                        <td>세포 유형 구성, 약물 반응</td>
+                    </tr>
+                    <tr>
+                        <td><strong>CRISPR Perturbation</strong></td>
+                        <td>{top_genes[0] if top_genes else 'target gene'}</td>
+                        <td>Perturb-seq (scRNA-seq + CRISPR)</td>
+                        <td>유전자 기능 및 하위 경로</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Co-culture Assay</strong></td>
+                        <td>면역세포 + 종양세포</td>
+                        <td>T cell cytotoxicity assay</td>
+                        <td>면역 살상 능력</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Drug Screen</strong></td>
+                        <td>주요 클러스터</td>
+                        <td>세포 유형별 약물 감수성</td>
+                        <td>IC50, 세포 사멸 비율</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">9.3 임상 검증</h3>
+            <table>
+                <thead>
+                    <tr><th>Study Type</th><th>Description</th><th>Expected Outcome</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Independent Cohort</strong></td>
+                        <td>독립 환자 코호트에서 세포 유형 구성 비교</td>
+                        <td>세포 유형 비율과 예후 연관성</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Treatment Response</strong></td>
+                        <td>치료 전후 샘플 비교 (paired scRNA-seq)</td>
+                        <td>치료 반응 바이오마커 식별</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Multi-region Sampling</strong></td>
+                        <td>종양 내 여러 부위에서 샘플링</td>
+                        <td>종양 내 이질성 지도</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {celltype_validation}
+
+        <div style="padding:16px;background:var(--bg-tertiary);border-radius:8px;">
+            <h4 style="margin-bottom:8px;">우선순위 권장사항</h4>
+            <p style="font-size:13px;"><strong>1순위:</strong> Spatial Transcriptomics로 공간적 발현 패턴 검증</p>
+            <p style="font-size:13px;"><strong>2순위:</strong> FACS 분리 + qRT-PCR로 세포 유형별 마커 검증</p>
+            <p style="font-size:13px;"><strong>3순위:</strong> Organoid/Perturb-seq으로 기능 연구 수행</p>
+        </div>
+        '''
+
+    def _methods_scorecard_html(self, data: Dict[str, Any]) -> str:
+        """Generate Methods & Quality Scorecard section."""
+        adata_summary = data.get('adata_summary', {})
+        n_cells = adata_summary.get('n_cells', 0)
+        n_genes = adata_summary.get('n_genes', 0)
+        n_clusters = adata_summary.get('n_clusters', 0)
+        cancer_prediction = data.get('cancer_prediction', {})
+        confidence = cancer_prediction.get('confidence', 0)
+
+        # Calculate quality scores
+        cell_score = min(5, max(1, int(n_cells / 2000))) if n_cells > 0 else 1
+        gene_score = min(5, max(1, int(n_genes / 4000))) if n_genes > 0 else 1
+        cluster_score = 5 if 5 <= n_clusters <= 20 else (3 if n_clusters > 0 else 1)
+        ml_score = min(5, max(1, int(confidence * 5))) if confidence > 0 else 1
+
+        # Tool performance indicators
+        def score_dots(score):
+            return "🟢" * score + "⚪" * (5 - score)
+
+        return f'''
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">분석 도구 및 파라미터</h3>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+                <div style="background:var(--bg-tertiary);padding:16px;border-radius:8px;">
+                    <h4 style="font-size:13px;margin-bottom:8px;">🧬 전처리 (Preprocessing)</h4>
+                    <ul style="font-size:12px;margin-left:16px;">
+                        <li>도구: Scanpy v1.9+</li>
+                        <li>QC: min_genes={self.config.get('min_genes_per_cell', 200)}, max_mito={self.config.get('max_mito_percent', 20)}%</li>
+                        <li>정규화: Total count + log1p</li>
+                        <li>HVG: {self.config.get('n_top_genes', 2000)} genes ({self.config.get('hvg_flavor', 'seurat_v3')})</li>
+                    </ul>
+                </div>
+                <div style="background:var(--bg-tertiary);padding:16px;border-radius:8px;">
+                    <h4 style="font-size:13px;margin-bottom:8px;">📊 차원축소 & 클러스터링</h4>
+                    <ul style="font-size:12px;margin-left:16px;">
+                        <li>PCA: {self.config.get('n_pcs', 50)} components</li>
+                        <li>UMAP: n_neighbors=15, min_dist=0.3</li>
+                        <li>클러스터링: {self.config.get('clustering_method', 'leiden')}</li>
+                        <li>Resolution: {self.config.get('clustering_resolution', 0.5)}</li>
+                    </ul>
+                </div>
+                <div style="background:var(--bg-tertiary);padding:16px;border-radius:8px;">
+                    <h4 style="font-size:13px;margin-bottom:8px;">🔬 DEG & Annotation</h4>
+                    <ul style="font-size:12px;margin-left:16px;">
+                        <li>DEG: {self.config.get('deg_method', 'wilcoxon')}</li>
+                        <li>Cell type: CellTypist / Marker-based</li>
+                        <li>Driver: COSMIC Tier1 + OncoKB</li>
+                        <li>Pathway: Enrichr (GO, KEGG)</li>
+                    </ul>
+                </div>
+                <div style="background:var(--bg-tertiary);padding:16px;border-radius:8px;">
+                    <h4 style="font-size:13px;margin-bottom:8px;">🤖 ML & 고급 분석</h4>
+                    <ul style="font-size:12px;margin-left:16px;">
+                        <li>암종 예측: Pan-Cancer CatBoost</li>
+                        <li>Trajectory: PAGA + DPT</li>
+                        <li>GRN: Correlation-based TF analysis</li>
+                        <li>Ploidy: InferPloidy (악성세포 감별)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">품질 점수표 (Quality Scorecard)</h3>
+            <table>
+                <thead>
+                    <tr><th>평가 항목</th><th>현재 값</th><th>점수</th><th>평가</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>세포 수 (Cell Count)</td>
+                        <td>{n_cells:,}개</td>
+                        <td>{score_dots(cell_score)}</td>
+                        <td>{'충분' if cell_score >= 4 else '적정' if cell_score >= 2 else '부족'}</td>
+                    </tr>
+                    <tr>
+                        <td>유전자 수 (Gene Count)</td>
+                        <td>{n_genes:,}개</td>
+                        <td>{score_dots(gene_score)}</td>
+                        <td>{'충분' if gene_score >= 4 else '적정' if gene_score >= 2 else '부족'}</td>
+                    </tr>
+                    <tr>
+                        <td>클러스터 수 (Clusters)</td>
+                        <td>{n_clusters}개</td>
+                        <td>{score_dots(cluster_score)}</td>
+                        <td>{'적정' if cluster_score >= 4 else '확인 필요'}</td>
+                    </tr>
+                    <tr>
+                        <td>ML 예측 신뢰도</td>
+                        <td>{confidence:.1%}</td>
+                        <td>{score_dots(ml_score)}</td>
+                        <td>{'높음' if ml_score >= 4 else '중간' if ml_score >= 2 else '낮음'}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="background:#f8fafc;padding:20px;border-radius:8px;border:1px solid var(--border-light);">
+            <h4 style="margin-bottom:12px;">신뢰도 점수 계산 기준</h4>
+            <table style="font-size:12px;">
+                <tr><td>세포 수 ≥10,000</td><td>+5점</td><td>충분한 통계적 검증력</td></tr>
+                <tr><td>유전자 수 ≥20,000</td><td>+5점</td><td>전체 전사체 커버리지</td></tr>
+                <tr><td>클러스터 수 5-20개</td><td>+5점</td><td>적절한 해상도</td></tr>
+                <tr><td>ML 신뢰도 ≥80%</td><td>+5점</td><td>높은 예측 정확도</td></tr>
+                <tr><td>Driver 유전자 발견</td><td>+1점</td><td>임상적 관련성</td></tr>
+            </table>
+        </div>
+        '''
+
+    def _research_recommendations_html(self, data: Dict[str, Any]) -> str:
+        """Generate Research Recommendations section for single-cell analysis."""
+        driver_genes_df = data.get('driver_genes')
+        tme_composition = data.get('tme_composition')
+        cancer_prediction = data.get('cancer_prediction', {})
+        cluster_markers = data.get('cluster_markers')
+
+        predicted_cancer = cancer_prediction.get('predicted_cancer', 'Unknown')
+
+        # Determine research focus based on TME
+        tme_focus = ""
+        if tme_composition is not None and len(tme_composition) > 0:
+            immune_cells = tme_composition[tme_composition['category'].str.contains('immune|T_cell|NK', case=False, na=False)]
+            immune_pct = immune_cells['percentage'].sum() if len(immune_cells) > 0 else 0
+
+            if immune_pct > 30:
+                tme_focus = "면역 침윤이 높아 면역치료 기전 연구 및 반응 바이오마커 탐색에 적합"
+            elif immune_pct > 15:
+                tme_focus = "중간 수준의 면역 침윤으로 면역 활성화 전략 및 병용요법 연구 추천"
+            else:
+                tme_focus = "면역 사막(cold TME) 상태로 면역세포 유입 유도 전략 연구 필요"
+
+        # Top driver genes for research
+        top_drivers = []
+        if driver_genes_df is not None and len(driver_genes_df) > 0:
+            top_drivers = driver_genes_df.head(5)['gene'].tolist()
+
+        drivers_str = ', '.join(top_drivers) if top_drivers else '주요 마커 유전자'
+
+        return f'''
+        <div class="rec-intro" style="margin-bottom:24px;padding:16px;background:var(--bg-tertiary);border-radius:8px;">
+            <p style="font-size:13px;">
+                본 섹션은 Single-cell RNA-seq 분석 결과를 바탕으로 후속 연구 방향을 제안합니다.
+                세포 유형별 이질성, 종양 미세환경 특성, 그리고 잠재적 치료 표적을 고려한 연구 전략을 포함합니다.
+            </p>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">🎯 단기 연구 방향 (6개월 이내)</h3>
+            <div style="background:white;padding:16px;border:1px solid var(--border-light);border-radius:8px;">
+                <ul style="margin-left:16px;font-size:13px;">
+                    <li><strong>마커 검증:</strong> {drivers_str}의 독립 코호트 발현 검증</li>
+                    <li><strong>세포 분리:</strong> FACS/MACS를 이용한 주요 세포 유형 분리 및 기능 분석</li>
+                    <li><strong>Spatial 검증:</strong> Visium/MERFISH로 세포 유형 공간적 분포 확인</li>
+                    <li><strong>바이오마커 개발:</strong> 진단/예후 마커 패널 구성 및 임상 유용성 평가</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">🔬 중기 연구 방향 (6개월-2년)</h3>
+            <div style="background:white;padding:16px;border:1px solid var(--border-light);border-radius:8px;">
+                <ul style="margin-left:16px;font-size:13px;">
+                    <li><strong>기능 연구:</strong> Perturb-seq을 통한 주요 유전자 기능 규명</li>
+                    <li><strong>TME 연구:</strong> {tme_focus if tme_focus else '종양 미세환경 특성 규명'}</li>
+                    <li><strong>약물 스크리닝:</strong> 세포 유형별 약물 감수성 프로파일링</li>
+                    <li><strong>Organoid 모델:</strong> 환자 유래 오가노이드에서 세포 구성 재현 확인</li>
+                    <li><strong>다중오믹스:</strong> scATAC-seq, CITE-seq 통합 분석</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">🚀 장기 연구 방향 (2년 이상)</h3>
+            <div style="background:white;padding:16px;border:1px solid var(--border-light);border-radius:8px;">
+                <ul style="margin-left:16px;font-size:13px;">
+                    <li><strong>임상 시험:</strong> 세포 유형 기반 바이오마커 전향적 검증</li>
+                    <li><strong>정밀 의료:</strong> 환자별 세포 구성에 따른 맞춤 치료 전략 개발</li>
+                    <li><strong>내성 연구:</strong> 치료 전후 세포 구성 변화 및 내성 기전 규명</li>
+                    <li><strong>Atlas 구축:</strong> {predicted_cancer} 세포 유형 레퍼런스 아틀라스 기여</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="margin-bottom:24px;">
+            <h3 style="font-size:15px;margin-bottom:12px;">🤝 협력 연구 제안</h3>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+                <div style="padding:12px;background:#eff6ff;border-radius:8px;">
+                    <strong style="font-size:12px;">병리학 협력</strong>
+                    <p style="font-size:11px;margin-top:4px;">조직학적 검증, Multiplex IHC/IF</p>
+                </div>
+                <div style="padding:12px;background:#f0fdf4;border-radius:8px;">
+                    <strong style="font-size:12px;">임상 협력</strong>
+                    <p style="font-size:11px;margin-top:4px;">전향적 코호트, 치료 반응 데이터</p>
+                </div>
+                <div style="padding:12px;background:#fef3c7;border-radius:8px;">
+                    <strong style="font-size:12px;">생물정보학 협력</strong>
+                    <p style="font-size:11px;margin-top:4px;">다중오믹스 통합, AI 모델 개발</p>
+                </div>
+                <div style="padding:12px;background:#fce7f3;border-radius:8px;">
+                    <strong style="font-size:12px;">제약/바이오텍 협력</strong>
+                    <p style="font-size:11px;margin-top:4px;">약물 스크리닝, 표적 치료제 개발</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding:16px;background:#fff7ed;border-left:4px solid #d97706;border-radius:4px;">
+            <h4 style="margin-bottom:8px;font-size:13px;">⚠️ 연구 수행 시 주의사항</h4>
+            <ul style="font-size:12px;margin-left:16px;color:var(--text-secondary);">
+                <li>Single-cell 데이터의 기술적 노이즈(dropout, batch effect)를 고려한 분석 필요</li>
+                <li>세포 수 및 시퀀싱 깊이가 결과 해석에 영향을 미칠 수 있음</li>
+                <li>in silico 예측은 반드시 실험적 검증을 통해 확인 필요</li>
+                <li>환자 간 이질성을 고려한 충분한 샘플 수 확보 중요</li>
+            </ul>
+        </div>
+        '''
 
     def validate_outputs(self) -> bool:
         """Validate that required output files were created."""

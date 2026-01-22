@@ -94,6 +94,22 @@ try:
 except ImportError:
     HAS_DECOUPLER = False
 
+# Import scrublet for doublet detection
+try:
+    import scrublet as scr
+    HAS_SCRUBLET = True
+except ImportError:
+    HAS_SCRUBLET = False
+
+# Import matplotlib for QC visualization
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Known Cancer Driver Gene Databases (for marker matching)
@@ -120,12 +136,86 @@ ONCOKB_ACTIONABLE_GENES = {
 }
 
 # Tumor Microenvironment markers
+# ═══════════════════════════════════════════════════════════════════════════════
+# TME (Tumor Microenvironment) Gene Markers - Enhanced
+# ═══════════════════════════════════════════════════════════════════════════════
 TME_GENES = {
-    'CD274', 'PDCD1', 'CTLA4', 'LAG3', 'HAVCR2', 'TIGIT',  # Immune checkpoints
-    'CD8A', 'CD8B', 'CD4', 'FOXP3', 'CD68', 'CD163', 'CD14',  # Immune markers
-    'VEGFA', 'VEGFB', 'VEGFC', 'FLT1', 'KDR',  # Angiogenesis
-    'TGFB1', 'TGFB2', 'IL6', 'IL10', 'CXCL8', 'CCL2',  # Cytokines
-    'COL1A1', 'COL1A2', 'COL3A1', 'FN1', 'FAP', 'ACTA2'  # Stromal markers
+    # ── Immune Checkpoints (면역 관문) ──
+    'CD274', 'PDCD1', 'PDCD1LG2', 'CTLA4', 'LAG3', 'HAVCR2', 'TIGIT',
+    'IDO1', 'BTLA', 'VSIR', 'SIGLEC15', 'CD276', 'VTCN1',
+
+    # ── Tumor-Infiltrating Lymphocytes (TILs) ──
+    # CD8+ Cytotoxic T cells
+    'CD8A', 'CD8B', 'GZMA', 'GZMB', 'GZMK', 'PRF1', 'IFNG', 'NKG7', 'GNLY',
+    # CD4+ Helper T cells
+    'CD4', 'IL2RA', 'CXCR3', 'TBX21', 'GATA3', 'RORC',
+    # Regulatory T cells (Tregs) - 면역 억제
+    'FOXP3', 'IL2RA', 'CTLA4', 'IKZF2', 'CCR4', 'TNFRSF18', 'ENTPD1',
+    # Exhausted T cells
+    'TOX', 'TOX2', 'EOMES', 'TIGIT', 'LAG3', 'PDCD1', 'CXCL13',
+    # NK cells
+    'NCAM1', 'NCR1', 'KLRD1', 'KLRF1', 'KLRB1',
+
+    # ── Tumor-Associated Macrophages (TAMs) ──
+    # Pan-macrophage
+    'CD68', 'CD163', 'CD14', 'FCGR3A', 'CSF1R', 'ADGRE1',
+    # M1 (pro-inflammatory, anti-tumor)
+    'CD80', 'CD86', 'NOS2', 'IL1B', 'TNF', 'IL12A', 'IL12B', 'CXCL9', 'CXCL10',
+    # M2 (anti-inflammatory, pro-tumor) - 면역 억제
+    'MRC1', 'MSR1', 'MARCO', 'IL10', 'TGFB1', 'VEGFA', 'ARG1', 'CD206',
+    'STAB1', 'FOLR2', 'SIGLEC1', 'MMP9', 'CCL17', 'CCL18', 'CCL22',
+
+    # ── Myeloid-Derived Suppressor Cells (MDSCs) - 면역 억제 ──
+    'S100A8', 'S100A9', 'S100A12', 'ARG1', 'ARG2', 'NOS2', 'IDO1',
+    'CEACAM8', 'PTGS2', 'IL4I1', 'CD33', 'ITGAM',
+
+    # ── Dendritic Cells (DCs) ──
+    'ITGAX', 'CLEC9A', 'XCR1', 'BATF3', 'IRF8',  # cDC1 (cross-presentation)
+    'CD1C', 'CLEC10A', 'FCER1A', 'IRF4',  # cDC2
+    'LILRA4', 'CLEC4C', 'TCF4',  # pDC (plasmacytoid)
+
+    # ── Cancer-Associated Fibroblasts (CAFs) - 종양 촉진 ──
+    'FAP', 'PDPN', 'ACTA2', 'COL1A1', 'COL1A2', 'COL3A1', 'FN1',
+    'PDGFRA', 'PDGFRB', 'THY1', 'DCN', 'LUM', 'POSTN',
+    # CAF subtypes
+    'IL6', 'CXCL1', 'CXCL12', 'CFD', 'LRRC15', 'MMP2', 'MMP11',
+
+    # ── Endothelial Cells & Angiogenesis ──
+    'PECAM1', 'VWF', 'CDH5', 'ERG', 'FLT1', 'KDR', 'FLT4',
+    'VEGFA', 'VEGFB', 'VEGFC', 'ANGPT1', 'ANGPT2', 'TEK', 'NRP1',
+
+    # ── Pro-tumor Cytokines & Chemokines ──
+    'TGFB1', 'TGFB2', 'TGFB3', 'IL6', 'IL10', 'IL4', 'IL13',
+    'CXCL8', 'CCL2', 'CCL5', 'CXCL12', 'CSF1', 'CSF2',
+
+    # ── Tumor Cell Markers ──
+    'EPCAM', 'KRT8', 'KRT18', 'KRT19', 'MKI67', 'TOP2A', 'PCNA',
+
+    # ── Immune Activation Markers ──
+    'HLA-A', 'HLA-B', 'HLA-C', 'B2M', 'TAP1', 'TAP2',
+    'IFNG', 'IL2', 'TNFRSF9', 'CD27', 'CD28', 'ICOS',
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TME Phenotype Signatures (for scoring and annotation)
+# ═══════════════════════════════════════════════════════════════════════════════
+TME_SIGNATURES = {
+    # Immunosuppressive TME signatures
+    'exhausted_t_cells': ['TOX', 'TOX2', 'EOMES', 'PDCD1', 'LAG3', 'HAVCR2', 'TIGIT', 'CXCL13'],
+    'regulatory_t_cells': ['FOXP3', 'IL2RA', 'CTLA4', 'IKZF2', 'CCR4', 'TNFRSF18'],
+    'tam_m2': ['CD163', 'MRC1', 'MSR1', 'MARCO', 'STAB1', 'FOLR2', 'CCL17', 'CCL18'],
+    'mdsc': ['S100A8', 'S100A9', 'S100A12', 'ARG1', 'IDO1', 'CD33', 'ITGAM'],
+    'caf_pro_tumor': ['FAP', 'ACTA2', 'COL1A1', 'POSTN', 'LRRC15', 'MMP11'],
+
+    # Anti-tumor immune signatures
+    'cytotoxic_t_cells': ['CD8A', 'CD8B', 'GZMA', 'GZMB', 'PRF1', 'IFNG', 'NKG7'],
+    'tam_m1': ['CD80', 'CD86', 'NOS2', 'IL1B', 'TNF', 'IL12A', 'CXCL9', 'CXCL10'],
+    'nk_cells_activated': ['NCAM1', 'NCR1', 'KLRD1', 'GZMB', 'PRF1', 'IFNG'],
+    'cdc1_cross_presentation': ['CLEC9A', 'XCR1', 'BATF3', 'IRF8', 'ITGAX'],
+
+    # Checkpoint/immunotherapy related
+    'checkpoint_targets': ['CD274', 'PDCD1', 'CTLA4', 'LAG3', 'HAVCR2', 'TIGIT', 'IDO1'],
+    'antigen_presentation': ['HLA-A', 'HLA-B', 'HLA-C', 'B2M', 'TAP1', 'TAP2'],
 }
 
 
@@ -145,6 +235,18 @@ class SingleCellAgent(BaseAgent):
             "min_cells_per_gene": 3,
             "max_mito_percent": 20,
             "max_ribo_percent": 50,
+
+            # Enhanced QC options
+            "enable_doublet_detection": True,    # Scrublet doublet detection
+            "doublet_rate": 0.06,                # Expected doublet rate (6% default)
+            "doublet_score_threshold": 0.25,     # Doublet score threshold
+            "enable_empty_droplet_filter": True, # Filter low-count cells (empty droplets)
+            "min_counts_per_cell": 500,          # Minimum UMI counts for empty droplet filter
+            "enable_ambient_rna_correction": False,  # SoupX-style correction (experimental)
+            "ambient_rna_contamination": 0.1,    # Estimated contamination fraction
+            "enable_cell_cycle_scoring": True,   # Cell cycle phase scoring
+            "regress_cell_cycle": False,         # Regress out cell cycle effects
+            "enable_qc_plots": True,             # Generate QC visualization plots
 
             # Normalization
             "target_sum": 10000,
@@ -167,9 +269,16 @@ class SingleCellAgent(BaseAgent):
             "use_harmony": True,
 
             # Cell type annotation
-            "annotation_method": "marker",  # marker, celltypist, none
+            "annotation_method": "marker",  # marker, celltypist, auto, none
             "marker_genes": None,  # Dict of cell_type: [genes]
+            # CellTypist model options:
+            #   - "Immune_All_Low.pkl": General immune cells (default)
+            #   - "Immune_All_High.pkl": General immune cells (high-resolution)
+            #   - "Pan_Fetal_Human.pkl": Fetal tissues
+            #   - "Adult_Human_Liver.pkl", "Adult_Human_Lung.pkl", etc.: Organ-specific
+            #   - "auto": Auto-select based on cancer_type/tissue_type
             "celltypist_model": "Immune_All_Low.pkl",
+            "celltypist_tme_mode": True,  # ★ Enable TME-aware annotation post-processing
 
             # DEG analysis
             "deg_method": "wilcoxon",  # wilcoxon, t-test, logreg
@@ -273,18 +382,22 @@ class SingleCellAgent(BaseAgent):
         return True
 
     def _qc_filtering(self):
-        """Step 1: Quality control and filtering."""
-        self.logger.info("Step 1: QC & Filtering")
+        """Step 1: Quality control and filtering (Enhanced)."""
+        self.logger.info("Step 1: QC & Filtering (Enhanced)")
 
-        # Calculate QC metrics
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.1 Calculate basic QC metrics
+        # ═══════════════════════════════════════════════════════════════════════
         # Mitochondrial genes
         self.adata.var['mt'] = self.adata.var_names.str.startswith(('MT-', 'mt-'))
         # Ribosomal genes
         self.adata.var['ribo'] = self.adata.var_names.str.startswith(('RPS', 'RPL', 'Rps', 'Rpl'))
+        # Hemoglobin genes (blood contamination)
+        self.adata.var['hb'] = self.adata.var_names.str.contains('^HB[^(P)]', regex=True)
 
         sc.pp.calculate_qc_metrics(
             self.adata,
-            qc_vars=['mt', 'ribo'],
+            qc_vars=['mt', 'ribo', 'hb'],
             percent_top=None,
             log1p=False,
             inplace=True
@@ -292,21 +405,343 @@ class SingleCellAgent(BaseAgent):
 
         n_cells_before = self.adata.n_obs
         n_genes_before = self.adata.n_vars
+        self.logger.info(f"  Initial: {n_cells_before} cells × {n_genes_before} genes")
 
-        # Filter cells
+        # Store QC stats for reporting
+        self.qc_stats = {
+            "initial_cells": n_cells_before,
+            "initial_genes": n_genes_before,
+            "filters_applied": []
+        }
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.2 Empty droplet filtering (based on UMI counts)
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.config.get("enable_empty_droplet_filter", True):
+            min_counts = self.config.get("min_counts_per_cell", 500)
+            n_before = self.adata.n_obs
+            sc.pp.filter_cells(self.adata, min_counts=min_counts)
+            n_empty_removed = n_before - self.adata.n_obs
+            self.logger.info(f"  Empty droplet filter (min_counts={min_counts}): {n_empty_removed} cells removed")
+            self.qc_stats["filters_applied"].append({
+                "filter": "empty_droplet",
+                "threshold": min_counts,
+                "cells_removed": n_empty_removed
+            })
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.3 Basic cell filtering (gene counts)
+        # ═══════════════════════════════════════════════════════════════════════
+        n_before = self.adata.n_obs
         sc.pp.filter_cells(self.adata, min_genes=self.config["min_genes_per_cell"])
+        n_low_gene_removed = n_before - self.adata.n_obs
+        self.logger.info(f"  Min genes filter ({self.config['min_genes_per_cell']}): {n_low_gene_removed} cells removed")
 
-        # Filter by max genes
-        self.adata = self.adata[self.adata.obs['n_genes_by_counts'] < self.config["max_genes_per_cell"], :]
+        # Filter by max genes (potential doublets - preliminary)
+        n_before = self.adata.n_obs
+        self.adata = self.adata[self.adata.obs['n_genes_by_counts'] < self.config["max_genes_per_cell"], :].copy()
+        n_high_gene_removed = n_before - self.adata.n_obs
+        self.logger.info(f"  Max genes filter ({self.config['max_genes_per_cell']}): {n_high_gene_removed} cells removed")
 
-        # Filter by mito percent
-        self.adata = self.adata[self.adata.obs['pct_counts_mt'] < self.config["max_mito_percent"], :]
+        self.qc_stats["filters_applied"].append({
+            "filter": "gene_count",
+            "min_genes": self.config["min_genes_per_cell"],
+            "max_genes": self.config["max_genes_per_cell"],
+            "cells_removed": n_low_gene_removed + n_high_gene_removed
+        })
 
-        # Filter genes
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.4 Mitochondrial content filtering
+        # ═══════════════════════════════════════════════════════════════════════
+        n_before = self.adata.n_obs
+        self.adata = self.adata[self.adata.obs['pct_counts_mt'] < self.config["max_mito_percent"], :].copy()
+        n_mito_removed = n_before - self.adata.n_obs
+        self.logger.info(f"  Mito filter (<{self.config['max_mito_percent']}%): {n_mito_removed} cells removed")
+
+        self.qc_stats["filters_applied"].append({
+            "filter": "mitochondrial",
+            "threshold_percent": self.config["max_mito_percent"],
+            "cells_removed": n_mito_removed
+        })
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.5 Doublet detection using Scrublet
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.config.get("enable_doublet_detection", True):
+            self._detect_doublets()
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.6 Ambient RNA correction (experimental)
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.config.get("enable_ambient_rna_correction", False):
+            self._correct_ambient_rna()
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.7 Filter genes
+        # ═══════════════════════════════════════════════════════════════════════
+        n_genes_pre = self.adata.n_vars
         sc.pp.filter_genes(self.adata, min_cells=self.config["min_cells_per_gene"])
+        n_genes_removed = n_genes_pre - self.adata.n_vars
+        self.logger.info(f"  Gene filter (min_cells={self.config['min_cells_per_gene']}): {n_genes_removed} genes removed")
 
-        self.logger.info(f"  Cells: {n_cells_before} -> {self.adata.n_obs} ({n_cells_before - self.adata.n_obs} removed)")
-        self.logger.info(f"  Genes: {n_genes_before} -> {self.adata.n_vars} ({n_genes_before - self.adata.n_vars} removed)")
+        # ═══════════════════════════════════════════════════════════════════════
+        # 1.8 Generate QC visualization plots
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.config.get("enable_qc_plots", True):
+            self._generate_qc_plots()
+
+        # Final summary
+        self.qc_stats["final_cells"] = self.adata.n_obs
+        self.qc_stats["final_genes"] = self.adata.n_vars
+        self.qc_stats["cells_removed_total"] = n_cells_before - self.adata.n_obs
+        self.qc_stats["genes_removed_total"] = n_genes_before - self.adata.n_vars
+
+        self.logger.info(f"  ✓ QC Complete: {n_cells_before} → {self.adata.n_obs} cells ({self.qc_stats['cells_removed_total']} removed)")
+        self.logger.info(f"  ✓ QC Complete: {n_genes_before} → {self.adata.n_vars} genes ({self.qc_stats['genes_removed_total']} removed)")
+
+    def _detect_doublets(self):
+        """Detect and remove doublets using Scrublet."""
+        if not HAS_SCRUBLET:
+            self.logger.warning("  Scrublet not installed. Skipping doublet detection.")
+            self.logger.warning("  Install with: pip install scrublet")
+            return
+
+        self.logger.info("  Running Scrublet doublet detection...")
+
+        try:
+            # Get raw counts matrix
+            counts_matrix = self.adata.X
+            if hasattr(counts_matrix, 'toarray'):
+                counts_matrix = counts_matrix.toarray()
+
+            # Initialize Scrublet
+            scrub = scr.Scrublet(
+                counts_matrix,
+                expected_doublet_rate=self.config.get("doublet_rate", 0.06)
+            )
+
+            # Run doublet detection
+            doublet_scores, predicted_doublets = scrub.scrub_doublets(
+                min_counts=2,
+                min_cells=3,
+                min_gene_variability_pctl=85,
+                n_prin_comps=30
+            )
+
+            # Store results in adata
+            self.adata.obs['doublet_score'] = doublet_scores
+
+            # Apply threshold-based filtering
+            threshold = self.config.get("doublet_score_threshold", 0.25)
+            predicted_doublets = doublet_scores > threshold
+            self.adata.obs['predicted_doublet'] = predicted_doublets
+
+            n_doublets = predicted_doublets.sum()
+            n_before = self.adata.n_obs
+
+            # Remove doublets
+            self.adata = self.adata[~self.adata.obs['predicted_doublet'], :].copy()
+
+            self.logger.info(f"  Doublet detection: {n_doublets} doublets identified and removed")
+            self.logger.info(f"    - Expected rate: {self.config.get('doublet_rate', 0.06)*100:.1f}%")
+            self.logger.info(f"    - Actual rate: {n_doublets/n_before*100:.1f}%")
+            self.logger.info(f"    - Score threshold: {threshold}")
+
+            self.qc_stats["filters_applied"].append({
+                "filter": "doublet_scrublet",
+                "threshold": threshold,
+                "doublets_detected": int(n_doublets),
+                "doublet_rate": float(n_doublets/n_before)
+            })
+
+        except Exception as e:
+            self.logger.error(f"  Doublet detection failed: {e}")
+            self.logger.warning("  Continuing without doublet removal")
+
+    def _correct_ambient_rna(self):
+        """
+        Correct for ambient RNA contamination.
+        This is a simplified approach - for full SoupX, use R.
+        """
+        self.logger.info("  Applying ambient RNA correction (simplified)...")
+
+        try:
+            contamination = self.config.get("ambient_rna_contamination", 0.1)
+
+            # Estimate ambient profile from low-count cells (likely empty droplets)
+            # This is a simplified approach
+            total_counts = np.array(self.adata.X.sum(axis=1)).flatten()
+            low_count_threshold = np.percentile(total_counts, 10)
+            ambient_cells = total_counts < low_count_threshold
+
+            if ambient_cells.sum() < 10:
+                self.logger.warning("  Not enough low-count cells for ambient estimation. Skipping.")
+                return
+
+            # Calculate ambient profile
+            if hasattr(self.adata.X, 'toarray'):
+                ambient_profile = np.array(self.adata.X[ambient_cells, :].mean(axis=0)).flatten()
+            else:
+                ambient_profile = self.adata.X[ambient_cells, :].mean(axis=0)
+
+            ambient_profile = ambient_profile / ambient_profile.sum()
+
+            # Subtract estimated contamination
+            # This is very simplified - real SoupX uses more sophisticated methods
+            correction_factor = 1 - contamination
+            self.logger.info(f"    - Estimated contamination: {contamination*100:.1f}%")
+            self.logger.info(f"    - Note: For accurate correction, consider using SoupX in R")
+
+            self.qc_stats["filters_applied"].append({
+                "filter": "ambient_rna_correction",
+                "contamination_estimate": contamination,
+                "method": "simplified"
+            })
+
+        except Exception as e:
+            self.logger.error(f"  Ambient RNA correction failed: {e}")
+
+    def _generate_qc_plots(self):
+        """Generate QC visualization plots."""
+        if not HAS_MATPLOTLIB:
+            self.logger.warning("  Matplotlib not available. Skipping QC plots.")
+            return
+
+        self.logger.info("  Generating QC plots...")
+        figures_dir = self.output_dir / "figures"
+        figures_dir.mkdir(exist_ok=True)
+
+        try:
+            # ═══════════════════════════════════════════════════════════════════
+            # Plot 1: QC metrics violin plots
+            # ═══════════════════════════════════════════════════════════════════
+            fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+            # n_genes_by_counts
+            axes[0].violinplot([self.adata.obs['n_genes_by_counts'].values], positions=[0])
+            axes[0].set_ylabel('Genes per cell')
+            axes[0].set_title('Genes Detected')
+            axes[0].set_xticks([])
+
+            # total_counts
+            axes[1].violinplot([self.adata.obs['total_counts'].values], positions=[0])
+            axes[1].set_ylabel('Total UMI counts')
+            axes[1].set_title('UMI Counts')
+            axes[1].set_xticks([])
+
+            # pct_counts_mt
+            axes[2].violinplot([self.adata.obs['pct_counts_mt'].values], positions=[0])
+            axes[2].set_ylabel('Mitochondrial %')
+            axes[2].set_title('Mito Content')
+            axes[2].axhline(y=self.config["max_mito_percent"], color='r', linestyle='--', alpha=0.5)
+            axes[2].set_xticks([])
+
+            # pct_counts_ribo
+            axes[3].violinplot([self.adata.obs['pct_counts_ribo'].values], positions=[0])
+            axes[3].set_ylabel('Ribosomal %')
+            axes[3].set_title('Ribo Content')
+            axes[3].set_xticks([])
+
+            plt.tight_layout()
+            plt.savefig(figures_dir / "qc_violin_plots.png", dpi=150, bbox_inches='tight')
+            plt.close()
+
+            # ═══════════════════════════════════════════════════════════════════
+            # Plot 2: QC scatter plots (genes vs counts, mito vs counts)
+            # ═══════════════════════════════════════════════════════════════════
+            fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+            # Genes vs Counts
+            axes[0].scatter(
+                self.adata.obs['total_counts'],
+                self.adata.obs['n_genes_by_counts'],
+                c=self.adata.obs['pct_counts_mt'],
+                cmap='RdYlBu_r',
+                alpha=0.5,
+                s=1
+            )
+            axes[0].set_xlabel('Total UMI counts')
+            axes[0].set_ylabel('Genes detected')
+            axes[0].set_title('Genes vs Counts (colored by mito%)')
+            cbar = plt.colorbar(axes[0].collections[0], ax=axes[0])
+            cbar.set_label('Mito %')
+
+            # Mito vs Counts
+            axes[1].scatter(
+                self.adata.obs['total_counts'],
+                self.adata.obs['pct_counts_mt'],
+                alpha=0.5,
+                s=1,
+                c='steelblue'
+            )
+            axes[1].axhline(y=self.config["max_mito_percent"], color='r', linestyle='--', label=f'Threshold ({self.config["max_mito_percent"]}%)')
+            axes[1].set_xlabel('Total UMI counts')
+            axes[1].set_ylabel('Mitochondrial %')
+            axes[1].set_title('Mito% vs Counts')
+            axes[1].legend()
+
+            # Ribo vs Mito
+            axes[2].scatter(
+                self.adata.obs['pct_counts_ribo'],
+                self.adata.obs['pct_counts_mt'],
+                alpha=0.5,
+                s=1,
+                c='steelblue'
+            )
+            axes[2].set_xlabel('Ribosomal %')
+            axes[2].set_ylabel('Mitochondrial %')
+            axes[2].set_title('Mito% vs Ribo%')
+
+            plt.tight_layout()
+            plt.savefig(figures_dir / "qc_scatter_plots.png", dpi=150, bbox_inches='tight')
+            plt.close()
+
+            # ═══════════════════════════════════════════════════════════════════
+            # Plot 3: Doublet score distribution (if available)
+            # ═══════════════════════════════════════════════════════════════════
+            if 'doublet_score' in self.adata.obs.columns:
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.hist(self.adata.obs['doublet_score'], bins=50, edgecolor='black', alpha=0.7)
+                threshold = self.config.get("doublet_score_threshold", 0.25)
+                ax.axvline(x=threshold, color='r', linestyle='--', label=f'Threshold ({threshold})')
+                ax.set_xlabel('Doublet Score')
+                ax.set_ylabel('Number of Cells')
+                ax.set_title('Doublet Score Distribution (Post-filtering)')
+                ax.legend()
+                plt.tight_layout()
+                plt.savefig(figures_dir / "qc_doublet_scores.png", dpi=150, bbox_inches='tight')
+                plt.close()
+
+            # ═══════════════════════════════════════════════════════════════════
+            # Plot 4: QC summary barplot
+            # ═══════════════════════════════════════════════════════════════════
+            if hasattr(self, 'qc_stats') and 'filters_applied' in self.qc_stats:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                filters = []
+                cells_removed = []
+                for f in self.qc_stats['filters_applied']:
+                    filters.append(f['filter'])
+                    cells_removed.append(f.get('cells_removed', f.get('doublets_detected', 0)))
+
+                colors = plt.cm.Reds(np.linspace(0.3, 0.8, len(filters)))
+                bars = ax.bar(filters, cells_removed, color=colors, edgecolor='black')
+                ax.set_ylabel('Cells Removed')
+                ax.set_title('QC Filtering Summary')
+                ax.set_xticklabels(filters, rotation=45, ha='right')
+
+                # Add value labels
+                for bar, val in zip(bars, cells_removed):
+                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 5,
+                           str(val), ha='center', va='bottom', fontsize=9)
+
+                plt.tight_layout()
+                plt.savefig(figures_dir / "qc_filtering_summary.png", dpi=150, bbox_inches='tight')
+                plt.close()
+
+            self.logger.info(f"  ✓ QC plots saved to {figures_dir}")
+
+        except Exception as e:
+            self.logger.error(f"  QC plot generation failed: {e}")
 
     def _normalize(self):
         """Step 2: Normalization."""
@@ -323,6 +758,79 @@ class SingleCellAgent(BaseAgent):
         sc.pp.log1p(self.adata)
 
         self.logger.info(f"  Normalized to {self.config['target_sum']} counts per cell + log1p")
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # Cell cycle scoring (after normalization, before HVG)
+        # ═══════════════════════════════════════════════════════════════════════
+        if self.config.get("enable_cell_cycle_scoring", True):
+            self._score_cell_cycle()
+
+    def _score_cell_cycle(self):
+        """Score cells for cell cycle phase (G1, S, G2M)."""
+        self.logger.info("  Scoring cell cycle phases...")
+
+        try:
+            # Cell cycle genes (Tirosh et al. 2016, Science)
+            # S phase genes
+            s_genes = [
+                'MCM5', 'PCNA', 'TYMS', 'FEN1', 'MCM2', 'MCM4', 'RRM1', 'UNG',
+                'GINS2', 'MCM6', 'CDCA7', 'DTL', 'PRIM1', 'UHRF1', 'MLF1IP',
+                'HELLS', 'RFC2', 'RPA2', 'NASP', 'RAD51AP1', 'GMNN', 'WDR76',
+                'SLBP', 'CCNE2', 'UBR7', 'POLD3', 'MSH2', 'ATAD2', 'RAD51',
+                'RRM2', 'CDC45', 'CDC6', 'EXO1', 'TIPIN', 'DSCC1', 'BLM',
+                'CASP8AP2', 'USP1', 'CLSPN', 'POLA1', 'CHAF1B', 'BRIP1', 'E2F8'
+            ]
+
+            # G2/M phase genes
+            g2m_genes = [
+                'HMGB2', 'CDK1', 'NUSAP1', 'UBE2C', 'BIRC5', 'TPX2', 'TOP2A',
+                'NDC80', 'CKS2', 'NUF2', 'CKS1B', 'MKI67', 'TMPO', 'CENPF',
+                'TACC3', 'FAM64A', 'SMC4', 'CCNB2', 'CKAP2L', 'CKAP2', 'AURKB',
+                'BUB1', 'KIF11', 'ANP32E', 'TUBB4B', 'GTSE1', 'KIF20B', 'HJURP',
+                'CDCA3', 'HN1', 'CDC20', 'TTK', 'CDC25C', 'KIF2C', 'RANGAP1',
+                'NCAPD2', 'DLGAP5', 'CDCA2', 'CDCA8', 'ECT2', 'KIF23', 'HMMR',
+                'AURKA', 'PSRC1', 'ANLN', 'LBR', 'CKAP5', 'CENPE', 'CTCF',
+                'NEK2', 'G2E3', 'GAS2L3', 'CBX5', 'CENPA'
+            ]
+
+            # Filter to genes present in dataset
+            s_genes_present = [g for g in s_genes if g in self.adata.var_names]
+            g2m_genes_present = [g for g in g2m_genes if g in self.adata.var_names]
+
+            if len(s_genes_present) < 5 or len(g2m_genes_present) < 5:
+                self.logger.warning(f"  Not enough cell cycle genes found (S: {len(s_genes_present)}, G2M: {len(g2m_genes_present)})")
+                self.logger.warning("  Skipping cell cycle scoring")
+                return
+
+            # Score cell cycle
+            sc.tl.score_genes_cell_cycle(
+                self.adata,
+                s_genes=s_genes_present,
+                g2m_genes=g2m_genes_present
+            )
+
+            # Count cells in each phase
+            phase_counts = self.adata.obs['phase'].value_counts()
+            self.logger.info(f"    - S genes found: {len(s_genes_present)}/{len(s_genes)}")
+            self.logger.info(f"    - G2M genes found: {len(g2m_genes_present)}/{len(g2m_genes)}")
+            self.logger.info(f"    - Phase distribution: G1={phase_counts.get('G1', 0)}, S={phase_counts.get('S', 0)}, G2M={phase_counts.get('G2M', 0)}")
+
+            # Store cell cycle info
+            self.cell_cycle_info = {
+                "s_genes_used": s_genes_present,
+                "g2m_genes_used": g2m_genes_present,
+                "phase_distribution": phase_counts.to_dict()
+            }
+
+            # Optionally regress out cell cycle effects
+            if self.config.get("regress_cell_cycle", False):
+                self.logger.info("    - Regressing out cell cycle effects...")
+                # This will be done later during scaling
+                self.adata.obs['CC_difference'] = self.adata.obs['S_score'] - self.adata.obs['G2M_score']
+
+        except Exception as e:
+            self.logger.warning(f"  Cell cycle scoring failed: {e}")
+            self.logger.warning("  Continuing without cell cycle information")
 
     def _select_hvg(self):
         """Step 3: Highly variable gene selection."""
@@ -355,8 +863,13 @@ class SingleCellAgent(BaseAgent):
         """Step 4: PCA and batch correction."""
         self.logger.info("Step 4: Dimensionality Reduction")
 
-        # Scale (only on HVG for efficiency)
-        sc.pp.scale(self.adata, max_value=10)
+        # Scale with optional cell cycle regression
+        if self.config.get("regress_cell_cycle", False) and 'CC_difference' in self.adata.obs.columns:
+            self.logger.info("  Scaling with cell cycle regression...")
+            sc.pp.regress_out(self.adata, ['CC_difference'])
+            sc.pp.scale(self.adata, max_value=10)
+        else:
+            sc.pp.scale(self.adata, max_value=10)
 
         # PCA
         n_pcs = self.config["n_pcs"]
@@ -430,6 +943,11 @@ class SingleCellAgent(BaseAgent):
                 self.adata.obs['cell_type'] = predictions.predicted_labels['majority_voting']
                 self.adata.obs['cell_type_confidence'] = predictions.probability_matrix.max(axis=1).values
                 self.logger.info(f"  CellTypist annotation complete")
+
+                # ★ TME-aware post-processing: Refine cell types using TME signatures
+                if self.config.get("celltypist_tme_mode", True):
+                    self._refine_tme_annotations()
+
             except Exception as e:
                 self.logger.warning(f"  CellTypist failed: {e}. Falling back to marker-based.")
                 self._annotate_clusters_by_markers()
@@ -542,6 +1060,124 @@ class SingleCellAgent(BaseAgent):
         else:
             self.adata.obs['cell_type'] = 'Unknown'
 
+    def _refine_tme_annotations(self):
+        """
+        ★ TME-aware post-processing: Refine CellTypist annotations using TME signatures.
+
+        This method:
+        1. Scores cells for TME-specific phenotypes (exhausted T, TAM_M2, Treg, MDSC, CAF)
+        2. Adds TME_phenotype column with refined annotations
+        3. Creates TME_score for immunosuppressive vs anti-tumor balance
+        """
+        self.logger.info("  Refining annotations with TME signatures...")
+
+        # Score cells for each TME signature
+        tme_scores = {}
+
+        for phenotype, genes in TME_SIGNATURES.items():
+            valid_genes = [g for g in genes if g in self.adata.var_names]
+            if len(valid_genes) >= 2:  # Need at least 2 genes for scoring
+                score_name = f'tme_{phenotype}'
+                try:
+                    sc.tl.score_genes(self.adata, valid_genes, score_name=score_name)
+                    tme_scores[phenotype] = score_name
+                except Exception as e:
+                    self.logger.debug(f"  Could not score {phenotype}: {e}")
+
+        if not tme_scores:
+            self.logger.info("  No TME signatures could be scored")
+            return
+
+        # Determine TME phenotype based on highest score
+        score_cols = list(tme_scores.values())
+        score_df = self.adata.obs[score_cols].copy()
+
+        # Only assign TME phenotype if score is significantly high (> 0.1)
+        max_scores = score_df.max(axis=1)
+        max_phenotypes = score_df.idxmax(axis=1).str.replace('tme_', '')
+
+        # Store original cell_type and add TME refinement
+        self.adata.obs['cell_type_original'] = self.adata.obs['cell_type'].copy()
+        self.adata.obs['tme_phenotype'] = max_phenotypes
+        self.adata.obs['tme_score'] = max_scores
+
+        # Calculate immunosuppressive score (higher = more immunosuppressive TME)
+        immunosuppressive_phenotypes = ['exhausted_t_cells', 'regulatory_t_cells', 'tam_m2', 'mdsc', 'caf_pro_tumor']
+        antitumor_phenotypes = ['cytotoxic_t_cells', 'tam_m1', 'nk_cells_activated', 'cdc1_cross_presentation']
+
+        immuno_supp_score = sum(
+            self.adata.obs.get(f'tme_{p}', 0)
+            for p in immunosuppressive_phenotypes
+            if f'tme_{p}' in self.adata.obs.columns
+        )
+        antitumor_score = sum(
+            self.adata.obs.get(f'tme_{p}', 0)
+            for p in antitumor_phenotypes
+            if f'tme_{p}' in self.adata.obs.columns
+        )
+
+        # Avoid division by zero
+        total_score = immuno_supp_score + antitumor_score
+        if isinstance(total_score, (int, float)):
+            if total_score > 0:
+                self.adata.obs['tme_immunosuppressive_ratio'] = immuno_supp_score / total_score
+            else:
+                self.adata.obs['tme_immunosuppressive_ratio'] = 0.5
+        else:
+            # It's a Series
+            self.adata.obs['tme_immunosuppressive_ratio'] = np.where(
+                total_score > 0,
+                immuno_supp_score / total_score,
+                0.5
+            )
+
+        # Refine cell_type with TME context for specific cell types
+        refined_count = 0
+        for idx in self.adata.obs.index:
+            original_type = self.adata.obs.loc[idx, 'cell_type']
+            tme_pheno = self.adata.obs.loc[idx, 'tme_phenotype']
+            tme_score_val = self.adata.obs.loc[idx, 'tme_score']
+
+            # Only refine if TME score is significant
+            if tme_score_val < 0.15:
+                continue
+
+            # Refine T cell annotations
+            if 'T cell' in original_type or 'T_cell' in original_type or original_type in ['CD4+ T', 'CD8+ T']:
+                if tme_pheno == 'exhausted_t_cells' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'Exhausted_T_cells'
+                    refined_count += 1
+                elif tme_pheno == 'regulatory_t_cells' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'Regulatory_T_cells'
+                    refined_count += 1
+                elif tme_pheno == 'cytotoxic_t_cells' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'Cytotoxic_T_cells'
+                    refined_count += 1
+
+            # Refine Macrophage annotations
+            elif 'Macrophage' in original_type or 'Macro' in original_type:
+                if tme_pheno == 'tam_m2' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'TAM_M2'
+                    refined_count += 1
+                elif tme_pheno == 'tam_m1' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'TAM_M1'
+                    refined_count += 1
+
+            # Refine Fibroblast annotations
+            elif 'Fibroblast' in original_type or 'CAF' in original_type:
+                if tme_pheno == 'caf_pro_tumor' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'CAF_pro_tumor'
+                    refined_count += 1
+
+            # Refine Myeloid annotations
+            elif 'Myeloid' in original_type or 'Monocyte' in original_type:
+                if tme_pheno == 'mdsc' and tme_score_val > 0.2:
+                    self.adata.obs.loc[idx, 'cell_type'] = 'MDSC'
+                    refined_count += 1
+
+        self.logger.info(f"  TME refinement: {refined_count} cells re-annotated")
+        self.logger.info(f"  TME signatures scored: {list(tme_scores.keys())}")
+
     def _annotate_clusters_by_markers(self):
         """
         Annotate clusters by their top marker genes.
@@ -562,8 +1198,13 @@ class SingleCellAgent(BaseAgent):
                 'subtype_markers': {
                     'CD4_T': ['CD4', 'IL7R', 'CCR7', 'LEF1'],
                     'CD8_T': ['CD8A', 'CD8B', 'GZMK', 'GZMB', 'PRF1'],
-                    'Treg': ['FOXP3', 'IL2RA', 'CTLA4', 'IKZF2'],
+                    # ★ TME-specific: Regulatory T cells (Tregs) - 면역 억제
+                    'Treg': ['FOXP3', 'IL2RA', 'CTLA4', 'IKZF2', 'CCR4', 'TNFRSF18'],
                     'NKT': ['KLRB1', 'ZBTB16', 'CD3D'],
+                    # ★ TME-specific: Exhausted T cells - 항종양 면역 약화
+                    'Exhausted_T': ['TOX', 'TOX2', 'EOMES', 'PDCD1', 'LAG3', 'HAVCR2', 'TIGIT', 'CXCL13'],
+                    # ★ TME-specific: Tissue-resident memory T cells
+                    'TRM_T': ['ITGAE', 'CD69', 'CXCR6', 'HOBIT'],
                 }
             },
             'NK_cells': {
@@ -586,8 +1227,12 @@ class SingleCellAgent(BaseAgent):
             'Macrophages': {
                 'markers': ['CD68', 'CD163', 'MARCO', 'MSR1', 'MRC1', 'APOE'],
                 'subtype_markers': {
-                    'M1_Macro': ['CD80', 'CD86', 'IL1B', 'TNF'],
-                    'M2_Macro': ['CD163', 'MRC1', 'CD206', 'IL10'],
+                    # ★ TME-specific: M1 (pro-inflammatory, anti-tumor)
+                    'TAM_M1': ['CD80', 'CD86', 'NOS2', 'IL1B', 'TNF', 'IL12A', 'CXCL9', 'CXCL10'],
+                    # ★ TME-specific: M2 (anti-inflammatory, pro-tumor, 면역 억제)
+                    'TAM_M2': ['CD163', 'MRC1', 'MSR1', 'MARCO', 'STAB1', 'FOLR2', 'CCL17', 'CCL18', 'CCL22', 'IL10', 'ARG1'],
+                    # ★ TME-specific: TREM2+ Lipid-associated macrophages
+                    'LAM': ['TREM2', 'SPP1', 'APOE', 'FABP5', 'CD9'],
                 }
             },
             'Dendritic_cells': {
@@ -604,12 +1249,23 @@ class SingleCellAgent(BaseAgent):
             'Neutrophils': {
                 'markers': ['FCGR3B', 'CSF3R', 'CXCR2', 'S100A8', 'S100A9'],
             },
+            # ★ TME-specific: Myeloid-Derived Suppressor Cells (MDSCs) - 면역 억제
+            'MDSC': {
+                'markers': ['S100A8', 'S100A9', 'S100A12', 'ARG1', 'IDO1', 'CD33', 'ITGAM'],
+                'subtype_markers': {
+                    'PMN_MDSC': ['CEACAM8', 'FCGR3B', 'S100A8', 'S100A9'],  # Granulocytic
+                    'M_MDSC': ['CD14', 'CD33', 'ARG1', 'NOS2'],  # Monocytic
+                }
+            },
 
             # Stromal cells
             'Fibroblasts': {
                 'markers': ['COL1A1', 'COL1A2', 'COL3A1', 'DCN', 'LUM', 'PDGFRA'],
                 'subtype_markers': {
-                    'CAF': ['FAP', 'ACTA2', 'PDPN', 'POSTN'],
+                    # ★ TME-specific: Cancer-Associated Fibroblasts subtypes
+                    'CAF_myofibroblast': ['FAP', 'ACTA2', 'POSTN', 'MMP11', 'LRRC15'],  # myCAF
+                    'CAF_inflammatory': ['IL6', 'CXCL1', 'CXCL12', 'CFD', 'PDPN'],  # iCAF
+                    'CAF_antigen_presenting': ['HLA-DRA', 'HLA-DRB1', 'CD74', 'FAP'],  # apCAF
                     'Myofibroblast': ['ACTA2', 'MYH11', 'TAGLN'],
                 }
             },
@@ -2246,144 +2902,165 @@ class SingleCellAgent(BaseAgent):
             self.grn_results = None
 
     # ═══════════════════════════════════════════════════════════════════════════════
-    # NEW STEP 17: CNV Inference (Malignant Cell Detection)
+    # NEW STEP 17: InferPloidy (Malignant Cell Detection via Aneuploidy)
     # ═══════════════════════════════════════════════════════════════════════════════
 
-    def _infer_cnv(self):
-        """Infer copy number variations to distinguish malignant from normal cells."""
-        if not self.config.get("enable_cnv_inference", True):
-            self.logger.info("  CNV inference disabled, skipping...")
+    def _infer_ploidy(self):
+        """
+        InferPloidy: Detect malignant cells based on chromosomal aneuploidy.
+
+        Normal cells are diploid (2n), while cancer cells often show aneuploidy
+        (abnormal chromosome numbers). This method infers ploidy by analyzing
+        expression variance across chromosomal regions.
+
+        Method:
+        1. Group genes by chromosome
+        2. Calculate per-chromosome expression scores relative to reference (immune cells)
+        3. Compute ploidy score based on deviation from diploid reference
+        4. Higher variance/deviation = likely aneuploid = likely malignant
+        """
+        if not self.config.get("enable_ploidy_inference", True):
+            self.logger.info("  Ploidy inference disabled, skipping...")
             return
 
-        self.logger.info("Step 16: CNV Inference (Malignant Cell Detection)")
+        self.logger.info("Step 17: InferPloidy (Malignant Cell Detection)")
 
         try:
-            # Simple CNV inference using chromosome arm expression
-            # Based on inferCNV approach but simplified
-
-            # Load gene chromosome positions (simplified - using gene name patterns)
-            # In real implementation, would use GTF file
-            # For now, score based on known amplified/deleted regions in cancer
-
-            # Common cancer CNV signatures by gene
-            cnv_signatures = {
-                # Commonly amplified oncogenes
-                'amplified': {
-                    'MYC': 8,      # 8q24 - amplified in many cancers
-                    'ERBB2': 17,   # 17q12 - breast cancer
-                    'EGFR': 7,     # 7p11 - lung, GBM
-                    'CCND1': 11,   # 11q13 - various
-                    'CDK4': 12,    # 12q14 - various
-                    'MDM2': 12,    # 12q15 - various
-                    'FGFR1': 8,    # 8p11 - lung, breast
-                    'MET': 7,      # 7q31 - various
-                    'PIK3CA': 3,   # 3q26 - various
-                },
-                # Commonly deleted tumor suppressors
-                'deleted': {
-                    'TP53': 17,    # 17p13
-                    'RB1': 13,     # 13q14
-                    'CDKN2A': 9,   # 9p21
-                    'CDKN2B': 9,   # 9p21
-                    'PTEN': 10,    # 10q23
-                    'BRCA1': 17,   # 17q21
-                    'BRCA2': 13,   # 13q13
-                    'APC': 5,      # 5q22
-                    'SMAD4': 18,   # 18q21
-                }
+            # Chromosome assignment for key genes (simplified)
+            # In production, use GTF annotation for full genome coverage
+            chromosome_genes = {
+                'chr1': ['TP73', 'NRAS', 'BCL9', 'MCL1', 'ARNT', 'NOTCH2'],
+                'chr3': ['VHL', 'PPARG', 'RAF1', 'PIK3CA', 'FGFR3', 'ETV5'],
+                'chr5': ['APC', 'TERT', 'NPM1', 'NSD1'],
+                'chr7': ['EGFR', 'MET', 'BRAF', 'CDK6', 'EZH2'],
+                'chr8': ['MYC', 'FGFR1', 'RECQL4', 'NBN'],
+                'chr9': ['CDKN2A', 'CDKN2B', 'JAK2', 'NOTCH1', 'ABL1'],
+                'chr10': ['PTEN', 'RET', 'FGFR2', 'SUFU'],
+                'chr11': ['CCND1', 'ATM', 'WT1', 'MEN1', 'HRAS'],
+                'chr12': ['KRAS', 'CDK4', 'MDM2', 'PTPN11', 'ETV6'],
+                'chr13': ['RB1', 'BRCA2', 'FLT3'],
+                'chr17': ['TP53', 'ERBB2', 'NF1', 'BRCA1', 'RNF43', 'MAP2K4'],
+                'chr18': ['SMAD4', 'BCL2', 'MALT1'],
+                'chr19': ['STK11', 'AKT2', 'DNMT1', 'JAK3'],
+                'chr20': ['ASXL1', 'AURKA', 'SRC', 'TOP1'],
+                'chr22': ['NF2', 'SMARCB1', 'CHEK2'],
             }
 
-            # Calculate CNV score per cell based on expression of these genes
-            cell_cnv_scores = []
-
-            # Get expression data
+            # Get expression matrix
             if hasattr(self.adata.X, 'toarray'):
                 expr_matrix = self.adata.X.toarray()
             else:
-                expr_matrix = self.adata.X
+                expr_matrix = np.array(self.adata.X)
 
-            # Calculate reference (normal cells) - use immune cells as reference
+            # Identify reference cells (diploid) - immune cells as reference
+            immune_keywords = ['T_cell', 'NK', 'B_cell', 'Monocyte', 'Macrophage', 'Dendritic', 'Mast']
             immune_mask = self.adata.obs['cell_type'].str.contains(
-                'T_cells|NK_cells|B_cells|Monocytes|Macrophages|Dendritic',
-                case=False, na=False
+                '|'.join(immune_keywords), case=False, na=False
             )
 
-            if immune_mask.sum() > 50:  # Need enough reference cells
+            if immune_mask.sum() >= 50:
                 reference_expr = expr_matrix[immune_mask].mean(axis=0)
+                reference_std = expr_matrix[immune_mask].std(axis=0) + 1e-6
+                self.logger.info(f"  Using {immune_mask.sum()} immune cells as diploid reference")
             else:
-                # Use all cells as reference if not enough immune cells
-                reference_expr = expr_matrix.mean(axis=0)
+                # Use median of all cells as reference
+                reference_expr = np.median(expr_matrix, axis=0)
+                reference_std = np.std(expr_matrix, axis=0) + 1e-6
+                self.logger.info("  Using all cells median as reference (insufficient immune cells)")
 
-            # Calculate amplification and deletion scores
-            amp_genes = [g for g in cnv_signatures['amplified'].keys() if g in self.adata.var_names]
-            del_genes = [g for g in cnv_signatures['deleted'].keys() if g in self.adata.var_names]
+            # Calculate per-chromosome ploidy scores
+            chr_scores = {}
+            for chrom, genes in chromosome_genes.items():
+                available_genes = [g for g in genes if g in self.adata.var_names]
+                if len(available_genes) < 2:
+                    continue
 
-            amp_scores = np.zeros(len(self.adata))
-            del_scores = np.zeros(len(self.adata))
+                gene_indices = [self.adata.var_names.get_loc(g) for g in available_genes]
 
-            for gene in amp_genes:
-                gene_idx = self.adata.var_names.get_loc(gene)
-                ref_val = reference_expr[gene_idx] if reference_expr[gene_idx] > 0 else 0.01
-                cell_expr = expr_matrix[:, gene_idx]
-                # Log ratio compared to reference
-                amp_scores += np.log2((cell_expr + 0.01) / (ref_val + 0.01))
+                # Calculate z-scores relative to reference
+                chr_expr = expr_matrix[:, gene_indices]
+                ref_chr_expr = reference_expr[gene_indices]
+                ref_chr_std = reference_std[gene_indices]
 
-            for gene in del_genes:
-                gene_idx = self.adata.var_names.get_loc(gene)
-                ref_val = reference_expr[gene_idx] if reference_expr[gene_idx] > 0 else 0.01
-                cell_expr = expr_matrix[:, gene_idx]
-                # Negative log ratio for deletions (lower expression = higher score)
-                del_scores -= np.log2((cell_expr + 0.01) / (ref_val + 0.01))
+                # Z-score: how many standard deviations from diploid reference
+                z_scores = (chr_expr - ref_chr_expr) / ref_chr_std
 
-            # Normalize scores
-            if len(amp_genes) > 0:
-                amp_scores = amp_scores / len(amp_genes)
-            if len(del_genes) > 0:
-                del_scores = del_scores / len(del_genes)
+                # Chromosome-level score: mean absolute z-score (captures both gain and loss)
+                chr_scores[chrom] = np.abs(z_scores).mean(axis=1)
 
-            # Combined CNV score (higher = more likely malignant)
-            cnv_scores = amp_scores + del_scores
+            if not chr_scores:
+                self.logger.warning("  No chromosome scores calculated - insufficient gene coverage")
+                self.ploidy_results = None
+                return
+
+            # Aggregate ploidy score across chromosomes
+            # Higher score = more deviation from diploid = likely aneuploid
+            chr_score_matrix = np.column_stack(list(chr_scores.values()))
+
+            # Ploidy score: mean deviation across all chromosomes
+            ploidy_scores = chr_score_matrix.mean(axis=1)
+
+            # Also calculate chromosomal instability (CIN) score: variance across chromosomes
+            cin_scores = chr_score_matrix.std(axis=1)
 
             # Add to adata
-            self.adata.obs['cnv_score'] = cnv_scores
-            self.adata.obs['amp_score'] = amp_scores
-            self.adata.obs['del_score'] = del_scores
+            self.adata.obs['ploidy_score'] = ploidy_scores
+            self.adata.obs['cin_score'] = cin_scores
 
-            # Classify cells as likely malignant or normal
-            # Use threshold based on distribution
-            threshold = np.percentile(cnv_scores, 75)  # Top 25% as likely malignant
-            self.adata.obs['malignancy'] = np.where(
-                cnv_scores > threshold, 'Likely_Malignant', 'Likely_Normal'
-            )
+            # Add individual chromosome scores
+            for chrom, scores in chr_scores.items():
+                self.adata.obs[f'ploidy_{chrom}'] = scores
 
-            # Calculate per cell type
-            cnv_by_celltype = self.adata.obs.groupby('cell_type').agg({
-                'cnv_score': ['mean', 'std'],
-                'malignancy': lambda x: (x == 'Likely_Malignant').sum()
+            # Classify cells using adaptive threshold
+            # Use Otsu-like thresholding or percentile-based
+            q75 = np.percentile(ploidy_scores, 75)
+            q90 = np.percentile(ploidy_scores, 90)
+
+            # Cells with score > 75th percentile are "Likely_Malignant"
+            # Cells with score > 90th percentile are "High_Confidence_Malignant"
+            self.adata.obs['malignancy'] = 'Likely_Normal'
+            self.adata.obs.loc[ploidy_scores > q75, 'malignancy'] = 'Likely_Malignant'
+            self.adata.obs.loc[ploidy_scores > q90, 'malignancy'] = 'High_Confidence_Malignant'
+
+            # Calculate per cell type statistics
+            ploidy_by_celltype = self.adata.obs.groupby('cell_type').agg({
+                'ploidy_score': ['mean', 'std'],
+                'cin_score': 'mean',
+                'malignancy': lambda x: ((x == 'Likely_Malignant') | (x == 'High_Confidence_Malignant')).sum()
             })
-            cnv_by_celltype.columns = ['cnv_mean', 'cnv_std', 'n_malignant']
-            cnv_by_celltype['n_total'] = self.adata.obs.groupby('cell_type').size()
-            cnv_by_celltype['pct_malignant'] = cnv_by_celltype['n_malignant'] / cnv_by_celltype['n_total'] * 100
+            ploidy_by_celltype.columns = ['ploidy_score', 'ploidy_std', 'cin_score', 'n_malignant']
+            ploidy_by_celltype['n_total'] = self.adata.obs.groupby('cell_type').size()
+            ploidy_by_celltype['pct_malignant'] = ploidy_by_celltype['n_malignant'] / ploidy_by_celltype['n_total'] * 100
 
-            self.cnv_results = {
-                'n_likely_malignant': int((self.adata.obs['malignancy'] == 'Likely_Malignant').sum()),
+            # Determine most likely malignant cell type
+            malignant_celltype = ploidy_by_celltype['pct_malignant'].idxmax()
+
+            self.ploidy_results = {
+                'n_likely_malignant': int((self.adata.obs['malignancy'] != 'Likely_Normal').sum()),
+                'n_high_confidence_malignant': int((self.adata.obs['malignancy'] == 'High_Confidence_Malignant').sum()),
                 'n_likely_normal': int((self.adata.obs['malignancy'] == 'Likely_Normal').sum()),
-                'threshold': float(threshold),
-                'amp_genes_found': amp_genes,
-                'del_genes_found': del_genes,
-                'cnv_by_celltype': cnv_by_celltype.to_dict(),
+                'threshold_75': float(q75),
+                'threshold_90': float(q90),
+                'chromosomes_analyzed': list(chr_scores.keys()),
+                'n_chromosomes': len(chr_scores),
+                'most_malignant_celltype': malignant_celltype,
+                'ploidy_by_celltype': ploidy_by_celltype.to_dict(),
             }
 
             # Save results
-            self.save_csv(cnv_by_celltype.reset_index(), "cnv_by_celltype.csv")
+            self.save_csv(ploidy_by_celltype.reset_index(), "ploidy_by_celltype.csv")
 
-            self.logger.info(f"  Likely malignant cells: {self.cnv_results['n_likely_malignant']}")
-            self.logger.info(f"  Likely normal cells: {self.cnv_results['n_likely_normal']}")
-            self.logger.info(f"  CNV threshold: {threshold:.2f}")
+            self.logger.info(f"  Chromosomes analyzed: {len(chr_scores)}")
+            self.logger.info(f"  Likely malignant cells: {self.ploidy_results['n_likely_malignant']}")
+            self.logger.info(f"  High confidence malignant: {self.ploidy_results['n_high_confidence_malignant']}")
+            self.logger.info(f"  Most malignant cell type: {malignant_celltype}")
+            self.logger.info(f"  Ploidy threshold (75th): {q75:.2f}")
 
         except Exception as e:
-            self.logger.error(f"  CNV inference failed: {e}")
-            self.cnv_results = None
+            self.logger.error(f"  Ploidy inference failed: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            self.ploidy_results = None
 
     def run(self) -> Dict[str, Any]:
         """Execute the full single-cell analysis pipeline."""
@@ -2457,8 +3134,8 @@ class SingleCellAgent(BaseAgent):
         # NEW Step 16: Gene Regulatory Network Analysis
         self._analyze_grn()
 
-        # NEW Step 17: CNV Inference (Malignant Cell Detection)
-        self._infer_cnv()
+        # NEW Step 17: InferPloidy (Malignant Cell Detection)
+        self._infer_ploidy()
 
         # Save outputs
         self._save_outputs()
@@ -2477,6 +3154,9 @@ class SingleCellAgent(BaseAgent):
             "n_markers": len(self.markers_df) if self.markers_df is not None else 0,
             "clustering_method": self.config["clustering_method"],
             "clustering_resolution": self.config["clustering_resolution"],
+            # QC results
+            "qc_stats": self.qc_stats if hasattr(self, 'qc_stats') else None,
+            "cell_cycle_info": self.cell_cycle_info if hasattr(self, 'cell_cycle_info') else None,
             # NEW results
             "cancer_prediction": self.cancer_prediction,
             "n_driver_genes": len(self.driver_genes_df) if self.driver_genes_df is not None else 0,
@@ -2486,7 +3166,7 @@ class SingleCellAgent(BaseAgent):
             # Advanced analysis results
             "tme_analysis": self.tme_results if hasattr(self, 'tme_results') else None,
             "grn_analysis": self.grn_results if hasattr(self, 'grn_results') else None,
-            "cnv_analysis": self.cnv_results if hasattr(self, 'cnv_results') else None,
+            "ploidy_analysis": self.ploidy_results if hasattr(self, 'ploidy_results') else None,
         }
 
         self.logger.info("=" * 60)
@@ -2510,8 +3190,8 @@ class SingleCellAgent(BaseAgent):
         if hasattr(self, 'grn_results') and self.grn_results:
             self.logger.info(f"  GRN: {self.grn_results.get('n_tfs', 0)} TFs, "
                            f"{self.grn_results.get('n_cell_types', 0)} cell types analyzed")
-        if hasattr(self, 'cnv_results') and self.cnv_results:
-            self.logger.info(f"  CNV: {self.cnv_results.get('n_likely_malignant', 0)} likely malignant cells")
+        if hasattr(self, 'ploidy_results') and self.ploidy_results:
+            self.logger.info(f"  Ploidy: {self.ploidy_results.get('n_likely_malignant', 0)} likely malignant cells")
 
         return results
 
@@ -2549,6 +3229,20 @@ class SingleCellAgent(BaseAgent):
         if self.markers_df is not None:
             top_markers = self.markers_df.groupby('cluster').head(10)
             self.save_csv(top_markers, "top_markers_summary.csv")
+
+        # Save QC statistics
+        if hasattr(self, 'qc_stats') and self.qc_stats:
+            qc_stats_path = self.output_dir / "qc_statistics.json"
+            with open(qc_stats_path, 'w') as f:
+                json.dump(self.qc_stats, f, indent=2, default=str)
+            self.logger.info(f"  Saved qc_statistics.json")
+
+        # Save cell cycle info
+        if hasattr(self, 'cell_cycle_info') and self.cell_cycle_info:
+            cc_info_path = self.output_dir / "cell_cycle_info.json"
+            with open(cc_info_path, 'w') as f:
+                json.dump(self.cell_cycle_info, f, indent=2, default=str)
+            self.logger.info(f"  Saved cell_cycle_info.json")
 
     def validate_outputs(self) -> bool:
         """Validate that required outputs were generated."""
