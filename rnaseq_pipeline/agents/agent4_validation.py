@@ -46,6 +46,13 @@ try:
 except ImportError:
     HAS_RAG = False
 
+# Enhanced RAG with external APIs
+try:
+    from ..rag.enhanced_interpreter import EnhancedGeneInterpreter, create_enhanced_interpreter
+    HAS_ENHANCED_RAG = True
+except ImportError:
+    HAS_ENHANCED_RAG = False
+
 
 class ConfidenceLevel(str, Enum):
     """Interpretation confidence levels."""
@@ -147,6 +154,9 @@ class ValidationAgent(BaseAgent):
             "enable_rag": True,  # Enable RAG-based literature interpretation
             "rag_max_genes": 20,  # Max genes to interpret via RAG (top by score)
             "rag_top_k": 5,  # Number of papers to retrieve per gene
+            # Enhanced RAG with external APIs (OncoKB, CIViC, STRING, UniProt, KEGG, Reactome)
+            "enable_enhanced_rag": True,  # Use enhanced interpreter with external APIs
+            "use_external_apis": True,  # Fetch live data from external APIs
             # 2-stage validation settings
             "validation_stage": 1,  # 1 = DEG/Network/Pathway, 2 = ML Prediction
             "validate_ml_prediction": False  # Set True for stage 2
@@ -711,6 +721,11 @@ class ValidationAgent(BaseAgent):
     def _run_rag_interpretation(self, top_genes: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Run RAG-based literature interpretation for top genes.
 
+        Supports two modes:
+        1. Basic RAG: Internal VectorDB only (Hybrid Search: Dense + Sparse)
+        2. Enhanced RAG: Internal VectorDB + External APIs
+           (OncoKB, CIViC, STRING, UniProt, KEGG, Reactome)
+
         Args:
             top_genes: List of gene dictionaries with gene_symbol, log2fc, direction
 
@@ -721,16 +736,33 @@ class ValidationAgent(BaseAgent):
             self.logger.info("RAG interpretation disabled in config")
             return {}
 
-        if not HAS_RAG:
+        # Determine which interpreter to use
+        use_enhanced = self.config.get('enable_enhanced_rag', True) and HAS_ENHANCED_RAG
+        use_external_apis = self.config.get('use_external_apis', True)
+
+        if not use_enhanced and not HAS_RAG:
             self.logger.warning("RAG module not available - skipping literature interpretation")
             return {}
 
         try:
-            # Initialize RAG interpreter
             cancer_type = self.config.get('cancer_type', 'breast_cancer')
-            self.rag_interpreter = create_interpreter(cancer_type)
 
-            self.logger.info(f"Running RAG interpretation for {len(top_genes)} genes...")
+            if use_enhanced:
+                # Enhanced RAG with external APIs
+                self.logger.info(f"Using Enhanced RAG interpreter (External APIs: {use_external_apis})")
+                self.rag_interpreter = create_enhanced_interpreter(
+                    cancer_type=cancer_type,
+                    use_llm=True,
+                    use_external_apis=use_external_apis
+                )
+                interpreter_type = "Enhanced RAG (Internal VectorDB + External APIs)"
+            else:
+                # Basic RAG with internal VectorDB only
+                self.logger.info("Using Basic RAG interpreter (Internal VectorDB only)")
+                self.rag_interpreter = create_interpreter(cancer_type)
+                interpreter_type = "Basic RAG (Internal VectorDB)"
+
+            self.logger.info(f"Running {interpreter_type} for {len(top_genes)} genes...")
 
             # Run interpretation
             interpretations = self.rag_interpreter.interpret_genes(
@@ -744,10 +776,21 @@ class ValidationAgent(BaseAgent):
                 result[interp.gene_symbol] = interp.to_dict()
 
             self.logger.info(f"RAG interpretation complete: {len(result)} genes interpreted")
+
+            # Log external API usage if enhanced
+            if use_enhanced and hasattr(interp, 'sources_used'):
+                sources = set()
+                for g in result.values():
+                    sources.update(g.get('sources_used', []))
+                if sources:
+                    self.logger.info(f"External sources used: {', '.join(sources)}")
+
             return result
 
         except Exception as e:
             self.logger.error(f"RAG interpretation failed: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return {}
 
     def run(self) -> Dict[str, Any]:
@@ -923,8 +966,15 @@ class ValidationAgent(BaseAgent):
             ],
             # RAG interpretation section
             "rag_interpretation": {
-                "enabled": self.config.get('enable_rag', True) and HAS_RAG,
+                "enabled": self.config.get('enable_rag', True) and (HAS_RAG or HAS_ENHANCED_RAG),
+                "enhanced_mode": self.config.get('enable_enhanced_rag', True) and HAS_ENHANCED_RAG,
+                "external_apis_enabled": self.config.get('use_external_apis', True),
                 "genes_interpreted": len(self.rag_interpretations),
+                "external_sources": list(set(
+                    source
+                    for interp in self.rag_interpretations.values()
+                    for source in interp.get('sources_used', [])
+                )) if self.rag_interpretations else [],
                 "interpretations": self.rag_interpretations
             }
         }
