@@ -69,7 +69,7 @@ G2M_GENES = [
     'AURKA', 'PSRC1', 'ANLN', 'LBR', 'CKAP5', 'CENPE', 'CTCF',
     'NEK2', 'G2E3', 'GAS2L3', 'CBX5', 'CENPA'
 ]
-
+#G1_genes은 휴지기이기 때문에 특벽할 활동이 없어서 특이적 마커 없음. -> 소거법을 표준으로 사용함.  
 
 class SingleCellQCAgent(BaseAgent):
     """Agent 1: Quality Control & Preprocessing for single-cell RNA-seq."""
