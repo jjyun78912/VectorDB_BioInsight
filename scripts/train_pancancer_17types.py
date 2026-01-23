@@ -122,11 +122,9 @@ def load_all_tcga_data(cancer_types: List[str] = CANCER_TYPES,
     return combined, labels
 
 
-def preprocess_data(X: pd.DataFrame, y: pd.Series,
-                    n_top_genes: int = 5000,
-                    variance_threshold: float = 0.1) -> Tuple[np.ndarray, np.ndarray, List[str], LabelEncoder, StandardScaler]:
-    """데이터 전처리"""
-    logger.info("Preprocessing data...")
+def preprocess_data_basic(X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, np.ndarray, LabelEncoder]:
+    """기본 전처리 (Log2 변환, 레이블 인코딩) - Split 전에 수행"""
+    logger.info("Basic preprocessing (log2 transform)...")
 
     # 결측치 0으로 대체
     X = X.fillna(0)
@@ -134,32 +132,52 @@ def preprocess_data(X: pd.DataFrame, y: pd.Series,
     # 숫자형으로 변환
     X = X.apply(pd.to_numeric, errors='coerce').fillna(0)
 
-    # 1. Log2 변환 (TPM -> log2(TPM + 1))
+    # Log2 변환 (TPM -> log2(TPM + 1))
     X_log = np.log2(X + 1)
 
-    # 2. 분산 기반 유전자 선택
-    gene_vars = X_log.var(axis=0)
+    # 레이블 인코딩
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(y)
+
+    logger.info(f"Classes: {label_encoder.classes_}")
+
+    return X_log, y_encoded, label_encoder
+
+
+def select_genes_and_scale(X_train: pd.DataFrame, X_val: pd.DataFrame, X_test: pd.DataFrame,
+                           n_top_genes: int = 5000,
+                           variance_threshold: float = 0.1) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[str], StandardScaler]:
+    """
+    Train 데이터 기반 유전자 선택 및 스케일링 (Data Leakage 방지)
+
+    중요: Gene selection과 scaling은 반드시 train 데이터로만 fit해야 함
+    """
+    logger.info("Selecting genes and scaling (train-based, no leakage)...")
+
+    # 1. Train 데이터로만 분산 계산 및 유전자 선택
+    gene_vars = X_train.var(axis=0)
     gene_vars = gene_vars.sort_values(ascending=False)
 
     # 분산 임계값 이상 & 상위 N개 선택
     high_var_genes = gene_vars[gene_vars > variance_threshold]
     selected_genes = high_var_genes.head(n_top_genes).index.tolist()
 
-    logger.info(f"Selected {len(selected_genes)} genes (variance > {variance_threshold})")
+    logger.info(f"Selected {len(selected_genes)} genes from TRAIN data (variance > {variance_threshold})")
 
-    X_selected = X_log[selected_genes].values
+    # 2. 선택된 유전자만 추출
+    X_train_selected = X_train[selected_genes].values
+    X_val_selected = X_val[selected_genes].values
+    X_test_selected = X_test[selected_genes].values
 
-    # 3. 표준화
+    # 3. Train 데이터로만 scaler fit
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_selected)
+    X_train_scaled = scaler.fit_transform(X_train_selected)
+    X_val_scaled = scaler.transform(X_val_selected)  # transform only
+    X_test_scaled = scaler.transform(X_test_selected)  # transform only
 
-    # 4. 레이블 인코딩
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y)
+    logger.info(f"Scaled: Train={X_train_scaled.shape}, Val={X_val_scaled.shape}, Test={X_test_scaled.shape}")
 
-    logger.info(f"Classes: {label_encoder.classes_}")
-
-    return X_scaled, y_encoded, selected_genes, label_encoder, scaler
+    return X_train_scaled, X_val_scaled, X_test_scaled, selected_genes, scaler
 
 
 def optuna_objective(trial, X_train, y_train, X_val, y_val, n_classes):
@@ -218,10 +236,15 @@ def train_with_optuna(X_train, y_train, X_val, y_val, n_classes: int, n_trials: 
     return final_model, study.best_params
 
 
-def cross_validate(X: np.ndarray, y: np.ndarray, n_splits: int = 5,
-                   best_params: Dict = None) -> Dict:
-    """Stratified K-Fold Cross Validation"""
-    logger.info(f"Running {n_splits}-fold cross validation...")
+def cross_validate(X_log: pd.DataFrame, y: np.ndarray, n_splits: int = 5,
+                   best_params: Dict = None, n_top_genes: int = 5000,
+                   variance_threshold: float = 0.1) -> Dict:
+    """
+    Stratified K-Fold Cross Validation (Data Leakage 방지)
+
+    각 fold에서 train data로만 gene selection과 scaling 수행
+    """
+    logger.info(f"Running {n_splits}-fold cross validation (no leakage)...")
 
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
@@ -233,9 +256,27 @@ def cross_validate(X: np.ndarray, y: np.ndarray, n_splits: int = 5,
 
     fold_reports = []
 
-    for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
-        X_train, X_val = X[train_idx], X[val_idx]
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X_log, y)):
+        # DataFrame으로 분할 (column 정보 유지)
+        X_train_df = X_log.iloc[train_idx]
+        X_val_df = X_log.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
+
+        # 각 fold에서 train data로만 gene selection & scaling
+        # 1. Train 데이터로만 분산 계산 및 유전자 선택
+        gene_vars = X_train_df.var(axis=0)
+        gene_vars = gene_vars.sort_values(ascending=False)
+        high_var_genes = gene_vars[gene_vars > variance_threshold]
+        selected_genes = high_var_genes.head(n_top_genes).index.tolist()
+
+        # 2. 선택된 유전자만 추출
+        X_train_selected = X_train_df[selected_genes].values
+        X_val_selected = X_val_df[selected_genes].values
+
+        # 3. Train 데이터로만 scaler fit
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train_selected)
+        X_val_scaled = scaler.transform(X_val_selected)
 
         # 모델 학습
         params = best_params.copy() if best_params else {}
@@ -249,9 +290,9 @@ def cross_validate(X: np.ndarray, y: np.ndarray, n_splits: int = 5,
         })
 
         model = CatBoostClassifier(**params)
-        model.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=50, verbose=False)
+        model.fit(X_train_scaled, y_train, eval_set=(X_val_scaled, y_val), early_stopping_rounds=50, verbose=False)
 
-        y_pred = model.predict(X_val)
+        y_pred = model.predict(X_val_scaled)
 
         acc = accuracy_score(y_val, y_pred)
         f1 = f1_score(y_val, y_pred, average='macro')
@@ -261,7 +302,7 @@ def cross_validate(X: np.ndarray, y: np.ndarray, n_splits: int = 5,
         metrics['f1_macro'].append(f1)
         metrics['mcc'].append(mcc)
 
-        logger.info(f"Fold {fold+1}: Accuracy={acc:.4f}, F1={f1:.4f}, MCC={mcc:.4f}")
+        logger.info(f"Fold {fold+1}: Accuracy={acc:.4f}, F1={f1:.4f}, MCC={mcc:.4f} (genes={len(selected_genes)})")
 
     # 평균 및 표준편차
     summary = {}
@@ -335,20 +376,27 @@ def main():
     # 1. 데이터 로드
     X, y = load_all_tcga_data(CANCER_TYPES)
 
-    # 2. 전처리
-    X_processed, y_encoded, selected_genes, label_encoder, scaler = preprocess_data(
-        X, y, n_top_genes=5000, variance_threshold=0.1
+    # 2. 기본 전처리 (Log2 변환만 - split 전에 수행해도 됨)
+    X_log, y_encoded, label_encoder = preprocess_data_basic(X, y)
+
+    # 3. Train/Val/Test 분할 (전처리 전에!)
+    # DataFrame 상태로 분할하여 column 정보 유지
+    X_train_df, X_test_df, y_train, y_test = train_test_split(
+        X_log, y_encoded, test_size=0.15, random_state=42, stratify=y_encoded
+    )
+    X_train_df, X_val_df, y_train, y_val = train_test_split(
+        X_train_df, y_train, test_size=0.15, random_state=42, stratify=y_train
     )
 
-    # 3. Train/Val/Test 분할
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_processed, y_encoded, test_size=0.15, random_state=42, stratify=y_encoded
-    )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train, y_train, test_size=0.15, random_state=42, stratify=y_train
+    logger.info(f"Split (before scaling): Train={len(X_train_df)}, Val={len(X_val_df)}, Test={len(X_test_df)}")
+
+    # 4. Train 데이터 기반 유전자 선택 & 스케일링 (Data Leakage 방지!)
+    X_train, X_val, X_test, selected_genes, scaler = select_genes_and_scale(
+        X_train_df, X_val_df, X_test_df,
+        n_top_genes=5000, variance_threshold=0.1
     )
 
-    logger.info(f"Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+    logger.info(f"After preprocessing: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)}")
 
     # 4. Optuna HPO
     n_classes = len(label_encoder.classes_)
@@ -368,11 +416,27 @@ def main():
     print("\nClassification Report:")
     print(classification_report(y_test, y_test_pred, target_names=label_encoder.classes_))
 
-    # 6. Cross Validation (전체 데이터)
-    cv_results = cross_validate(X_processed, y_encoded, n_splits=5, best_params=best_params)
+    # 6. Cross Validation (Train+Val 데이터, Test는 제외)
+    # CV도 각 fold에서 train으로만 gene selection & scaling 수행
+    X_trainval_df = pd.concat([X_train_df, X_val_df], axis=0)
+    y_trainval = np.concatenate([y_train, y_val])
+    cv_results = cross_validate(X_trainval_df, y_trainval, n_splits=5, best_params=best_params,
+                                n_top_genes=5000, variance_threshold=0.1)
 
-    # 7. 최종 모델 학습 (전체 데이터)
-    logger.info("\nTraining final model on all data...")
+    # 7. 최종 모델 학습 (Train+Val 데이터로, Test 제외)
+    # Train+Val로 다시 gene selection & scaling
+    logger.info("\nTraining final model on train+val data...")
+
+    # Train+Val 데이터로 gene selection
+    gene_vars = X_trainval_df.var(axis=0)
+    gene_vars = gene_vars.sort_values(ascending=False)
+    high_var_genes = gene_vars[gene_vars > 0.1]
+    final_selected_genes = high_var_genes.head(5000).index.tolist()
+
+    X_trainval_selected = X_trainval_df[final_selected_genes].values
+    final_scaler = StandardScaler()
+    X_trainval_scaled = final_scaler.fit_transform(X_trainval_selected)
+
     final_params = best_params.copy()
     final_params.update({
         'loss_function': 'MultiClass',
@@ -383,11 +447,11 @@ def main():
     })
 
     final_model = CatBoostClassifier(**final_params)
-    final_model.fit(X_processed, y_encoded)
+    final_model.fit(X_trainval_scaled, y_trainval)
 
-    # 8. 모델 저장
+    # 8. 모델 저장 (final_scaler와 final_selected_genes 사용)
     output_path = save_model(
-        final_model, label_encoder, scaler, selected_genes,
+        final_model, label_encoder, final_scaler, final_selected_genes,
         best_params, cv_results, output_dir="models/rnaseq/pancancer_v3"
     )
 
