@@ -1,12 +1,22 @@
 """
-Enhanced RAG Gene Interpreter with External API Integration.
+Multi-Source Gene Interpreter: RAG + External API Integration.
 
-Combines internal vector search (ChromaDB) with external biological databases
-to provide comprehensive, literature-backed gene interpretations.
+Combines two distinct data sources for gene interpretation:
+
+1. RAG (Retrieval-Augmented Generation)
+   - Internal VectorDB (ChromaDB) with indexed literature
+   - Hybrid search: Dense (PubMedBERT) + Sparse (BM25)
+   - Returns relevant paper chunks for context
+
+2. External API Context (NOT RAG - structured data fetch)
+   - OncoKB, CIViC: Cancer gene annotations
+   - STRING: Protein-protein interactions
+   - UniProt: Protein function
+   - KEGG, Reactome: Pathway information
 
 Architecture:
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Enhanced Gene Interpreter                             │
+│                      Multi-Source Gene Interpreter                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Input: Gene Symbol + Cancer Type + DEG Data                                │
@@ -15,15 +25,16 @@ Architecture:
 │      │               │                                                      │
 │      ▼               ▼                                                      │
 │  ┌────────────┐  ┌────────────────┐                                         │
-│  │ Internal   │  │   External     │                                         │
-│  │ Vector DB  │  │   APIs         │                                         │
-│  │ (ChromaDB) │  │                │                                         │
-│  │            │  │ • OncoKB       │                                         │
-│  │ Hybrid:    │  │ • CIViC        │                                         │
-│  │ • Dense    │  │ • STRING       │                                         │
-│  │ • Sparse   │  │ • UniProt      │                                         │
+│  │    RAG     │  │  API Context   │                                         │
+│  │ (VectorDB) │  │  (Structured)  │                                         │
+│  │            │  │                │                                         │
+│  │ • Hybrid   │  │ • OncoKB       │                                         │
+│  │   Search   │  │ • CIViC        │                                         │
+│  │ • Dense +  │  │ • STRING       │                                         │
+│  │   Sparse   │  │ • UniProt      │                                         │
 │  │            │  │ • KEGG         │                                         │
-│  │            │  │ • Reactome     │                                         │
+│  │ 문헌 기반   │  │ • Reactome     │                                         │
+│  │            │  │ 구조화 데이터   │                                         │
 │  └─────┬──────┘  └───────┬────────┘                                         │
 │        │                 │                                                  │
 │        └────────┬────────┘                                                  │
@@ -40,10 +51,13 @@ Architecture:
 │        └───────┬───────┘                                                    │
 │                │                                                            │
 │                ▼                                                            │
-│        Enhanced GeneInterpretation                                          │
-│        (with external annotations)                                          │
+│        MultiSourceGeneInterpretation                                        │
+│        (RAG citations + API annotations)                                    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+Note: "RAG" refers specifically to the VectorDB literature search component.
+      External API integration is "Structured Data Augmentation", not RAG.
 """
 
 import asyncio
@@ -78,8 +92,14 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class EnhancedGeneInterpretation:
-    """Enhanced interpretation with external database annotations."""
+class MultiSourceGeneInterpretation:
+    """
+    Gene interpretation combining RAG (literature) + API (structured data).
+
+    Sources:
+    - RAG: citations, pmids (from VectorDB literature search)
+    - API: cancer_role, protein_function, pathways, etc. (from external APIs)
+    """
     gene_symbol: str
     gene_id: str
     log2fc: float
@@ -136,14 +156,16 @@ class EnhancedGeneInterpretation:
         }
 
 
-class EnhancedGeneInterpreter:
+class MultiSourceGeneInterpreter:
     """
-    Enhanced RAG interpreter with external API integration.
+    Multi-source gene interpreter: RAG + External API integration.
 
-    Combines:
-    - Internal VectorDB (Hybrid search: Dense + Sparse)
-    - External APIs (OncoKB, CIViC, STRING, UniProt, KEGG, Reactome)
-    - Claude LLM for interpretation synthesis
+    Two distinct data sources:
+    1. RAG (VectorDB): Literature-based context via hybrid search
+    2. API Context: Structured data from biological databases
+
+    Note: Only the VectorDB component is true "RAG".
+    External APIs provide structured data augmentation, not retrieval.
     """
 
     def __init__(
@@ -366,7 +388,7 @@ Write in Korean (한국어로 작성).
         log2fc: float,
         direction: str,
         padj: float = 0.05
-    ) -> EnhancedGeneInterpretation:
+    ) -> MultiSourceGeneInterpretation:
         """
         Generate enhanced interpretation for a gene (async version).
         """
@@ -435,7 +457,7 @@ Write in Korean (한국어로 작성).
             for p in external_context.reactome_pathways[:5]:
                 pathways.append({"source": "Reactome", "id": p.get("id", ""), "name": p.get("name", "")})
 
-        return EnhancedGeneInterpretation(
+        return MultiSourceGeneInterpretation(
             gene_symbol=gene_symbol,
             gene_id=gene_id,
             log2fc=log2fc,
@@ -464,7 +486,7 @@ Write in Korean (한국어로 작성).
         log2fc: float,
         direction: str,
         padj: float = 0.05
-    ) -> EnhancedGeneInterpretation:
+    ) -> MultiSourceGeneInterpretation:
         """Synchronous wrapper for interpret_gene_async."""
         try:
             loop = asyncio.get_event_loop()
@@ -483,7 +505,7 @@ Write in Korean (한국어로 작성).
         self,
         genes: List[Dict[str, Any]],
         max_genes: int = 20
-    ) -> List[EnhancedGeneInterpretation]:
+    ) -> List[MultiSourceGeneInterpretation]:
         """Interpret multiple genes asynchronously."""
         results = []
         genes_to_process = genes[:max_genes]
@@ -509,7 +531,7 @@ Write in Korean (한국어로 작성).
         self,
         genes: List[Dict[str, Any]],
         max_genes: int = 20
-    ) -> List[EnhancedGeneInterpretation]:
+    ) -> List[MultiSourceGeneInterpretation]:
         """Synchronous wrapper for interpret_genes_async."""
         try:
             loop = asyncio.get_event_loop()
@@ -603,7 +625,7 @@ Write in Korean (한국어로 작성).
 
     def generate_summary(
         self,
-        interpretations: List[EnhancedGeneInterpretation],
+        interpretations: List[MultiSourceGeneInterpretation],
         include_external: bool = True
     ) -> str:
         """Generate summary report."""
@@ -664,13 +686,13 @@ Write in Korean (한국어로 작성).
         return "\n".join(lines)
 
 
-def create_enhanced_interpreter(
+def create_multisource_interpreter(
     cancer_type: str = "breast_cancer",
     use_llm: bool = True,
     use_external_apis: bool = True
-) -> EnhancedGeneInterpreter:
+) -> MultiSourceGeneInterpreter:
     """Factory function to create enhanced interpreter."""
-    return EnhancedGeneInterpreter(
+    return MultiSourceGeneInterpreter(
         cancer_type=cancer_type,
         use_llm=use_llm,
         use_external_apis=use_external_apis
@@ -683,7 +705,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     async def test():
-        interpreter = create_enhanced_interpreter("breast_cancer")
+        interpreter = create_multisource_interpreter("breast_cancer")
 
         test_genes = [
             {"gene_symbol": "BRCA1", "gene_id": "ENSG00000012048", "log2fc": -1.5, "direction": "down"},
