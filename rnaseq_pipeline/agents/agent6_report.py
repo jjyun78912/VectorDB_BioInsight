@@ -2614,6 +2614,191 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _generate_recommended_papers_html(self, data: Dict) -> str:
+        """Generate Recommended Papers section based on PubMed search."""
+        papers_data = data.get('recommended_papers', {})
+
+        if not papers_data or not papers_data.get('papers'):
+            return '''
+            <section class="recommended-papers-section" id="recommended-papers">
+                <h2>9.6 추천 논문 (Recommended Papers)</h2>
+                <p class="no-data">PubMed 검색을 통한 추천 논문이 없습니다.</p>
+            </section>
+            '''
+
+        papers = papers_data.get('papers', [])
+        cancer_type = papers_data.get('cancer_type', 'cancer')
+        search_genes = papers_data.get('search_genes', [])
+
+        # Build paper cards
+        paper_cards = ''
+        for i, paper in enumerate(papers[:5], 1):
+            title = paper.get('title', 'No title')
+            authors = paper.get('authors', 'Unknown')
+            journal = paper.get('journal', '')
+            year = paper.get('year', '')
+            abstract = paper.get('abstract', '')[:300]
+            if len(paper.get('abstract', '')) > 300:
+                abstract += '...'
+            pmid = paper.get('pmid', '')
+            pubmed_url = paper.get('pubmed_url', f'https://pubmed.ncbi.nlm.nih.gov/{pmid}/')
+            doi = paper.get('doi', '')
+            relevance = paper.get('relevance_reason', '')
+
+            paper_cards += f'''
+            <div class="paper-card">
+                <div class="paper-number">{i}</div>
+                <div class="paper-content">
+                    <h4 class="paper-title">
+                        <a href="{pubmed_url}" target="_blank" rel="noopener">{title}</a>
+                    </h4>
+                    <p class="paper-meta">
+                        <span class="authors">{authors}</span>
+                        <span class="journal">{journal}</span>
+                        <span class="year">({year})</span>
+                    </p>
+                    <p class="paper-abstract">{abstract}</p>
+                    <div class="paper-footer">
+                        <span class="relevance-tag">{relevance}</span>
+                        <span class="pmid">PMID: <a href="{pubmed_url}" target="_blank">{pmid}</a></span>
+                        {f'<span class="doi">DOI: {doi}</span>' if doi else ''}
+                    </div>
+                </div>
+            </div>
+            '''
+
+        return f'''
+        <section class="recommended-papers-section" id="recommended-papers">
+            <h2>9.6 추천 논문 (Recommended Papers)</h2>
+
+            <div class="papers-intro">
+                <p>아래 논문들은 <strong>{cancer_type}</strong> 및 분석에서 도출된 주요 유전자
+                ({', '.join(search_genes[:5])})를 기반으로 PubMed에서 실시간 검색된 결과입니다.
+                최근 5년 내 출판된 관련성 높은 연구들을 우선적으로 선정하였습니다.</p>
+            </div>
+
+            <div class="paper-list">
+                {paper_cards}
+            </div>
+
+            <div class="papers-disclaimer">
+                <p><strong>참고:</strong> 추천 논문은 자동화된 검색 알고리즘에 의해 선정되었으며,
+                연구자의 판단에 따라 추가적인 문헌 검토가 필요할 수 있습니다.</p>
+            </div>
+        </section>
+
+        <style>
+        .recommended-papers-section {{
+            margin: 2rem 0;
+            padding: 1.5rem;
+            background: #fafafa;
+            border-radius: 8px;
+        }}
+        .papers-intro {{
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #e8f4fd;
+            border-left: 4px solid #2196F3;
+            border-radius: 4px;
+        }}
+        .paper-list {{
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }}
+        .paper-card {{
+            display: flex;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1rem;
+            transition: box-shadow 0.2s;
+        }}
+        .paper-card:hover {{
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }}
+        .paper-number {{
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            background: #2196F3;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 1rem;
+        }}
+        .paper-content {{
+            flex: 1;
+        }}
+        .paper-title {{
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }}
+        .paper-title a {{
+            color: #1a1a1a;
+            text-decoration: none;
+        }}
+        .paper-title a:hover {{
+            color: #2196F3;
+            text-decoration: underline;
+        }}
+        .paper-meta {{
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }}
+        .paper-meta .authors {{
+            font-style: italic;
+        }}
+        .paper-meta .journal {{
+            color: #2196F3;
+            margin-left: 0.5rem;
+        }}
+        .paper-meta .year {{
+            color: #888;
+            margin-left: 0.25rem;
+        }}
+        .paper-abstract {{
+            font-size: 0.9rem;
+            color: #444;
+            line-height: 1.5;
+            margin-bottom: 0.75rem;
+        }}
+        .paper-footer {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            font-size: 0.8rem;
+        }}
+        .relevance-tag {{
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }}
+        .pmid, .doi {{
+            color: #666;
+        }}
+        .pmid a {{
+            color: #2196F3;
+        }}
+        .papers-disclaimer {{
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: #fff3e0;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #666;
+        }}
+        </style>
+        '''
+
     def _generate_research_recommendations_html(self, data: Dict) -> str:
         """Generate comprehensive Research Recommendations section."""
         recommendations = data.get('research_recommendations', {})
@@ -5947,6 +6132,9 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         <!-- 9.5 Research Recommendations -->
         {self._generate_research_recommendations_html(data)}
 
+        <!-- 9.6 Recommended Papers -->
+        {self._generate_recommended_papers_html(data)}
+
         <!-- 10. Methods Summary -->
         {self._generate_methods_html() if self.config["include_methods"] else ""}
 
@@ -6061,6 +6249,21 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             research_recommendations = self._generate_research_recommendations(data)
             if research_recommendations:
                 data['research_recommendations'] = research_recommendations
+
+        # Generate paper recommendations (PubMed real-time search)
+        recommended_papers_path = run_dir / "recommended_papers.json"
+        if recommended_papers_path.exists():
+            try:
+                with open(recommended_papers_path, 'r', encoding='utf-8') as f:
+                    data['recommended_papers'] = json.load(f)
+                self.logger.info("Loaded existing paper recommendations")
+            except Exception as e:
+                self.logger.warning(f"Error loading paper recommendations: {e}")
+        else:
+            self.logger.info("Fetching paper recommendations from PubMed...")
+            recommended_papers = self._fetch_paper_recommendations(data)
+            if recommended_papers:
+                data['recommended_papers'] = recommended_papers
 
         self.save_json(data, "report_data.json")
 
@@ -7508,6 +7711,90 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
             })
 
         return candidates
+
+    def _fetch_paper_recommendations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Fetch paper recommendations from PubMed based on analysis results.
+
+        Searches PubMed in real-time for papers related to:
+        - Cancer type
+        - Top hub genes
+        - Key pathways
+
+        Returns:
+            Dictionary containing recommended papers and metadata
+        """
+        try:
+            from ..rag.paper_recommender import recommend_papers_sync
+        except ImportError:
+            self.logger.warning("Paper recommender module not available")
+            return None
+
+        # Get cancer type
+        cancer_type = self.config.get('cancer_type', 'unknown')
+        if cancer_type == 'unknown':
+            cancer_type = data.get('cancer_type', 'cancer')
+
+        # Get hub genes
+        hub_genes = []
+        hub_df = data.get('hub_genes_df')
+        if hub_df is not None and len(hub_df) > 0:
+            gene_col = None
+            for col in ['gene_symbol', 'gene_id', 'gene_name']:
+                if col in hub_df.columns:
+                    gene_col = col
+                    break
+            if gene_col:
+                hub_genes = [str(g) for g in hub_df[gene_col].head(10).tolist()
+                            if not str(g).startswith('ENSG')]
+
+        # Get pathways
+        pathways = []
+        pathway_df = data.get('pathway_summary_df')
+        if pathway_df is not None and len(pathway_df) > 0:
+            term_col = None
+            for col in ['Term', 'term', 'pathway', 'Pathway', 'name', 'Name']:
+                if col in pathway_df.columns:
+                    term_col = col
+                    break
+            if term_col:
+                pathways = pathway_df[term_col].head(5).tolist()
+
+        if not hub_genes:
+            self.logger.warning("No hub genes found for paper recommendations")
+            return None
+
+        self.logger.info(f"Fetching papers for cancer_type={cancer_type}, genes={hub_genes[:5]}")
+
+        try:
+            # Use synchronous wrapper
+            run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
+            papers = recommend_papers_sync(
+                cancer_type=cancer_type,
+                hub_genes=hub_genes,
+                pathways=pathways,
+                output_dir=run_dir,
+                max_papers=5
+            )
+
+            if papers:
+                result = {
+                    "cancer_type": cancer_type,
+                    "search_genes": hub_genes[:5],
+                    "search_pathways": pathways[:3] if pathways else [],
+                    "paper_count": len(papers),
+                    "papers": papers
+                }
+                self.logger.info(f"Retrieved {len(papers)} paper recommendations")
+                return result
+            else:
+                self.logger.warning("No papers found from PubMed search")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"Error fetching paper recommendations: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     def validate_outputs(self) -> bool:
         """Validate report outputs."""
