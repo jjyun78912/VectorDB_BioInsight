@@ -68,3 +68,4 @@ gen-lang-client-*.json
 *-credentials.json
 *-service-account.json
 node_modules
+evaluation/benchmark_data/*.h5ad
