@@ -181,17 +181,67 @@ class VisualizationAgent(BaseAgent):
         self.integrated_table = self.load_csv("integrated_gene_table.csv", required=False)
 
         # Load metadata for sample labels (optional)
-        self.metadata = self.load_csv("metadata.csv", required=False)
+        # Try multiple possible locations for metadata.csv
+        self.metadata = None
+        metadata_search_paths = [
+            self.input_dir / "metadata.csv",
+            self.input_dir.parent / "metadata.csv",
+            self.input_dir.parent.parent / "metadata.csv",
+            self.input_dir.parent.parent.parent / "metadata.csv",
+        ]
+        for meta_path in metadata_search_paths:
+            if meta_path.exists():
+                try:
+                    self.metadata = pd.read_csv(meta_path)
+                    self.logger.info(f"Found metadata at: {meta_path}")
+                    break
+                except Exception as e:
+                    self.logger.warning(f"Failed to load {meta_path}: {e}")
+
+        if self.metadata is None:
+            self.metadata = self.load_csv("metadata.csv", required=False)
+
         self.sample_to_condition = {}
         if self.metadata is not None:
             # Build sample -> condition mapping
-            sample_col = self.metadata.columns[0]  # First col is sample_id
-            condition_col = self.config.get("condition_column", "condition")
-            if condition_col in self.metadata.columns:
+            # Find the sample ID column that matches count_matrix columns
+            # Try common sample ID column names, prioritizing 'barcode' for TCGA data
+            possible_sample_cols = [
+                'barcode', 'Barcode', 'BARCODE',
+                'sample_id', 'SampleID', 'sample_ID', 'Sample_ID',
+                'sample', 'Sample', 'SAMPLE',
+                'id', 'ID', 'Id',
+            ]
+            sample_col = None
+            for col in possible_sample_cols:
+                if col in self.metadata.columns:
+                    sample_col = col
+                    break
+            # Fallback to first column if no match found
+            if sample_col is None:
+                sample_col = self.metadata.columns[0]
+
+            # Try multiple possible condition column names
+            possible_condition_cols = [
+                self.config.get("condition_column", "condition"),
+                "condition", "Condition", "CONDITION",
+                "group", "Group", "GROUP",
+                "sample_type", "SampleType", "sample_Type",
+                "type", "Type", "TYPE",
+                "class", "Class", "CLASS",
+                "status", "Status", "STATUS",
+            ]
+            condition_col = None
+            for col in possible_condition_cols:
+                if col in self.metadata.columns:
+                    condition_col = col
+                    break
+
+            if condition_col:
                 self.sample_to_condition = dict(
                     zip(self.metadata[sample_col], self.metadata[condition_col])
                 )
-                self.logger.info(f"Loaded metadata: {len(self.sample_to_condition)} samples")
+                self.logger.info(f"Loaded metadata: {len(self.sample_to_condition)} samples using '{sample_col}' -> '{condition_col}'")
 
         # Need at least DEG results
         if self.deg_all is None and self.deg_sig is None:
@@ -280,46 +330,13 @@ class VisualizationAgent(BaseAgent):
         ax.axvline(x=-log2fc_cutoff, color='#757575', linestyle='--',
                   alpha=0.6, linewidth=0.8, zorder=0)
 
-        # Label top genes
-        if self.deg_sig is not None and len(self.deg_sig) > 0:
-            deg_sorted = self.deg_sig.copy()
-            deg_sorted['abs_log2FC'] = deg_sorted['log2FC'].abs()
-            deg_sorted = deg_sorted.sort_values('abs_log2FC', ascending=False)
-
-            n_labels = self.config["label_top_genes"]
-            top_up = deg_sorted[deg_sorted['direction'] == 'up'].head(n_labels // 2)
-            top_down = deg_sorted[deg_sorted['direction'] == 'down'].head(n_labels // 2)
-            top_genes = pd.concat([top_up, top_down])
-
-            try:
-                from adjustText import adjust_text
-                texts = []
-
-                for _, row in top_genes.iterrows():
-                    gene_row = df[df['gene_id'] == row['gene_id']]
-                    if len(gene_row) > 0:
-                        x = gene_row['log2FC'].values[0]
-                        y = gene_row['neg_log10_padj'].values[0]
-
-                        if 'gene_symbol' in row and pd.notna(row['gene_symbol']):
-                            label = row['gene_symbol']
-                        else:
-                            label = self._get_gene_symbol(row['gene_id'])
-
-                        # npj style: italic gene names
-                        text = ax.annotate(label, (x, y), fontsize=8,
-                                          fontstyle='italic', fontweight='medium',
-                                          ha='center', va='bottom',
-                                          color=colors['text'])
-                        texts.append(text)
-
-                adjust_text(texts, arrowprops=dict(arrowstyle='-', color='#9e9e9e',
-                                                   alpha=0.5, lw=0.5),
-                           expand_points=(1.5, 1.5))
-            except ImportError:
-                self.logger.warning("adjustText not installed - skipping labels")
-            except Exception as e:
-                self.logger.warning(f"Label adjustment failed: {e}")
+        # No gene labels on static plot - use interactive version for hover
+        # Add note about interactive version
+        ax.text(0.98, 0.02, '💡 Interactive 버전에서 호버로 유전자 확인',
+               transform=ax.transAxes, fontsize=8, color='#666666',
+               ha='right', va='bottom', style='italic',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                        edgecolor='#e0e0e0', alpha=0.9))
 
         # Axis labels (npj style)
         ax.set_xlabel('log$_2$ Fold Change', fontsize=12)
@@ -679,7 +696,7 @@ class VisualizationAgent(BaseAgent):
         if show_sample_names and n_samples > 30:
             figsize = (max(figsize[0], n_samples * 0.25), figsize[1])
 
-        # Create clustermap
+        # Create clustermap - NO labels (all shown via hover in interactive version)
         g = sns.clustermap(
             expr_zscore,
             cmap=cmap,
@@ -688,8 +705,8 @@ class VisualizationAgent(BaseAgent):
             col_cluster=False,  # Don't cluster samples (keep condition order)
             row_cluster=True,   # Cluster genes
             col_colors=col_colors,
-            yticklabels=gene_labels if n_genes <= 60 else False,
-            xticklabels=sample_labels if show_sample_names else False,
+            yticklabels=False,  # No gene labels - use interactive for hover
+            xticklabels=False,  # No sample labels - use interactive for hover
             figsize=figsize,
             dendrogram_ratio=(0.1, 0.05),
             colors_ratio=0.02,
@@ -698,12 +715,16 @@ class VisualizationAgent(BaseAgent):
         )
 
         # Style adjustments
-        g.ax_heatmap.set_xlabel('Samples', fontsize=11)
-        g.ax_heatmap.set_ylabel('Genes', fontsize=11)
+        g.ax_heatmap.set_xlabel(f'Samples (n={n_samples})', fontsize=11)
+        g.ax_heatmap.set_ylabel(f'Genes (n={n_genes})', fontsize=11)
 
-        # Rotate x-axis labels for readability
-        if show_sample_names:
-            plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, ha='right', fontsize=8)
+        # Note about interactive version for hovering
+        g.ax_heatmap.text(1.02, 0.5, '💡 Interactive 버전에서\n호버로 확인',
+                         transform=g.ax_heatmap.transAxes,
+                         fontsize=8, color='#666666',
+                         va='center', ha='left', style='italic',
+                         bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                                  edgecolor='#e0e0e0', alpha=0.9))
 
         # Colorbar label
         g.cax.set_ylabel('Z-score', fontsize=10, rotation=90)
@@ -735,6 +756,105 @@ class VisualizationAgent(BaseAgent):
             self.logger.info(f"Saved {filepath.name}")
         plt.close(g.fig)
         return saved_files
+
+    def _plot_heatmap_interactive(self) -> Optional[str]:
+        """Generate interactive heatmap with Plotly (hover for gene names).
+
+        Clean visualization with:
+        - No gene labels on y-axis (shown on hover)
+        - Color-coded condition bar
+        - Sample names on hover
+        - Z-score color scale
+        """
+        if not HAS_PLOTLY:
+            self.logger.warning("Plotly not installed - skipping interactive heatmap")
+            return None
+
+        if self.norm_counts is None or self.deg_sig is None:
+            self.logger.warning("Skipping interactive heatmap - missing data")
+            return None
+
+        self.logger.info("Generating interactive heatmap (Plotly)...")
+
+        # Get top DEGs
+        n_genes = min(50, len(self.deg_sig))
+        top_genes = self.deg_sig.head(n_genes)['gene_id'].tolist()
+
+        # Filter expression data
+        gene_col = self.norm_counts.columns[0]
+        expr_df = self.norm_counts[self.norm_counts[gene_col].isin(top_genes)]
+        expr_df = expr_df.set_index(gene_col)
+
+        if len(expr_df) == 0:
+            return None
+
+        # Sort samples by condition
+        sample_order = list(expr_df.columns)
+        if self.sample_to_condition:
+            sample_order = sorted(
+                sample_order,
+                key=lambda x: (self.sample_to_condition.get(x, 'zzz'), x)
+            )
+            expr_df = expr_df[sample_order]
+
+        # Z-score normalize (row-wise)
+        expr_zscore = expr_df.apply(lambda x: (x - x.mean()) / (x.std() + 1e-10), axis=1)
+
+        # Get gene symbols for y-axis labels (shown on hover)
+        gene_symbols = [self._get_gene_symbol(gid) for gid in expr_zscore.index]
+
+        # Create sample labels
+        sample_labels = []
+        for sample in expr_df.columns:
+            cond = self.sample_to_condition.get(sample, 'Unknown') if self.sample_to_condition else ''
+            sample_labels.append(f"{sample} ({cond[:1].upper()})")
+
+        # Create heatmap with Plotly
+        fig = go.Figure(data=go.Heatmap(
+            z=expr_zscore.values,
+            x=sample_labels,
+            y=gene_symbols,
+            colorscale='RdBu_r',
+            zmid=0,
+            zmin=-2,
+            zmax=2,
+            colorbar=dict(
+                title='Z-score',
+                thickness=15,
+                len=0.5
+            ),
+            hovertemplate='<b>%{y}</b><br>Sample: %{x}<br>Z-score: %{z:.2f}<extra></extra>'
+        ))
+
+        # Update layout
+        fig.update_layout(
+            title=dict(
+                text=f'<b>Expression Heatmap (Top {n_genes} DEGs)</b><br><sup>마우스를 올려 유전자/샘플 정보 확인</sup>',
+                x=0.5,
+                font=dict(size=14)
+            ),
+            xaxis=dict(
+                title='Samples',
+                showticklabels=False,  # Hide x-axis labels (shown on hover)
+                side='bottom'
+            ),
+            yaxis=dict(
+                title='Genes',
+                showticklabels=False,  # Hide y-axis labels (shown on hover)
+                autorange='reversed'  # Top genes at top
+            ),
+            template='plotly_white',
+            width=800,
+            height=600,
+            margin=dict(l=60, r=30, t=80, b=60)
+        )
+
+        # Save HTML
+        html_path = self.figures_dir / "heatmap_interactive.html"
+        fig.write_html(str(html_path), include_plotlyjs='cdn')
+        self.logger.info(f"Saved interactive heatmap: {html_path.name}")
+
+        return str(html_path)
 
     def _plot_pca(self) -> Optional[List[str]]:
         """Generate PCA plot with condition-based coloring.
@@ -780,53 +900,80 @@ class VisualizationAgent(BaseAgent):
         pca_result = pca.fit_transform(expr_scaled)
 
         # Load metadata for condition coloring
-        # Try multiple possible locations for metadata.csv
-        possible_metadata_paths = [
-            self.input_dir / "metadata.csv",                    # Current input dir
-            self.input_dir.parent / "metadata.csv",             # Parent (run dir)
-            self.input_dir.parent.parent / "metadata.csv",      # Grandparent (pipeline output)
-            self.input_dir.parent.parent.parent / "metadata.csv",  # Original input
-        ]
-
-        metadata_path = None
-        for path in possible_metadata_paths:
-            if path.exists():
-                metadata_path = path
-                break
-
-        # First, use pre-loaded sample_to_condition from validate_inputs
+        # Use pre-loaded sample_to_condition from validate_inputs first
         sample_conditions = {}
         if self.sample_to_condition:
             sample_conditions = self.sample_to_condition.copy()
             self.logger.info(f"Using pre-loaded conditions: {len(sample_conditions)} samples")
-        elif metadata_path and metadata_path.exists():
-            try:
-                metadata_df = pd.read_csv(metadata_path)
-                for _, row in metadata_df.iterrows():
-                    sample_id = row.get('sample_id', row.get('sample', ''))
-                    condition = row.get('condition', row.get('group', 'unknown'))
-                    sample_conditions[sample_id] = condition
-                self.logger.info(f"Loaded metadata for {len(sample_conditions)} samples")
-            except Exception as e:
-                self.logger.warning(f"Could not load metadata: {e}")
+        else:
+            # Try multiple possible locations for metadata.csv
+            possible_metadata_paths = [
+                self.input_dir / "metadata.csv",
+                self.input_dir.parent / "metadata.csv",
+                self.input_dir.parent.parent / "metadata.csv",
+                self.input_dir.parent.parent.parent / "metadata.csv",
+            ]
+
+            for meta_path in possible_metadata_paths:
+                if meta_path.exists():
+                    try:
+                        metadata_df = pd.read_csv(meta_path)
+                        self.logger.info(f"Found metadata at: {meta_path}")
+                        # Find sample column
+                        sample_col = None
+                        for col in ['sample_id', 'sample', 'Sample', 'SampleID', 'sample_ID']:
+                            if col in metadata_df.columns:
+                                sample_col = col
+                                break
+                        if sample_col is None:
+                            sample_col = metadata_df.columns[0]
+
+                        # Find condition column
+                        condition_col = None
+                        for col in ['condition', 'Condition', 'group', 'Group', 'sample_type',
+                                   'SampleType', 'type', 'Type', 'class', 'Class', 'status', 'Status']:
+                            if col in metadata_df.columns:
+                                condition_col = col
+                                break
+
+                        if condition_col:
+                            for _, row in metadata_df.iterrows():
+                                sample_id = str(row[sample_col])
+                                condition = str(row[condition_col])
+                                sample_conditions[sample_id] = condition
+                            self.logger.info(f"Loaded metadata: {len(sample_conditions)} samples with column '{condition_col}'")
+                            break
+                    except Exception as e:
+                        self.logger.warning(f"Could not load metadata from {meta_path}: {e}")
 
         # If no metadata, try to infer condition from TCGA barcode pattern
-        # TCGA barcode format: TCGA-XX-XXXX-01A (01-09: Tumor, 10-19: Normal, 11: Solid Tissue Normal)
+        # TCGA barcode format: TCGA-XX-XXXX-01A-... or TCGA.XX.XXXX.01A...
+        # Sample type codes: 01-09 = Tumor, 10-19 = Normal (11 = Solid Tissue Normal)
         if not sample_conditions:
             import re
-            tcga_pattern = re.compile(r'TCGA-[A-Z0-9]{2}-[A-Z0-9]{4}-(\d{2})')
+            # Match both dash-separated and dot-separated formats
+            tcga_patterns = [
+                re.compile(r'TCGA[-\.][A-Z0-9]{2}[-\.][A-Z0-9]{4}[-\.](\d{2})'),  # Standard format
+                re.compile(r'TCGA_[A-Z0-9]{2}_[A-Z0-9]{4}_(\d{2})'),  # Underscore format
+            ]
             inferred_count = 0
+            tumor_count = 0
+            normal_count = 0
             for sample in expr_t.index:
-                match = tcga_pattern.search(sample)
-                if match:
-                    sample_type = int(match.group(1))
-                    if sample_type >= 10:  # Normal tissue (10-19)
-                        sample_conditions[sample] = 'normal'
-                    else:  # Tumor tissue (01-09)
-                        sample_conditions[sample] = 'tumor'
-                    inferred_count += 1
+                for pattern in tcga_patterns:
+                    match = pattern.search(str(sample))
+                    if match:
+                        sample_type = int(match.group(1))
+                        if sample_type >= 10:  # Normal tissue (10-19)
+                            sample_conditions[sample] = 'normal'
+                            normal_count += 1
+                        else:  # Tumor tissue (01-09)
+                            sample_conditions[sample] = 'tumor'
+                            tumor_count += 1
+                        inferred_count += 1
+                        break
             if inferred_count > 0:
-                self.logger.info(f"Inferred condition from TCGA barcode for {inferred_count} samples")
+                self.logger.info(f"Inferred condition from TCGA barcode: {tumor_count} tumor, {normal_count} normal")
 
         # If still no conditions, try to infer from cancer_prediction.json
         # Samples in prediction are tumor, others are normal
@@ -864,17 +1011,26 @@ class VisualizationAgent(BaseAgent):
                     except Exception as e:
                         self.logger.warning(f"Could not load cancer_prediction.json: {e}")
 
-        # Define colors for conditions
-        condition_colors = {
-            'tumor': '#dc2626',      # Red
-            'cancer': '#dc2626',     # Red
-            'case': '#dc2626',       # Red
-            'treatment': '#dc2626',  # Red
-            'normal': '#2563eb',     # Blue
-            'control': '#2563eb',    # Blue
-            'healthy': '#2563eb',    # Blue
-        }
+        # Define colors for conditions - use keywords that may appear in condition names
+        # Red for tumor/cancer samples, Blue for normal/control samples
+        tumor_keywords = ['tumor', 'cancer', 'case', 'treatment', 'primary', 'metasta', 'recurrent', 'malignant']
+        normal_keywords = ['normal', 'control', 'healthy', 'benign', 'adjacent', 'solid tissue normal']
+        tumor_color = '#dc2626'   # Red
+        normal_color = '#2563eb'  # Blue
         default_color = '#6b7280'  # Gray for unknown
+
+        def get_condition_color(condition_str: str) -> str:
+            """Get color based on condition keywords."""
+            cond_lower = condition_str.lower()
+            # Check normal keywords first (to handle "Solid Tissue Normal" correctly)
+            for kw in normal_keywords:
+                if kw in cond_lower:
+                    return normal_color
+            # Check tumor keywords
+            for kw in tumor_keywords:
+                if kw in cond_lower:
+                    return tumor_color
+            return default_color
 
         # Plot
         fig, ax = plt.subplots(figsize=self.config["figsize"]["pca"])
@@ -882,33 +1038,20 @@ class VisualizationAgent(BaseAgent):
         # Get colors for each sample
         colors = []
         for sample in expr_t.index:
-            condition = sample_conditions.get(sample, 'unknown').lower()
-            color = condition_colors.get(condition, default_color)
+            condition = sample_conditions.get(sample, 'unknown')
+            color = get_condition_color(condition)
             colors.append(color)
 
-        # Scatter plot with colors
+        # Scatter plot with colors - NO labels (use interactive for hover)
         scatter = ax.scatter(pca_result[:, 0], pca_result[:, 1],
                             c=colors, s=120, alpha=0.8, edgecolors='white', linewidths=1.5)
 
-        # Label points - only for small datasets, otherwise use interactive version
-        n_samples = len(expr_t.index)
-        if n_samples <= 20:
-            # Show all labels for small datasets
-            for i, sample in enumerate(expr_t.index):
-                ax.annotate(sample, (pca_result[i, 0], pca_result[i, 1]),
-                           fontsize=8, ha='center', va='bottom')
-        elif n_samples <= 50:
-            # Show shortened labels for medium datasets
-            for i, sample in enumerate(expr_t.index):
-                # Shorten TCGA sample IDs: TCGA-XX-XXXX-01A-... -> XX-XXXX
-                if sample.startswith('TCGA-'):
-                    parts = sample.split('-')
-                    short_label = f"{parts[1]}-{parts[2]}" if len(parts) >= 3 else sample[:12]
-                else:
-                    short_label = sample[:12]
-                ax.annotate(short_label, (pca_result[i, 0], pca_result[i, 1]),
-                           fontsize=7, ha='center', va='bottom', alpha=0.7)
-        # For large datasets (>50), no labels - use interactive HTML version for hover
+        # No sample labels - use interactive version for hover
+        ax.text(0.98, 0.02, '💡 Interactive 버전에서 호버로 샘플 확인',
+               transform=ax.transAxes, fontsize=8, color='#666666',
+               ha='right', va='bottom', style='italic',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                        edgecolor='#e0e0e0', alpha=0.9))
 
         ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
         ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
@@ -923,9 +1066,10 @@ class VisualizationAgent(BaseAgent):
             legend_elements = []
             from matplotlib.patches import Patch
             for cond in sorted(unique_conditions):
-                color = condition_colors.get(cond.lower(), default_color)
-                legend_elements.append(Patch(facecolor=color, edgecolor='white',
-                                            label=cond.capitalize()))
+                color = get_condition_color(cond)
+                # Use original label (capitalize first letter of each word)
+                label = cond.title() if cond else 'Unknown'
+                legend_elements.append(Patch(facecolor=color, edgecolor='white', label=label))
             ax.legend(handles=legend_elements, loc='upper right', framealpha=0.9)
 
         saved_files = self._save_figure(fig, "pca_plot")
@@ -934,8 +1078,7 @@ class VisualizationAgent(BaseAgent):
         if HAS_PLOTLY:
             try:
                 interactive_path = self._plot_pca_interactive(
-                    pca_result, expr_t.index, sample_conditions,
-                    condition_colors, default_color, pca
+                    pca_result, expr_t.index, sample_conditions, pca
                 )
                 if interactive_path:
                     saved_files.append(interactive_path)
@@ -944,32 +1087,43 @@ class VisualizationAgent(BaseAgent):
 
         return saved_files
 
-    def _plot_pca_interactive(self, pca_result, sample_names, sample_conditions,
-                               condition_colors, default_color, pca) -> Optional[str]:
+    def _plot_pca_interactive(self, pca_result, sample_names, sample_conditions, pca) -> Optional[str]:
         """Generate interactive PCA plot with Plotly for hover sample identification."""
         self.logger.info("Generating interactive PCA plot (Plotly)...")
 
-        # Prepare data
+        # Define keyword-based color function (same as static plot)
+        tumor_keywords = ['tumor', 'cancer', 'case', 'treatment', 'primary', 'metasta', 'recurrent', 'malignant']
+        normal_keywords = ['normal', 'control', 'healthy', 'benign', 'adjacent', 'solid tissue normal']
+        tumor_color = '#dc2626'   # Red
+        normal_color = '#2563eb'  # Blue
+        unknown_color = '#6b7280'  # Gray
+
+        def get_cond_color(cond_str: str) -> str:
+            cond_lower = cond_str.lower()
+            for kw in normal_keywords:
+                if kw in cond_lower:
+                    return normal_color
+            for kw in tumor_keywords:
+                if kw in cond_lower:
+                    return tumor_color
+            return unknown_color
+
+        # Prepare data - keep original condition names
         conditions = []
-        colors_list = []
         for sample in sample_names:
-            cond = sample_conditions.get(sample, 'unknown')
-            conditions.append(cond.capitalize())
-            colors_list.append(condition_colors.get(cond.lower(), default_color))
+            cond = sample_conditions.get(sample, 'Unknown')
+            conditions.append(cond.title() if cond else 'Unknown')
 
         # Create figure
         fig = go.Figure()
 
-        # Add traces for each condition
+        # Add traces for each unique condition
         unique_conds = list(set(conditions))
-        plotly_colors = {
-            'Tumor': '#dc2626', 'Normal': '#2563eb', 'Cancer': '#dc2626',
-            'Control': '#2563eb', 'Unknown': '#6b7280'
-        }
 
         for cond in sorted(unique_conds):
             mask = [c == cond for c in conditions]
             indices = [i for i, m in enumerate(mask) if m]
+            color = get_cond_color(cond)
 
             fig.add_trace(go.Scatter(
                 x=[pca_result[i, 0] for i in indices],
@@ -978,7 +1132,7 @@ class VisualizationAgent(BaseAgent):
                 name=f'{cond} ({len(indices)})',
                 marker=dict(
                     size=12,
-                    color=plotly_colors.get(cond, '#6b7280'),
+                    color=color,
                     line=dict(width=1, color='white')
                 ),
                 text=[sample_names[i] for i in indices],
@@ -1132,19 +1286,13 @@ class VisualizationAgent(BaseAgent):
                               edgecolors='white',
                               linewidths=1.5)
 
-        # Labels
-        hub_labels = {n: n for n in G.nodes() if n in hub_set_labels}
-        other_labels = {n: n for n in G.nodes() if n not in hub_set_labels}
-
-        # Hub labels: bold, larger
-        nx.draw_networkx_labels(G, pos, hub_labels, ax=ax,
-                               font_size=10, font_weight='bold',
-                               font_color=colors['text'])
-
-        # Other labels: smaller, lighter
-        nx.draw_networkx_labels(G, pos, other_labels, ax=ax,
-                               font_size=7, font_weight='normal',
-                               font_color='#757575')
+        # NO labels on static network - use interactive version for hover
+        # Note about interactive version
+        ax.text(0.5, -0.05, '💡 Interactive 버전에서 호버로 유전자 확인',
+               transform=ax.transAxes, fontsize=8, color='#666666',
+               ha='center', va='top', style='italic',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                        edgecolor='#e0e0e0', alpha=0.9))
 
         # Title
         ax.set_title('Gene Co-expression Network', fontsize=12, fontweight='bold',
@@ -1433,8 +1581,97 @@ class VisualizationAgent(BaseAgent):
         ax.xaxis.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
         ax.set_axisbelow(True)
 
+        # Note about interactive version
+        ax.text(0.98, 0.02, '💡 Interactive 버전에서 호버로 상세 정보 확인',
+               transform=ax.transAxes, fontsize=8, color='#666666',
+               ha='right', va='bottom', style='italic',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                        edgecolor='#e0e0e0', alpha=0.9))
+
         plt.tight_layout()
-        return self._save_figure(fig, "pathway_barplot")
+        saved_files = self._save_figure(fig, "pathway_barplot")
+
+        # Generate interactive version
+        if HAS_PLOTLY:
+            try:
+                interactive_path = self._plot_pathway_interactive()
+                if interactive_path:
+                    saved_files.append(interactive_path)
+            except Exception as e:
+                self.logger.warning(f"Interactive pathway plot failed: {e}")
+
+        return saved_files
+
+    def _plot_pathway_interactive(self) -> Optional[str]:
+        """Generate interactive pathway barplot with Plotly (hover for full names)."""
+        if self.pathway_summary is None or len(self.pathway_summary) == 0:
+            return None
+
+        self.logger.info("Generating interactive pathway barplot (Plotly)...")
+
+        n_pathways = min(self.config["top_pathways"], len(self.pathway_summary))
+        top_pathways = self.pathway_summary.head(n_pathways).copy()
+
+        if len(top_pathways) == 0:
+            return None
+
+        top_pathways['neg_log10_padj'] = -np.log10(top_pathways['padj'].clip(lower=1e-300))
+
+        # Truncate for display but keep full name for hover
+        top_pathways['term_short'] = top_pathways['term_name'].apply(
+            lambda x: x[:40] + '...' if len(str(x)) > 40 else x
+        )
+
+        # Reverse for plotting
+        top_pathways = top_pathways.iloc[::-1]
+
+        # Create hover text with full pathway name
+        hover_text = [
+            f"<b>{row['term_name']}</b><br>" +
+            f"P-value (adj): {row['padj']:.2e}<br>" +
+            f"-log10(P): {row['neg_log10_padj']:.2f}<br>" +
+            f"Genes: {int(row['gene_count'])}"
+            for _, row in top_pathways.iterrows()
+        ]
+
+        import plotly.graph_objects as go
+
+        fig = go.Figure(go.Bar(
+            x=top_pathways['neg_log10_padj'],
+            y=top_pathways['term_short'],
+            orientation='h',
+            marker=dict(
+                color=top_pathways['neg_log10_padj'],
+                colorscale='Blues',
+                line=dict(color='white', width=1)
+            ),
+            text=[f"n={int(g)}" for g in top_pathways['gene_count']],
+            textposition='outside',
+            hovertext=hover_text,
+            hoverinfo='text'
+        ))
+
+        # Add significance line
+        sig_line = -np.log10(0.05)
+        fig.add_vline(x=sig_line, line_dash="dash", line_color="#757575",
+                     annotation_text="p=0.05", annotation_position="top right")
+
+        fig.update_layout(
+            title=dict(text='Pathway Enrichment Analysis', font=dict(size=14, color='#1a1a1a')),
+            xaxis_title='-log₁₀ Adjusted P-value',
+            yaxis_title='',
+            template='plotly_white',
+            width=700,
+            height=max(400, n_pathways * 35),
+            margin=dict(l=250, r=80, t=60, b=60),
+            hoverlabel=dict(bgcolor='white', font_size=12)
+        )
+
+        # Save
+        filepath = self.figures_dir / "pathway_interactive.html"
+        fig.write_html(str(filepath), include_plotlyjs='cdn')
+        self.logger.info(f"Saved interactive pathway: {filepath.name}")
+        return str(filepath)
 
     def _plot_interpretation_summary(self) -> Optional[List[str]]:
         """Generate npj-style interpretation summary.
@@ -1667,10 +1904,82 @@ class VisualizationAgent(BaseAgent):
                  loc='upper right', fontsize=9, frameon=True,
                  edgecolor='#e0e0e0', title='Condition', title_fontsize=9)
 
+        # Note about interactive version
+        ax.text(0.98, 0.02, '💡 Interactive 버전에서 호버로 상세 정보 확인',
+               transform=ax.transAxes, fontsize=8, color='#666666',
+               ha='right', va='bottom', style='italic',
+               bbox=dict(boxstyle='round,pad=0.3', facecolor='#f5f5f5',
+                        edgecolor='#e0e0e0', alpha=0.9))
+
         sns.despine(ax=ax)
         plt.tight_layout()
 
-        return self._save_figure(fig, "expression_boxplot")
+        saved_files = self._save_figure(fig, "expression_boxplot")
+
+        # Generate interactive version
+        if HAS_PLOTLY:
+            try:
+                interactive_path = self._plot_expression_boxplot_interactive(df_plot, conditions)
+                if interactive_path:
+                    saved_files.append(interactive_path)
+            except Exception as e:
+                self.logger.warning(f"Interactive boxplot failed: {e}")
+
+        return saved_files
+
+    def _plot_expression_boxplot_interactive(self, df_plot: pd.DataFrame, conditions) -> Optional[str]:
+        """Generate interactive expression boxplot with Plotly."""
+        self.logger.info("Generating interactive expression boxplot (Plotly)...")
+
+        import plotly.graph_objects as go
+
+        colors = self.config["colors"]
+
+        # Condition colors
+        cond_palette = {}
+        for cond in conditions:
+            if 'tumor' in cond.lower():
+                cond_palette[cond] = colors['up']
+            elif 'normal' in cond.lower():
+                cond_palette[cond] = colors['down']
+            else:
+                cond_palette[cond] = colors['ns']
+
+        fig = go.Figure()
+
+        genes = df_plot['Gene'].unique()
+
+        for cond in conditions:
+            cond_data = df_plot[df_plot['Condition'] == cond]
+
+            fig.add_trace(go.Box(
+                x=cond_data['Gene'],
+                y=cond_data['Expression'],
+                name=cond,
+                marker_color=cond_palette.get(cond, '#9e9e9e'),
+                boxpoints='all',
+                jitter=0.3,
+                pointpos=-1.8,
+                hovertemplate='<b>%{x}</b><br>Expression: %{y:.2f}<br>Condition: ' + cond + '<extra></extra>'
+            ))
+
+        fig.update_layout(
+            title=dict(text='Expression of Top DEGs by Condition', font=dict(size=14, color='#1a1a1a')),
+            xaxis_title='',
+            yaxis_title='Expression (log₂ normalized counts)',
+            boxmode='group',
+            template='plotly_white',
+            width=800,
+            height=500,
+            legend=dict(title='Condition', orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            hoverlabel=dict(bgcolor='white', font_size=12)
+        )
+
+        # Save
+        filepath = self.figures_dir / "expression_boxplot_interactive.html"
+        fig.write_html(str(filepath), include_plotlyjs='cdn')
+        self.logger.info(f"Saved interactive boxplot: {filepath.name}")
+        return str(filepath)
 
     def _plot_network_3d_interactive(self) -> Optional[str]:
         """Generate CSN (Cell-Specific Network) paper style network visualization.
@@ -2150,6 +2459,15 @@ class VisualizationAgent(BaseAgent):
                     self.logger.info("Interactive 2D network generated successfully")
             except Exception as e:
                 self.logger.error(f"Error generating 2D network: {e}")
+
+            # Interactive heatmap (hover for gene names)
+            try:
+                heatmap_result = self._plot_heatmap_interactive()
+                if heatmap_result:
+                    interactive_files.append(heatmap_result)
+                    self.logger.info("Interactive heatmap generated successfully")
+            except Exception as e:
+                self.logger.error(f"Error generating interactive heatmap: {e}")
 
         self.logger.info(f"Visualization Complete:")
         self.logger.info(f"  Static figures: {len(generated_figures)} files")

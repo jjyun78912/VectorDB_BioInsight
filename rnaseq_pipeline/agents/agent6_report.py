@@ -26,18 +26,162 @@ import pandas as pd
 from ..utils.base_agent import BaseAgent
 
 # LLM API for Extended Abstract generation
-# Priority: OpenAI (gpt-4o-mini, cheaper) > Anthropic (Claude, backup)
+# Priority: Claude (more accurate, less hallucination) > OpenAI (fallback)
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
 
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
+
+def get_rag_context_for_report(cancer_type: str, key_genes: list = None) -> str:
+    """Get RAG context from VectorDB for grounded LLM interpretation.
+
+    This ensures LLM responses are based on actual literature,
+    preventing hallucination.
+    """
+    try:
+        from rnaseq_pipeline.rag.gene_interpreter import GeneInterpreter
+        interpreter = GeneInterpreter()
+
+        context_parts = []
+
+        # Get cancer-specific context
+        if cancer_type and cancer_type.lower() not in ["unknown", ""]:
+            cancer_query = f"{cancer_type} RNA-seq transcriptomics differential expression"
+            cancer_results = interpreter.search_papers(cancer_query, top_k=3)
+            if cancer_results:
+                context_parts.append(f"## {cancer_type} 관련 문헌 근거:")
+                for r in cancer_results[:3]:
+                    title = r.get('title', 'Unknown')
+                    pmid = r.get('pmid', '')
+                    abstract = r.get('abstract', r.get('content', ''))[:400]
+                    context_parts.append(f"- {title} [PMID: {pmid}]\n  {abstract}...")
+
+        # Get gene-specific context for top genes
+        if key_genes and len(key_genes) > 0:
+            for gene in key_genes[:5]:
+                if gene and not gene.startswith('ENSG'):
+                    gene_results = interpreter.search_papers(f"{gene} cancer expression", top_k=2)
+                    if gene_results:
+                        context_parts.append(f"\n## {gene} 관련 근거:")
+                        for r in gene_results[:2]:
+                            title = r.get('title', 'Unknown')
+                            pmid = r.get('pmid', '')
+                            context_parts.append(f"- {title} [PMID: {pmid}]")
+
+        return "\n".join(context_parts) if context_parts else ""
+
+    except Exception:
+        return ""
+
+
+def call_llm_with_rag(prompt: str, cancer_type: str = None, key_genes: list = None,
+                      max_tokens: int = 4000, logger=None) -> Optional[str]:
+    """Call LLM (Claude preferred) with RAG context for grounded responses.
+
+    Args:
+        prompt: Main prompt to send to LLM
+        cancer_type: Cancer type for RAG context retrieval
+        key_genes: Key genes for RAG context retrieval
+        max_tokens: Maximum tokens for response
+        logger: Logger instance for logging
+
+    Returns:
+        LLM response text or None if failed
+    """
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    openai_key = os.environ.get("OPENAI_API_KEY")
+
+    # Runtime availability check
+    anthropic_available = False
+    try:
+        import anthropic as anthropic_module
+        anthropic_available = True
+    except ImportError:
+        pass
+
+    openai_available = False
+    try:
+        from openai import OpenAI as OpenAIClient
+        openai_available = True
+    except ImportError:
+        pass
+
+    # Prefer Claude for accuracy and less hallucination
+    use_anthropic = anthropic_available and anthropic_key
+    use_openai = openai_available and openai_key and not use_anthropic
+
+    if not use_anthropic and not use_openai:
+        if logger:
+            logger.warning("No LLM API available (need ANTHROPIC_API_KEY or OPENAI_API_KEY)")
+        return None
+
+    # Get RAG context for grounding
+    rag_context = get_rag_context_for_report(cancer_type, key_genes)
+
+    # Build system prompt for accurate, hallucination-free responses
+    system_prompt = """당신은 RNA-seq 분석 결과를 해석하는 전문 바이오인포매틱스 연구자입니다.
+
+중요한 지침:
+1. 반드시 제공된 데이터와 문헌 근거만을 기반으로 해석하세요.
+2. 확실하지 않은 내용은 "~일 가능성이 있다", "추가 검증이 필요하다"로 표현하세요.
+3. 가능한 경우 PMID 인용을 포함하세요.
+4. 절대로 데이터에 없는 정보를 추측하거나 만들어내지 마세요.
+5. 임상적 결론이나 진단적 판단은 피하세요.
+6. 모든 해석은 한국어로 작성하세요."""
+
+    # Combine RAG context with prompt
+    full_prompt = prompt
+    if rag_context:
+        full_prompt = f"""다음은 VectorDB에서 검색된 관련 문헌 정보입니다. 이 정보를 참고하여 해석하세요:
+
+{rag_context}
+
+---
+
+{prompt}"""
+
+    llm_provider = "Claude" if use_anthropic else "OpenAI"
+    if logger:
+        logger.info(f"Using {llm_provider} for LLM generation (RAG context: {'Yes' if rag_context else 'No'})")
+
+    try:
+        if use_anthropic:
+            import anthropic as anthropic_module
+            client = anthropic_module.Anthropic(api_key=anthropic_key)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": full_prompt}]
+            )
+            return response.content[0].text
+
+        elif use_openai:
+            from openai import OpenAI as OpenAIClient
+            client = OpenAIClient(api_key=openai_key)
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.3
+            )
+            return response.choices[0].message.content
+
+    except Exception as e:
+        if logger:
+            logger.error(f"LLM API error ({llm_provider}): {e}")
+        return None
 
 
 class ReportAgent(BaseAgent):
@@ -1542,7 +1686,7 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_brief_abstract_html(self, data: Dict) -> str:
-        """Generate a brief abstract section right after study overview."""
+        """Generate a comprehensive abstract section with driver and literature interpretations."""
         extended_abstract = data.get('abstract_extended', {})
 
         if not extended_abstract:
@@ -1553,28 +1697,66 @@ class ReportAgent(BaseAgent):
         title_en = extended_abstract.get('title_en', '')
         key_findings = extended_abstract.get('key_findings', [])
         abstract_text = extended_abstract.get('abstract_extended', '')
+        driver_interp = extended_abstract.get('driver_interpretation', '')
+        rag_interp = extended_abstract.get('rag_interpretation', '')
+        validation = extended_abstract.get('validation_priorities', {})
 
-        # Extract just the background and conclusion for brief version
-        brief_parts = []
+        # Use full abstract text (not just brief parts)
+        formatted_abstract = ''
         if abstract_text:
             paragraphs = abstract_text.split('\n\n')
-            for p in paragraphs:
-                p_stripped = p.strip()
-                if p_stripped.startswith('배경:') or p_stripped.startswith('결론:'):
-                    brief_parts.append(p_stripped)
-
-        brief_text = '\n\n'.join(brief_parts) if brief_parts else abstract_text[:500] + '...'
+            formatted_abstract = ''.join([f'<p>{p.strip()}</p>' for p in paragraphs if p.strip()])
 
         # Format key findings as list
         findings_html = ''
         if key_findings:
-            findings_items = ''.join([f'<li>{f}</li>' for f in key_findings[:5]])
+            findings_items = ''.join([f'<li>{f}</li>' for f in key_findings[:10]])
             findings_html = f'''
-            <div class="key-findings">
+            <div class="key-findings-box">
                 <h4>📌 핵심 발견</h4>
                 <ul>{findings_items}</ul>
             </div>
             '''
+
+        # Driver Gene interpretation
+        driver_html = ''
+        if driver_interp:
+            driver_html = f'''
+            <div class="interpretation-box driver">
+                <h4>🧬 Driver Gene 연관성 분석</h4>
+                <p>{driver_interp}</p>
+            </div>
+            '''
+
+        # RAG Literature interpretation
+        rag_html = ''
+        if rag_interp:
+            rag_html = f'''
+            <div class="interpretation-box literature">
+                <h4>📚 문헌 기반 해석</h4>
+                <p>{rag_interp}</p>
+            </div>
+            '''
+
+        # Validation priorities
+        validation_html = ''
+        if validation:
+            val_items = []
+            if validation.get('qPCR'):
+                val_items.append(f'<div class="val-item"><strong>qRT-PCR:</strong> {", ".join(validation["qPCR"][:5])}</div>')
+            if validation.get('western_blot'):
+                val_items.append(f'<div class="val-item"><strong>Western Blot:</strong> {", ".join(validation["western_blot"][:3])}</div>')
+            if validation.get('functional_study'):
+                val_items.append(f'<div class="val-item"><strong>Functional Study:</strong> {", ".join(validation["functional_study"][:3])}</div>')
+            if validation.get('biomarker_candidates'):
+                val_items.append(f'<div class="val-item"><strong>Biomarker 후보:</strong> {", ".join(validation["biomarker_candidates"][:5])}</div>')
+            if val_items:
+                validation_html = f'''
+                <div class="validation-box">
+                    <h4>🔬 실험적 검증 제안</h4>
+                    <div class="val-grid">{''.join(val_items)}</div>
+                </div>
+                '''
 
         # Title section
         title_html = ''
@@ -1588,31 +1770,54 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="brief-abstract-section" id="brief-abstract">
-            <h2>1.5 연구 요약 (Abstract)</h2>
+            <h2>📄 연구 요약 (Extended Abstract)</h2>
+            <p class="section-subtitle">LLM 기반 종합 분석 요약</p>
 
             {title_html}
 
-            <div class="brief-abstract-content">
-                <div class="abstract-text">
-                    {brief_text.replace(chr(10)+chr(10), '</p><p>')}
+            <div class="extended-abstract-content">
+                <div class="abstract-main">
+                    <div class="abstract-text">
+                        {formatted_abstract}
+                    </div>
                 </div>
 
-                {findings_html}
+                <div class="abstract-sidebar">
+                    {findings_html}
+                </div>
+            </div>
+
+            <div class="interpretation-section">
+                {driver_html}
+                {rag_html}
+            </div>
+
+            {validation_html}
+
+            <div class="abstract-note">
+                <span class="note-icon">ℹ️</span>
+                <span>본 요약은 Claude AI + RAG 문헌 검색을 통해 자동 생성되었습니다.</span>
             </div>
 
             <style>
                 .brief-abstract-section {{
                     margin-bottom: var(--sp-6);
                 }}
+                .brief-abstract-section .section-subtitle {{
+                    font-size: 14px;
+                    color: var(--text-secondary);
+                    margin-top: -8px;
+                    margin-bottom: var(--sp-4);
+                }}
                 .abstract-title-box {{
-                    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+                    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
                     padding: var(--sp-4) var(--sp-5);
                     border-radius: var(--radius-md);
-                    border-left: 4px solid var(--accent-blue);
+                    border-left: 4px solid #0ea5e9;
                     margin-bottom: var(--sp-4);
                 }}
                 .abstract-title-box h3 {{
-                    font-size: 16px;
+                    font-size: 17px;
                     font-weight: 600;
                     color: var(--text-primary);
                     margin: 0 0 var(--sp-2) 0;
@@ -1623,44 +1828,140 @@ class ReportAgent(BaseAgent):
                     font-style: italic;
                     margin: 0;
                 }}
-                .brief-abstract-content {{
+                .extended-abstract-content {{
                     display: grid;
                     grid-template-columns: 2fr 1fr;
                     gap: var(--sp-4);
+                    margin-bottom: var(--sp-4);
+                }}
+                .abstract-main {{
+                    background: white;
+                    padding: var(--sp-4);
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--border-light);
                 }}
                 .abstract-text {{
                     font-size: 14px;
-                    line-height: 1.7;
+                    line-height: 1.8;
                     color: var(--text-primary);
                     text-align: justify;
                 }}
                 .abstract-text p {{
                     margin-bottom: var(--sp-3);
                 }}
-                .key-findings {{
-                    background: var(--bg-tertiary);
+                .abstract-sidebar {{
+                    display: flex;
+                    flex-direction: column;
+                    gap: var(--sp-3);
+                }}
+                .key-findings-box {{
+                    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
                     padding: var(--sp-4);
                     border-radius: var(--radius-md);
-                    border: 1px solid var(--border-light);
+                    border: 1px solid #22c55e;
                 }}
-                .key-findings h4 {{
+                .key-findings-box h4 {{
                     font-size: 14px;
                     font-weight: 600;
-                    color: var(--accent-blue);
+                    color: #15803d;
                     margin: 0 0 var(--sp-3) 0;
                 }}
-                .key-findings ul {{
+                .key-findings-box ul {{
                     margin: 0;
                     padding-left: var(--sp-4);
                 }}
-                .key-findings li {{
-                    font-size: 13px;
+                .key-findings-box li {{
+                    font-size: 12px;
                     line-height: 1.5;
                     color: var(--text-primary);
                     margin-bottom: var(--sp-2);
                 }}
+                .interpretation-section {{
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: var(--sp-4);
+                    margin-bottom: var(--sp-4);
+                }}
+                .interpretation-box {{
+                    background: white;
+                    padding: var(--sp-4);
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--border-light);
+                }}
+                .interpretation-box.driver {{
+                    border-left: 4px solid #8b5cf6;
+                    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+                }}
+                .interpretation-box.literature {{
+                    border-left: 4px solid #f59e0b;
+                    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+                }}
+                .interpretation-box h4 {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    margin: 0 0 var(--sp-3) 0;
+                }}
+                .interpretation-box.driver h4 {{
+                    color: #7c3aed;
+                }}
+                .interpretation-box.literature h4 {{
+                    color: #d97706;
+                }}
+                .interpretation-box p {{
+                    font-size: 13px;
+                    line-height: 1.7;
+                    color: var(--text-primary);
+                    margin: 0;
+                }}
+                .validation-box {{
+                    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+                    padding: var(--sp-4);
+                    border-radius: var(--radius-md);
+                    border: 1px solid #ef4444;
+                    margin-bottom: var(--sp-4);
+                }}
+                .validation-box h4 {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #dc2626;
+                    margin: 0 0 var(--sp-3) 0;
+                }}
+                .val-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: var(--sp-2);
+                }}
+                .val-item {{
+                    font-size: 12px;
+                    color: var(--text-primary);
+                    padding: var(--sp-2);
+                    background: rgba(255,255,255,0.7);
+                    border-radius: 4px;
+                }}
+                .val-item strong {{
+                    color: #dc2626;
+                }}
+                .abstract-note {{
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: var(--sp-3);
+                    background: var(--bg-tertiary);
+                    border-radius: var(--radius-sm);
+                    font-size: 12px;
+                    color: var(--text-secondary);
+                }}
+                .note-icon {{
+                    font-size: 16px;
+                }}
                 @media (max-width: 768px) {{
-                    .brief-abstract-content {{
+                    .extended-abstract-content {{
+                        grid-template-columns: 1fr;
+                    }}
+                    .interpretation-section {{
+                        grid-template-columns: 1fr;
+                    }}
+                    .val-grid {{
                         grid-template-columns: 1fr;
                     }}
                 }}
@@ -1700,17 +2001,41 @@ class ReportAgent(BaseAgent):
         else:
             pca_html = '<p class="no-data">PCA plot not available</p>'
 
-        # Get PCA interpretation from LLM
+        # Get PCA interpretation from LLM - DETAILED VERSION
         pca_interp = viz_interpretations.get('pca_plot', {})
         pca_ai_section = ''
         if pca_interp:
+            sample_quality = pca_interp.get('sample_quality', '')
+            biological_meaning = pca_interp.get('biological_meaning', '')
+            interpretation_guide = pca_interp.get('interpretation_guide', '')
+
             pca_ai_section = f'''
-            <div class="ai-box">
-                <div class="ai-box-header">AI 분석</div>
-                <div class="ai-box-content">
-                    <p>{pca_interp.get('summary', '')}</p>
-                    <p><strong>샘플 분리:</strong> {pca_interp.get('separation_analysis', '')}</p>
-                    <p><strong>설명된 분산:</strong> {pca_interp.get('variance_explanation', '')}</p>
+            <div class="ai-analysis-box detailed">
+                <div class="ai-analysis-header">
+                    <span class="ai-icon">🤖</span>
+                    <span class="ai-title">AI 상세 분석: PCA</span>
+                </div>
+                <div class="ai-analysis-content">
+                    <div class="ai-section">
+                        <h4>📊 분석 요약</h4>
+                        <p class="ai-summary-text">{pca_interp.get('summary', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🔀 샘플 분리도 분석</h4>
+                        <p>{pca_interp.get('separation_analysis', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>📈 분산 설명</h4>
+                        <p>{pca_interp.get('variance_explanation', '')}</p>
+                    </div>
+
+                    {f'<div class="ai-section"><h4>✅ 샘플 품질 평가</h4><p>{sample_quality}</p></div>' if sample_quality else ''}
+
+                    {f'<div class="ai-section"><h4>🧬 생물학적 의미</h4><p>{biological_meaning}</p></div>' if biological_meaning else ''}
+
+                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -1743,6 +2068,14 @@ class ReportAgent(BaseAgent):
         volcano_interactive = interactive_figures.get('volcano_interactive', '')
         heatmap_fig = figures.get('heatmap_top50', figures.get('heatmap_key_genes', figures.get('top_genes_heatmap', '')))
 
+        # Check for interactive heatmap (multiple possible keys)
+        heatmap_interactive = (
+            interactive_figures.get('heatmap_interactive') or
+            interactive_figures.get('heatmap_top50_interactive') or
+            interactive_figures.get('deg_heatmap_interactive') or
+            ''
+        )
+
         # Volcano plot with interactive toggle
         if volcano_interactive:
             escaped_html = volcano_interactive.replace('"', '&quot;')
@@ -1764,38 +2097,101 @@ class ReportAgent(BaseAgent):
         else:
             volcano_html = '<p class="no-data">Volcano plot not available</p>'
 
-        heatmap_html = f'<div style="text-align:center;"><img src="{heatmap_fig}" alt="Heatmap" class="figure-img" style="max-width:100%;"></div>' if heatmap_fig else '<p class="no-data">Heatmap not available</p>'
+        # Heatmap with interactive toggle (similar to volcano)
+        if heatmap_interactive:
+            escaped_heatmap_html = heatmap_interactive.replace('"', '&quot;')
+            heatmap_html = f'''
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="showHeatmapView('interactive')">Interactive</button>
+                <button class="toggle-btn" onclick="showHeatmapView('static')">Static</button>
+            </div>
+            <div id="heatmap-interactive" class="heatmap-view active" style="display:flex; flex-direction:column; align-items:center;">
+                <iframe id="heatmap-iframe" srcdoc="{escaped_heatmap_html}" style="width:100%; max-width:1000px; height:600px; border:none; border-radius:8px;"></iframe>
+                <p class="panel-note">💡 마우스를 올리면 유전자/샘플 정보를 확인할 수 있습니다.</p>
+            </div>
+            <div id="heatmap-static" class="heatmap-view" style="display:none; text-align:center;">
+                <img src="{heatmap_fig}" alt="Heatmap" class="figure-img" style="max-width:100%;">
+            </div>
+            '''
+        elif heatmap_fig:
+            heatmap_html = f'<div style="text-align:center;"><img src="{heatmap_fig}" alt="Heatmap" class="figure-img" style="max-width:100%;"></div>'
+        else:
+            heatmap_html = '<p class="no-data">Heatmap not available</p>'
 
-        # AI interpretation for volcano plot
+        # AI interpretation for volcano plot - DETAILED VERSION
         volcano_interp = viz_interpretations.get('volcano_plot', {})
         volcano_ai_section = ''
         if volcano_interp:
             observations = volcano_interp.get('key_observations', [])
-            obs_text = ' '.join(observations[:2]) if observations else ''
+            observations_html = ''.join([f'<li>{obs}</li>' for obs in observations]) if observations else ''
+
+            clinical_relevance = volcano_interp.get('clinical_relevance', '')
+            interpretation_guide = volcano_interp.get('interpretation_guide', '')
+
             volcano_ai_section = f'''
-            <div class="ai-box">
-                <div class="ai-box-header">AI 분석</div>
-                <div class="ai-box-content">
-                    <p>{volcano_interp.get('summary', '')}</p>
-                    {f'<p>{obs_text}</p>' if obs_text else ''}
-                    <p><strong>생물학적 의의:</strong> {volcano_interp.get('biological_significance', '')}</p>
+            <div class="ai-analysis-box detailed">
+                <div class="ai-analysis-header">
+                    <span class="ai-icon">🤖</span>
+                    <span class="ai-title">AI 상세 분석: Volcano Plot</span>
+                </div>
+                <div class="ai-analysis-content">
+                    <div class="ai-section">
+                        <h4>📊 분석 요약</h4>
+                        <p class="ai-summary-text">{volcano_interp.get('summary', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🔍 주요 관찰 사항</h4>
+                        <ul class="ai-observations-list">{observations_html}</ul>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🧬 생물학적 의의</h4>
+                        <p>{volcano_interp.get('biological_significance', '')}</p>
+                    </div>
+
+                    {f'<div class="ai-section"><h4>💊 임상적 관련성</h4><p>{clinical_relevance}</p></div>' if clinical_relevance else ''}
+
+                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
 
-        # AI interpretation for heatmap
+        # AI interpretation for heatmap - DETAILED VERSION
         heatmap_interp = viz_interpretations.get('heatmap', {})
         heatmap_ai_section = ''
         if heatmap_interp:
             observations = heatmap_interp.get('key_observations', [])
-            obs_text = ' '.join(observations[:2]) if observations else ''
+            observations_html = ''.join([f'<li>{obs}</li>' for obs in observations]) if observations else ''
+
+            sample_clustering = heatmap_interp.get('sample_clustering', '')
+            interpretation_guide = heatmap_interp.get('interpretation_guide', '')
+
             heatmap_ai_section = f'''
-            <div class="ai-box">
-                <div class="ai-box-header">AI 분석</div>
-                <div class="ai-box-content">
-                    <p>{heatmap_interp.get('summary', '')}</p>
-                    {f'<p>{obs_text}</p>' if obs_text else ''}
-                    <p><strong>발현 패턴:</strong> {heatmap_interp.get('pattern_analysis', '')}</p>
+            <div class="ai-analysis-box detailed">
+                <div class="ai-analysis-header">
+                    <span class="ai-icon">🤖</span>
+                    <span class="ai-title">AI 상세 분석: 발현 히트맵</span>
+                </div>
+                <div class="ai-analysis-content">
+                    <div class="ai-section">
+                        <h4>📊 분석 요약</h4>
+                        <p class="ai-summary-text">{heatmap_interp.get('summary', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🔍 주요 관찰 사항</h4>
+                        <ul class="ai-observations-list">{observations_html}</ul>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🧬 발현 패턴 분석</h4>
+                        <p>{heatmap_interp.get('pattern_analysis', '')}</p>
+                    </div>
+
+                    {f'<div class="ai-section"><h4>📈 샘플 클러스터링</h4><p>{sample_clustering}</p></div>' if sample_clustering else ''}
+
+                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -1923,20 +2319,46 @@ class ReportAgent(BaseAgent):
         pathway_fig = figures.get('pathway_barplot', figures.get('pathway_enrichment', figures.get('go_enrichment', '')))
         pathway_html = f'<div style="text-align:center;"><img src="{pathway_fig}" alt="Pathway Enrichment" class="figure-img" style="max-width:100%;"></div>' if pathway_fig else ''
 
-        # AI interpretation for pathway
+        # AI interpretation for pathway - DETAILED VERSION
         pathway_interp = viz_interpretations.get('pathway_barplot', {})
         pathway_ai_section = ''
         if pathway_interp:
             top_pathways = pathway_interp.get('top_pathways', [])
-            pathways_text = ', '.join(top_pathways[:3]) if top_pathways else ''
+            pathways_html = ''.join([f'<li>{pw}</li>' for pw in top_pathways]) if top_pathways else ''
+
+            cross_pathway = pathway_interp.get('cross_pathway_interactions', '')
+            interpretation_guide = pathway_interp.get('interpretation_guide', '')
+
             pathway_ai_section = f'''
-            <div class="ai-box green">
-                <div class="ai-box-header">AI 분석</div>
-                <div class="ai-box-content">
-                    <p>{pathway_interp.get('summary', '')}</p>
-                    {f'<p><strong>주요 경로:</strong> {pathways_text}</p>' if pathways_text else ''}
-                    <p><strong>기능적 테마:</strong> {pathway_interp.get('functional_theme', '')}</p>
-                    <p><strong>치료적 시사점:</strong> {pathway_interp.get('therapeutic_implications', '')}</p>
+            <div class="ai-analysis-box detailed green-theme">
+                <div class="ai-analysis-header">
+                    <span class="ai-icon">🤖</span>
+                    <span class="ai-title">AI 상세 분석: Pathway 분석</span>
+                </div>
+                <div class="ai-analysis-content">
+                    <div class="ai-section">
+                        <h4>📊 분석 요약</h4>
+                        <p class="ai-summary-text">{pathway_interp.get('summary', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🔬 주요 Pathway 상세 설명</h4>
+                        <ul class="ai-observations-list">{pathways_html}</ul>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🧬 기능적 테마</h4>
+                        <p>{pathway_interp.get('functional_theme', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>💊 치료적 함의</h4>
+                        <p>{pathway_interp.get('therapeutic_implications', '')}</p>
+                    </div>
+
+                    {f'<div class="ai-section"><h4>🔗 Pathway 간 상호작용</h4><p>{cross_pathway}</p></div>' if cross_pathway else ''}
+
+                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -2086,16 +2508,43 @@ class ReportAgent(BaseAgent):
                 if gene_id and gene_symbol and str(gene_symbol) != 'nan':
                     id_to_symbol[gene_id] = gene_symbol
 
-        # AI interpretation for network
+        # AI interpretation for network - DETAILED VERSION
         network_interp = viz_interpretations.get('network_graph', {})
         network_ai_section = ''
         if network_interp:
+            therapeutic_potential = network_interp.get('therapeutic_potential', '')
+            interpretation_guide = network_interp.get('interpretation_guide', '')
+
             network_ai_section = f'''
-            <div class="ai-box">
-                <div class="ai-box-header">AI 분석</div>
-                <div class="ai-box-content">
-                    <p>{network_interp.get('summary', '')}</p>
-                    <p><strong>네트워크 구조:</strong> {network_interp.get('structure_analysis', '')}</p>
+            <div class="ai-analysis-box detailed orange-theme">
+                <div class="ai-analysis-header">
+                    <span class="ai-icon">🤖</span>
+                    <span class="ai-title">AI 상세 분석: 유전자 네트워크</span>
+                </div>
+                <div class="ai-analysis-content">
+                    <div class="ai-section">
+                        <h4>📊 분석 요약</h4>
+                        <p class="ai-summary-text">{network_interp.get('summary', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🌐 Hub 유전자 심층 분석</h4>
+                        <p>{network_interp.get('hub_gene_analysis', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🔗 네트워크 토폴로지</h4>
+                        <p>{network_interp.get('network_topology', '')}</p>
+                    </div>
+
+                    <div class="ai-section">
+                        <h4>🧬 생물학적 의미</h4>
+                        <p>{network_interp.get('biological_implications', '')}</p>
+                    </div>
+
+                    {f'<div class="ai-section"><h4>💊 치료적 잠재력</h4><p>{therapeutic_potential}</p></div>' if therapeutic_potential else ''}
+
+                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -3531,7 +3980,130 @@ class ReportAgent(BaseAgent):
                 color: var(--gray-700);
             }
 
-            /* Extended Abstract Styles */
+            /* Extended Abstract Styles - Full Page */
+            .extended-abstract-section {
+                margin: 0 0 40px 0;
+                page-break-after: always;
+            }
+
+            .section-header-large {
+                background: linear-gradient(135deg, var(--npj-blue) 0%, #1e40af 100%);
+                color: white;
+                padding: 24px 32px;
+                border-radius: 12px 12px 0 0;
+                margin-bottom: 0;
+            }
+
+            .section-header-large h2 {
+                color: white;
+                font-size: 24px;
+                margin: 0 0 8px 0;
+                border: none;
+                padding: 0;
+            }
+
+            .section-subtitle {
+                color: rgba(255, 255, 255, 0.85);
+                font-size: 14px;
+                margin: 0;
+            }
+
+            .abstract-box.extended.full-page {
+                background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+                border: 2px solid var(--npj-blue);
+                border-top: none;
+                border-radius: 0 0 12px 12px;
+                padding: 32px 40px;
+                min-height: 600px;
+            }
+
+            .abstract-title {
+                text-align: center;
+                margin-bottom: 28px;
+                padding-bottom: 20px;
+                border-bottom: 2px solid var(--gray-200);
+            }
+
+            .abstract-title h3 {
+                font-size: 20px;
+                color: var(--gray-900);
+                margin: 0 0 8px 0;
+                line-height: 1.4;
+            }
+
+            .abstract-title .title-en {
+                font-size: 14px;
+                color: var(--gray-600);
+                font-style: italic;
+                margin: 0;
+            }
+
+            .abstract-main-content {
+                margin-bottom: 28px;
+            }
+
+            .abstract-body p {
+                font-size: 15px;
+                line-height: 1.8;
+                color: var(--gray-800);
+                text-align: justify;
+                margin-bottom: 16px;
+            }
+
+            .abstract-supplementary {
+                display: grid;
+                gap: 20px;
+            }
+
+            .abstract-interpretations {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 16px;
+            }
+
+            .driver-interpretation,
+            .rag-interpretation,
+            .ml-interpretation {
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                border: 1px solid var(--gray-200);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+
+            .driver-interpretation h4,
+            .rag-interpretation h4,
+            .ml-interpretation h4 {
+                font-size: 14px;
+                color: var(--npj-blue);
+                margin: 0 0 12px 0;
+            }
+
+            .driver-interpretation p,
+            .rag-interpretation p,
+            .ml-interpretation p {
+                font-size: 13px;
+                color: var(--gray-700);
+                line-height: 1.6;
+                margin: 0;
+            }
+
+            .abstract-note {
+                margin-top: 24px;
+                padding: 14px 20px;
+                background: #eff6ff;
+                border-radius: 8px;
+                font-size: 13px;
+                color: var(--gray-600);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .abstract-note .note-icon {
+                font-size: 16px;
+            }
+
             .abstract-box.extended {
                 background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
                 border-left: 4px solid var(--npj-blue);
@@ -5535,6 +6107,146 @@ class ReportAgent(BaseAgent):
                 border-bottom: none;
             }
 
+            /* ========== AI ANALYSIS BOX (DETAILED) ========== */
+            .ai-analysis-box.detailed {
+                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+                border: 1px solid #0ea5e9;
+                border-radius: 12px;
+                padding: var(--spacing-lg);
+                margin: var(--spacing-lg) 0;
+                box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+            }
+
+            .ai-analysis-box.detailed.green-theme {
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                border-color: #22c55e;
+                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
+            }
+
+            .ai-analysis-box.detailed.orange-theme {
+                background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+                border-color: #f97316;
+                box-shadow: 0 2px 8px rgba(249, 115, 22, 0.1);
+            }
+
+            .ai-analysis-header {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-bottom: var(--spacing-md);
+                padding-bottom: var(--spacing-sm);
+                border-bottom: 2px solid rgba(14, 165, 233, 0.2);
+            }
+
+            .green-theme .ai-analysis-header {
+                border-bottom-color: rgba(34, 197, 94, 0.2);
+            }
+
+            .orange-theme .ai-analysis-header {
+                border-bottom-color: rgba(249, 115, 22, 0.2);
+            }
+
+            .ai-icon {
+                font-size: 24px;
+            }
+
+            .ai-title {
+                font-size: 16px;
+                font-weight: 700;
+                color: #0369a1;
+            }
+
+            .green-theme .ai-title {
+                color: #15803d;
+            }
+
+            .orange-theme .ai-title {
+                color: #c2410c;
+            }
+
+            .ai-analysis-content {
+                display: flex;
+                flex-direction: column;
+                gap: var(--spacing-md);
+            }
+
+            .ai-section {
+                background: rgba(255, 255, 255, 0.7);
+                border-radius: 8px;
+                padding: var(--spacing-md);
+            }
+
+            .ai-section h4 {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--gray-800);
+                margin: 0 0 var(--spacing-sm) 0;
+            }
+
+            .ai-section p {
+                font-size: 13px;
+                color: var(--gray-700);
+                line-height: 1.7;
+                margin: 0;
+            }
+
+            .ai-summary-text {
+                font-size: 14px !important;
+                font-weight: 500;
+            }
+
+            .ai-observations-list {
+                list-style: none;
+                padding: 0;
+                margin: 0;
+            }
+
+            .ai-observations-list li {
+                font-size: 13px;
+                color: var(--gray-700);
+                padding: 8px 0 8px 24px;
+                position: relative;
+                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            }
+
+            .ai-observations-list li:last-child {
+                border-bottom: none;
+            }
+
+            .ai-observations-list li::before {
+                content: "▸";
+                position: absolute;
+                left: 0;
+                color: #0ea5e9;
+                font-weight: bold;
+            }
+
+            .green-theme .ai-observations-list li::before {
+                color: #22c55e;
+            }
+
+            .orange-theme .ai-observations-list li::before {
+                color: #f97316;
+            }
+
+            .ai-section.guide {
+                background: rgba(255, 255, 255, 0.9);
+                border-left: 3px solid #0ea5e9;
+            }
+
+            .green-theme .ai-section.guide {
+                border-left-color: #22c55e;
+            }
+
+            .orange-theme .ai-section.guide {
+                border-left-color: #f97316;
+            }
+
+            .guide-text {
+                font-style: italic;
+                color: var(--gray-600) !important;
+            }
+
             /* ========== RESPONSIVE ========== */
             @media (max-width: 768px) {
                 .cover-title { font-size: 24px; }
@@ -5734,6 +6446,42 @@ class ReportAgent(BaseAgent):
                     buttons[1].classList.add('active');
                 }}
             }}
+
+            // Heatmap view toggle
+            function showHeatmapView(view) {{
+                const interactiveView = document.getElementById('heatmap-interactive');
+                const staticView = document.getElementById('heatmap-static');
+                const container = interactiveView ? interactiveView.closest('.figure-panel') : null;
+                const buttons = container ? container.querySelectorAll('.view-toggle .toggle-btn') : [];
+
+                if (view === 'interactive') {{
+                    if (interactiveView) {{
+                        interactiveView.classList.add('active');
+                        interactiveView.style.display = 'flex';
+                    }}
+                    if (staticView) {{
+                        staticView.classList.remove('active');
+                        staticView.style.display = 'none';
+                    }}
+                    if (buttons.length >= 2) {{
+                        buttons[0].classList.add('active');
+                        buttons[1].classList.remove('active');
+                    }}
+                }} else {{
+                    if (interactiveView) {{
+                        interactiveView.classList.remove('active');
+                        interactiveView.style.display = 'none';
+                    }}
+                    if (staticView) {{
+                        staticView.classList.add('active');
+                        staticView.style.display = 'block';
+                    }}
+                    if (buttons.length >= 2) {{
+                        buttons[0].classList.remove('active');
+                        buttons[1].classList.add('active');
+                    }}
+                }}
+            }}
         </script>
         '''
 
@@ -5856,18 +6604,36 @@ class ReportAgent(BaseAgent):
                 ml_html = f'<div class="ml-interpretation"><h4>🤖 ML 예측 해석</h4><p>{ml_interp}</p></div>'
 
             return f'''
-        <section class="abstract-section" id="abstract">
-            <h2>확장 초록</h2>
-            <div class="abstract-box extended">
+        <section class="extended-abstract-section" id="abstract">
+            <div class="section-header-large">
+                <h2>📄 연구 요약 (Extended Abstract)</h2>
+                <p class="section-subtitle">LLM 기반 종합 분석 요약 - 1페이지 요약본</p>
+            </div>
+            <div class="abstract-box extended full-page">
                 {title_html}
-                <div class="abstract-content">
-                    {formatted_paragraphs}
+
+                <div class="abstract-main-content">
+                    <div class="abstract-body">
+                        {formatted_paragraphs}
+                    </div>
                 </div>
-                {findings_html}
-                {driver_html}
-                {rag_html}
-                {validation_html}
-                {ml_html}
+
+                <div class="abstract-supplementary">
+                    {findings_html}
+
+                    <div class="abstract-interpretations">
+                        {driver_html}
+                        {rag_html}
+                        {ml_html}
+                    </div>
+
+                    {validation_html}
+                </div>
+
+                <div class="abstract-note">
+                    <span class="note-icon">ℹ️</span>
+                    <span>본 요약은 Claude AI + RAG 문헌 검색을 통해 자동 생성되었습니다. 상세 내용은 각 섹션을 참조하세요.</span>
+                </div>
             </div>
         </section>
             '''
@@ -6665,8 +7431,9 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 3. Driver Gene Analysis 섹션 필수 - Known Driver/Candidate Regulator 구분하여 상위 유전자 명시
 4. Hub 유전자와 Driver 후보를 validation_priorities에 실제 유전자명으로 포함
 5. PMID 인용 형식 사용 (예: PMID 35409110)
-6. abstract_extended는 최소 800자 이상으로 상세하게 작성
-7. key_findings는 6개 이상, 각 섹션에서 핵심 발견 포함
+6. abstract_extended는 최소 2500자 이상으로 매우 상세하게 작성 (1페이지 분량, A4 기준)
+7. key_findings는 8개 이상, 각 섹션에서 핵심 발견 포함
+8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 검증 제안, 결론)은 각각 3-5문장 이상으로 상세히 기술
 
 문체 지침:
 - 마크다운 특수기호 사용 금지 (**, __, ##, [], () 등)
@@ -6676,25 +7443,19 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 """
 
         try:
-            # Call LLM API (OpenAI or Anthropic) - using runtime imports
-            if use_openai:
-                from openai import OpenAI as OpenAIClient
-                client = OpenAIClient(api_key=openai_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = response.choices[0].message.content
-            else:
-                import anthropic as anthropic_module
-                client = anthropic_module.Anthropic(api_key=anthropic_key)
-                message = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = message.content[0].text
+            # Call LLM API with RAG context (Claude preferred)
+            cancer_type = self.config.get('cancer_type', 'unknown')
+            response_text = call_llm_with_rag(
+                prompt=prompt,
+                cancer_type=cancer_type,
+                key_genes=hub_gene_names[:10],
+                max_tokens=6000,  # Increased for longer 1-page abstract
+                logger=self.logger
+            )
+
+            if not response_text:
+                self.logger.warning("LLM returned empty response")
+                return self._generate_fallback_extended_abstract(data)
 
             # Extract JSON from response
             json_start = response_text.find('{')
@@ -6708,15 +7469,14 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(extended_abstract, f, ensure_ascii=False, indent=2)
 
-                self.logger.info(f"Extended abstract generated via {llm_provider}: {output_path}")
+                self.logger.info(f"Extended abstract generated (RAG-based): {output_path}")
                 return extended_abstract
             else:
-                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
+                self.logger.warning("Could not extract JSON from LLM response")
                 return self._generate_fallback_extended_abstract(data)
 
         except Exception as e:
-            self.logger.error(f"Error generating extended abstract via {llm_provider}: {e}")
-            # Return fallback extended abstract when API fails
+            self.logger.error(f"Error generating extended abstract: {e}")
             return self._generate_fallback_extended_abstract(data)
 
     def _generate_fallback_extended_abstract(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -6931,96 +7691,115 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 ## Pathway 정보
 {chr(10).join(pathway_list) if pathway_list else '정보 없음'}
 
-다음 JSON 형식으로 각 시각화에 대한 해석을 제공해주세요:
+다음 JSON 형식으로 각 시각화에 대한 **매우 상세한** 해석을 제공해주세요. 각 항목은 3-5문장 이상으로 구체적으로 작성해야 합니다:
 
 ```json
 {{
   "volcano_plot": {{
     "title": "Volcano Plot 해석",
-    "summary": "1-2문장 요약",
+    "summary": "3-4문장으로 전체적인 DEG 분포 특성과 의미 요약",
     "key_observations": [
-      "관찰 1",
-      "관찰 2",
-      "관찰 3"
+      "DEG 분포 패턴에 대한 상세 관찰 (상향/하향 비율, 극단값 등)",
+      "통계적 유의성 분포 특성 (-log10 p-value 분포)",
+      "주요 상향조절 유전자 특성과 잠재적 역할",
+      "주요 하향조절 유전자 특성과 잠재적 역할",
+      "전체적인 발현 변화 양상이 시사하는 바"
     ],
-    "biological_significance": "생물학적 의미 설명",
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "biological_significance": "이러한 DEG 패턴이 암 생물학적 관점에서 의미하는 바를 3-4문장으로 상세히 설명. 종양 촉진/억제 경로, 대사 변화, 세포 주기 등과 연관지어 해석",
+    "clinical_relevance": "DEG 결과의 임상적 의의 - 진단, 예후, 치료 타겟 관점에서 2-3문장",
+    "interpretation_guide": "연구자가 Volcano Plot을 해석할 때 주의해야 할 점과 올바른 해석 방법을 3문장 이상으로 안내"
   }},
   "heatmap": {{
     "title": "발현 히트맵 해석",
-    "summary": "1-2문장 요약",
+    "summary": "3-4문장으로 전체적인 발현 패턴 특성 요약",
     "key_observations": [
-      "관찰 1",
-      "관찰 2"
+      "샘플 간 클러스터링 패턴에 대한 상세 분석",
+      "유전자 간 클러스터링 패턴과 공발현 그룹",
+      "종양-정상 조직 간 발현 차이의 명확성",
+      "특이적으로 높거나 낮은 발현을 보이는 유전자 그룹"
     ],
-    "pattern_analysis": "발현 패턴 분석",
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "pattern_analysis": "발현 패턴의 생물학적 의미를 3-4문장으로 상세 분석. 공발현 유전자 그룹이 시사하는 기능적 모듈, 샘플 이질성 등 해석",
+    "sample_clustering": "샘플 클러스터링 결과가 의미하는 바 - 종양 아형, 예후 그룹 등과의 연관성 2-3문장",
+    "interpretation_guide": "히트맵 해석 시 색상 스케일, 정규화 방법, 클러스터링 알고리즘의 영향을 고려한 올바른 해석 방법 안내"
   }},
   "network_graph": {{
     "title": "유전자 상호작용 네트워크 해석",
-    "summary": "1-2문장 요약",
-    "hub_gene_analysis": "Hub 유전자 분석",
-    "network_topology": "네트워크 구조 특성",
-    "biological_implications": "생물학적 의미",
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "summary": "3-4문장으로 네트워크의 전체적 구조와 특성 요약",
+    "hub_gene_analysis": "각 Hub 유전자의 역할과 중요성을 4-5문장으로 상세 분석. 높은 연결성이 의미하는 생물학적 의미, 각 Hub 유전자의 알려진 기능과 암에서의 역할",
+    "network_topology": "네트워크 구조 특성 (scale-free 특성, 모듈 구조, 연결 밀도 등)을 3문장으로 분석",
+    "biological_implications": "네트워크 분석 결과가 시사하는 생물학적 의미 4-5문장. 핵심 조절 메커니즘, 취약점(druggable targets), 경로 간 crosstalk 등",
+    "therapeutic_potential": "Hub 유전자를 표적으로 한 치료 전략 가능성 2-3문장",
+    "interpretation_guide": "네트워크 그래프 해석 시 edge의 의미, node 크기/색상의 의미, 상관관계 기반 분석의 한계점 등 안내"
   }},
   "pca_plot": {{
     "title": "PCA 분석 해석",
-    "summary": "1-2문장 요약",
-    "separation_analysis": "샘플 분리도 분석",
-    "variance_explanation": "분산 설명",
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "summary": "3-4문장으로 샘플 분포와 분리도 요약",
+    "separation_analysis": "종양-정상 조직 간 분리도를 4-5문장으로 상세 분석. 분리가 명확한지, 겹치는 샘플이 있는지, 이상치(outlier)가 있는지 등",
+    "variance_explanation": "각 주성분(PC)이 설명하는 분산 비율의 의미, PC1/PC2가 반영하는 생물학적 변이 3문장",
+    "sample_quality": "PCA 결과로부터 추론할 수 있는 샘플 품질 및 배치 효과 여부 2문장",
+    "biological_meaning": "샘플 분포 패턴이 의미하는 생물학적 차이 (전사체 프로파일의 전반적 변화) 3문장",
+    "interpretation_guide": "PCA 해석 시 분산 설명 비율, 샘플 레이블, 잠재적 교란 요인 고려 방법 안내"
   }},
   "pathway_barplot": {{
     "title": "Pathway 분석 해석",
-    "summary": "1-2문장 요약",
+    "summary": "3-4문장으로 전체적인 pathway 농축 결과 요약",
     "top_pathways": [
-      "주요 pathway 1 설명",
-      "주요 pathway 2 설명"
+      "가장 유의한 pathway 1에 대한 상세 설명 - 해당 경로의 생물학적 기능, 암과의 관련성, 포함된 DEG 등",
+      "가장 유의한 pathway 2에 대한 상세 설명",
+      "가장 유의한 pathway 3에 대한 상세 설명",
+      "전체 pathway 결과의 공통 주제/패턴"
     ],
-    "functional_theme": "전체적인 기능적 테마",
-    "therapeutic_implications": "치료적 함의",
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "functional_theme": "발굴된 pathway들의 전체적인 기능적 테마를 4-5문장으로 분석. 세포 증식, 면역, 대사, 신호전달 등 어떤 생물학적 과정이 주로 변화했는지",
+    "therapeutic_implications": "pathway 분석 결과가 시사하는 치료적 함의 3-4문장. 표적 치료제 가능성, 약물 재목적화 후보, 병용 치료 전략 등",
+    "cross_pathway_interactions": "주요 pathway 간의 상호작용과 crosstalk 2-3문장",
+    "interpretation_guide": "Pathway 분석 해석 시 FDR 보정, 유전자 중복 계산, 데이터베이스 특성 등 고려사항 안내"
   }},
   "expression_boxplot": {{
     "title": "유전자 발현 분포 해석",
-    "summary": "1-2문장 요약",
+    "summary": "3-4문장으로 전체적인 발현 분포 특성 요약",
     "key_observations": [
-      "관찰 1",
-      "관찰 2"
+      "종양-정상 간 발현 수준 차이의 정도와 일관성",
+      "발현 분포의 변동성(분산) 차이",
+      "이상치(outlier) 존재 여부와 의미",
+      "전체적인 발현 변화 경향"
     ],
-    "interpretation_guide": "이 플롯을 해석하는 방법 안내"
+    "statistical_significance": "발현 차이의 통계적 유의성과 효과 크기(effect size) 해석 2-3문장",
+    "biological_context": "발현 변화의 생물학적 맥락 - 해당 유전자(들)의 기능과 암에서의 역할 3문장",
+    "interpretation_guide": "Boxplot 해석 시 정규화 방법, 샘플 수, 분포 가정 등 고려사항 안내"
   }}
 }}
 ```
 
-중요:
-1. 한국어로 작성
-2. 각 시각화의 특성에 맞는 구체적인 해석 제공
-3. 생물학적/의학적 의미를 포함
-4. 연구자가 플롯을 이해할 수 있도록 해석 가이드 포함
+중요 지침:
+1. 한국어로 작성하되, 학술적이고 전문적인 문체 사용
+2. 각 시각화에 대해 **구체적인 숫자와 유전자명을 포함**하여 해석
+3. 생물학적/의학적 맥락에서 깊이 있는 해석 제공
+4. 연구자가 실제로 논문에 활용할 수 있는 수준의 상세한 설명
+5. 각 항목은 최소 3문장 이상으로 작성
+6. 임상적 관련성과 치료적 함의를 반드시 포함
 """
 
         try:
-            # Call LLM API (OpenAI or Anthropic) - using runtime imports
-            if use_openai:
-                from openai import OpenAI as OpenAIClient
-                client = OpenAIClient(api_key=openai_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = response.choices[0].message.content
-            else:
-                import anthropic as anthropic_module
-                client = anthropic_module.Anthropic(api_key=anthropic_key)
-                message = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=4000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = message.content[0].text
+            # Call LLM API with RAG context (Claude preferred)
+            cancer_type = self.config.get('cancer_type', 'unknown')
+            hub_gene_names = []
+            if hub_df is not None:
+                for _, row in hub_df.head(10).iterrows():
+                    gene_name = str(row.get('gene_id', row.get('gene_symbol', '')))
+                    if gene_name and not gene_name.startswith('ENSG'):
+                        hub_gene_names.append(gene_name)
+
+            response_text = call_llm_with_rag(
+                prompt=prompt,
+                cancer_type=cancer_type,
+                key_genes=hub_gene_names,
+                max_tokens=8000,  # Increased for detailed AI analysis
+                logger=self.logger
+            )
+
+            if not response_text:
+                self.logger.warning("LLM returned empty response for viz interpretations")
+                return self._generate_fallback_viz_interpretations(data)
 
             # Extract JSON from response
             json_start = response_text.find('{')
@@ -7035,15 +7814,14 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(viz_interpretations, f, ensure_ascii=False, indent=2)
 
-                self.logger.info(f"Visualization interpretations generated via {llm_provider}: {output_path}")
+                self.logger.info(f"Visualization interpretations generated (RAG-based): {output_path}")
                 return viz_interpretations
             else:
-                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
+                self.logger.warning("Could not extract JSON from LLM response")
                 return self._generate_fallback_viz_interpretations(data)
 
         except Exception as e:
-            self.logger.error(f"Error generating visualization interpretations via {llm_provider}: {e}")
-            # Return fallback interpretations when API fails
+            self.logger.error(f"Error generating visualization interpretations: {e}")
             return self._generate_fallback_viz_interpretations(data)
 
     def _generate_fallback_viz_interpretations(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -7383,25 +8161,29 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
 """
 
         try:
-            # Call LLM API - using runtime imports
-            if use_openai:
-                from openai import OpenAI as OpenAIClient
-                client = OpenAIClient(api_key=openai_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    max_tokens=6000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = response.choices[0].message.content
-            else:
-                import anthropic as anthropic_module
-                client = anthropic_module.Anthropic(api_key=anthropic_key)
-                message = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=6000,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response_text = message.content[0].text
+            # Call LLM API with RAG context (Claude preferred)
+            cancer_type = self.config.get('cancer_type', 'unknown')
+
+            # Get key genes for RAG context
+            hub_gene_names = []
+            hub_df = data.get('hub_genes_df')
+            if hub_df is not None:
+                for _, row in hub_df.head(10).iterrows():
+                    gene_name = str(row.get('gene_id', row.get('gene_symbol', '')))
+                    if gene_name and not gene_name.startswith('ENSG'):
+                        hub_gene_names.append(gene_name)
+
+            response_text = call_llm_with_rag(
+                prompt=prompt,
+                cancer_type=cancer_type,
+                key_genes=hub_gene_names,
+                max_tokens=6000,
+                logger=self.logger
+            )
+
+            if not response_text:
+                self.logger.warning("LLM returned empty response for recommendations")
+                return self._generate_fallback_research_recommendations(data)
 
             # Extract JSON from response
             json_start = response_text.find('{')
@@ -7416,14 +8198,14 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 with open(output_path, 'w', encoding='utf-8') as f:
                     json.dump(recommendations, f, ensure_ascii=False, indent=2)
 
-                self.logger.info(f"Research recommendations generated via {llm_provider}: {output_path}")
+                self.logger.info(f"Research recommendations generated (RAG-based): {output_path}")
                 return recommendations
             else:
-                self.logger.warning(f"Could not extract JSON from {llm_provider} response")
+                self.logger.warning("Could not extract JSON from LLM response")
                 return self._generate_fallback_research_recommendations(data)
 
         except Exception as e:
-            self.logger.error(f"Error generating research recommendations via {llm_provider}: {e}")
+            self.logger.error(f"Error generating research recommendations: {e}")
             return self._generate_fallback_research_recommendations(data)
 
     def _query_dgidb_for_recommendations(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -7734,18 +8516,35 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         if cancer_type == 'unknown':
             cancer_type = data.get('cancer_type', 'cancer')
 
-        # Get hub genes
+        # Get hub genes - prefer integrated_gene_table which has proper gene symbols
         hub_genes = []
-        hub_df = data.get('hub_genes_df')
-        if hub_df is not None and len(hub_df) > 0:
-            gene_col = None
-            for col in ['gene_symbol', 'gene_id', 'gene_name']:
-                if col in hub_df.columns:
-                    gene_col = col
-                    break
-            if gene_col:
-                hub_genes = [str(g) for g in hub_df[gene_col].head(10).tolist()
-                            if not str(g).startswith('ENSG')]
+
+        # First try integrated_gene_table (has proper gene symbols)
+        integrated_df = data.get('integrated_gene_table_df')
+        if integrated_df is not None and len(integrated_df) > 0:
+            # Filter for hub genes with proper symbols
+            if 'is_hub' in integrated_df.columns and 'gene_symbol' in integrated_df.columns:
+                hub_subset = integrated_df[integrated_df['is_hub'] == True]
+                if len(hub_subset) > 0:
+                    hub_genes = [str(g) for g in hub_subset['gene_symbol'].head(10).tolist()
+                                if g and not str(g).startswith('ENSG')]
+            # If no is_hub column, just get top genes with proper symbols
+            if not hub_genes and 'gene_symbol' in integrated_df.columns:
+                hub_genes = [str(g) for g in integrated_df['gene_symbol'].head(10).tolist()
+                            if g and not str(g).startswith('ENSG')]
+
+        # Fallback to hub_genes_df
+        if not hub_genes:
+            hub_df = data.get('hub_genes_df')
+            if hub_df is not None and len(hub_df) > 0:
+                gene_col = None
+                for col in ['gene_symbol', 'gene_id', 'gene_name']:
+                    if col in hub_df.columns:
+                        gene_col = col
+                        break
+                if gene_col:
+                    hub_genes = [str(g) for g in hub_df[gene_col].head(10).tolist()
+                                if g and not str(g).startswith('ENSG')]
 
         # Get pathways
         pathways = []
