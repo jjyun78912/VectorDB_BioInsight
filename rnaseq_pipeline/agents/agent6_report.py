@@ -1721,13 +1721,24 @@ class ReportAgent(BaseAgent):
             paragraphs = abstract_text.split('\n\n')
             formatted_abstract = ''.join([f'<p>{p.strip()}</p>' for p in paragraphs if p.strip()])
 
-        # Format key findings as list
+        # Format key findings as list with highlighted numbers
         findings_html = ''
         if key_findings:
-            findings_items = ''.join([f'<li>{f}</li>' for f in key_findings[:10]])
+            import re
+            def highlight_numbers(text):
+                """Highlight numbers and percentages in text."""
+                # Highlight numbers with units (201개, 174개, 86.6% etc)
+                text = re.sub(r'(\d+(?:,\d+)?(?:\.\d+)?)\s*(개|%|점|배)',
+                             r'<strong class="num">\1</strong>\2', text)
+                # Highlight standalone significant numbers
+                text = re.sub(r'(\d+(?:\.\d+)?)\s*(log2FC|AUC|p값|p-value)',
+                             r'<strong class="num">\1</strong> \2', text, flags=re.IGNORECASE)
+                return text
+
+            findings_items = ''.join([f'<li>{highlight_numbers(f)}</li>' for f in key_findings[:10]])
             findings_html = f'''
             <div class="key-findings-box">
-                <h4>📌 핵심 발견</h4>
+                <h4>📌 핵심 발견 <span class="findings-count">{len(key_findings)}건</span></h4>
                 <ul>{findings_items}</ul>
             </div>
             '''
@@ -1789,15 +1800,13 @@ class ReportAgent(BaseAgent):
 
             {title_html}
 
-            <div class="extended-abstract-content">
-                <div class="abstract-main">
-                    <div class="abstract-text">
-                        {formatted_abstract}
-                    </div>
-                </div>
+            <!-- 핵심 발견을 상단에 전체 너비로 배치 -->
+            {findings_html}
 
-                <div class="abstract-sidebar">
-                    {findings_html}
+            <!-- 본문 -->
+            <div class="abstract-main-full">
+                <div class="abstract-text">
+                    {formatted_abstract}
                 </div>
             </div>
 
@@ -1842,78 +1851,163 @@ class ReportAgent(BaseAgent):
                     font-style: italic;
                     margin: 0;
                 }}
-                .extended-abstract-content {{
-                    display: grid;
-                    grid-template-columns: 2fr 1fr;
-                    gap: var(--sp-4);
-                    margin-bottom: var(--sp-4);
-                }}
-                .abstract-main {{
-                    background: white;
-                    padding: var(--sp-4);
-                    border-radius: var(--radius-md);
-                    border: 1px solid var(--border-light);
-                }}
-                .abstract-text {{
-                    font-size: 14px;
-                    line-height: 1.8;
-                    color: var(--text-primary);
-                    text-align: justify;
-                }}
-                .abstract-text p {{
-                    margin-bottom: var(--sp-3);
-                }}
-                .abstract-sidebar {{
-                    display: flex;
-                    flex-direction: column;
-                    gap: var(--sp-3);
-                }}
+                /* 핵심 발견 - 상단 전체 너비 흰색 배너 */
                 .key-findings-box {{
-                    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                    padding: var(--sp-4);
-                    border-radius: var(--radius-md);
-                    border: 1px solid #22c55e;
+                    background: white;
+                    padding: 28px 32px;
+                    border-radius: 12px;
+                    border: none;
+                    margin-bottom: 24px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
                 }}
                 .key-findings-box h4 {{
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #15803d;
-                    margin: 0 0 var(--sp-3) 0;
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #1e293b;
+                    margin: 0 0 20px 0;
+                    padding-bottom: 12px;
+                    border-bottom: 3px solid #10b981;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
                 }}
                 .key-findings-box ul {{
                     margin: 0;
-                    padding-left: var(--sp-4);
+                    padding: 0;
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 12px;
+                    list-style: none;
+                    counter-reset: findings;
                 }}
                 .key-findings-box li {{
-                    font-size: 12px;
-                    line-height: 1.5;
-                    color: var(--text-primary);
-                    margin-bottom: var(--sp-2);
+                    font-size: 14px;
+                    line-height: 1.7;
+                    color: #334155;
+                    padding: 14px 16px 14px 50px;
+                    background: #f8fafc;
+                    border-radius: 8px;
+                    border: 1px solid #e2e8f0;
+                    position: relative;
+                    counter-increment: findings;
+                    transition: all 0.2s ease;
                 }}
+                .key-findings-box li:hover {{
+                    background: #f1f5f9;
+                    border-color: #10b981;
+                    transform: translateX(4px);
+                }}
+                .key-findings-box li::before {{
+                    content: counter(findings);
+                    position: absolute;
+                    left: 14px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 26px;
+                    height: 26px;
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    color: white;
+                    font-size: 12px;
+                    font-weight: 700;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }}
+                .key-findings-box li strong.num {{
+                    color: #059669;
+                    font-weight: 700;
+                    font-size: 15px;
+                }}
+                .key-findings-box .findings-count {{
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: white;
+                    background: #10b981;
+                    padding: 4px 10px;
+                    border-radius: 12px;
+                    margin-left: auto;
+                }}
+                /* 본문 - 전체 너비, 세련된 카드 스타일 */
+                .abstract-main-full {{
+                    background: white;
+                    padding: 28px 32px;
+                    border-radius: 12px;
+                    border: none;
+                    margin-bottom: 20px;
+                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+                }}
+                .abstract-main-full::before {{
+                    content: "📋 연구 요약";
+                    display: block;
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: #1e293b;
+                    margin-bottom: 16px;
+                    padding-bottom: 12px;
+                    border-bottom: 2px solid #3b82f6;
+                }}
+                .abstract-text {{
+                    font-size: 15px;
+                    line-height: 2;
+                    color: #374151;
+                    text-align: justify;
+                    column-count: 2;
+                    column-gap: 40px;
+                    column-rule: 1px solid #e5e7eb;
+                }}
+                .abstract-text p {{
+                    margin-bottom: 16px;
+                    text-indent: 0;
+                }}
+                .abstract-text p:first-letter {{
+                    font-size: 1.5em;
+                    font-weight: 600;
+                    color: #3b82f6;
+                }}
+                /* 해석 섹션 - 2열 카드 */
                 .interpretation-section {{
                     display: grid;
                     grid-template-columns: repeat(2, 1fr);
-                    gap: var(--sp-4);
-                    margin-bottom: var(--sp-4);
+                    gap: 16px;
+                    margin-bottom: 20px;
                 }}
                 .interpretation-box {{
                     background: white;
-                    padding: var(--sp-4);
-                    border-radius: var(--radius-md);
-                    border: 1px solid var(--border-light);
+                    padding: 24px;
+                    border-radius: 12px;
+                    border: none;
+                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+                    position: relative;
+                    overflow: hidden;
+                }}
+                .interpretation-box::before {{
+                    content: "";
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 4px;
+                    height: 100%;
                 }}
                 .interpretation-box.driver {{
-                    border-left: 4px solid #8b5cf6;
-                    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+                    background: white;
+                }}
+                .interpretation-box.driver::before {{
+                    background: linear-gradient(180deg, #8b5cf6 0%, #a78bfa 100%);
                 }}
                 .interpretation-box.literature {{
-                    border-left: 4px solid #f59e0b;
-                    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+                    background: white;
+                }}
+                .interpretation-box.literature::before {{
+                    background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 100%);
                 }}
                 .interpretation-box h4 {{
-                    font-size: 14px;
-                    font-weight: 600;
-                    margin: 0 0 var(--sp-3) 0;
+                    font-size: 16px;
+                    font-weight: 700;
+                    margin: 0 0 16px 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
                 }}
                 .interpretation-box.driver h4 {{
                     color: #7c3aed;
@@ -1922,38 +2016,65 @@ class ReportAgent(BaseAgent):
                     color: #d97706;
                 }}
                 .interpretation-box p {{
-                    font-size: 13px;
-                    line-height: 1.7;
-                    color: var(--text-primary);
+                    font-size: 14px;
+                    line-height: 1.8;
+                    color: #4b5563;
                     margin: 0;
                 }}
+                /* 검증 제안 - 4열 그리드 */
                 .validation-box {{
-                    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-                    padding: var(--sp-4);
-                    border-radius: var(--radius-md);
-                    border: 1px solid #ef4444;
-                    margin-bottom: var(--sp-4);
+                    background: white;
+                    padding: 24px 28px;
+                    border-radius: 12px;
+                    border: none;
+                    margin-bottom: 20px;
+                    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+                    position: relative;
+                    overflow: hidden;
+                }}
+                .validation-box::before {{
+                    content: "";
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 4px;
+                    background: linear-gradient(90deg, #ef4444 0%, #f87171 50%, #fca5a5 100%);
                 }}
                 .validation-box h4 {{
-                    font-size: 14px;
-                    font-weight: 600;
+                    font-size: 16px;
+                    font-weight: 700;
                     color: #dc2626;
-                    margin: 0 0 var(--sp-3) 0;
+                    margin: 0 0 16px 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
                 }}
                 .val-grid {{
                     display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: var(--sp-2);
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 12px;
                 }}
                 .val-item {{
-                    font-size: 12px;
-                    color: var(--text-primary);
-                    padding: var(--sp-2);
-                    background: rgba(255,255,255,0.7);
-                    border-radius: 4px;
+                    font-size: 13px;
+                    color: #374151;
+                    padding: 14px 16px;
+                    background: #fef2f2;
+                    border-radius: 8px;
+                    border: 1px solid #fecaca;
+                    transition: all 0.2s ease;
+                }}
+                .val-item:hover {{
+                    background: #fee2e2;
+                    transform: translateY(-2px);
                 }}
                 .val-item strong {{
+                    display: block;
                     color: #dc2626;
+                    font-size: 12px;
+                    margin-bottom: 6px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
                 }}
                 .abstract-note {{
                     display: flex;
@@ -1969,8 +2090,11 @@ class ReportAgent(BaseAgent):
                     font-size: 16px;
                 }}
                 @media (max-width: 768px) {{
-                    .extended-abstract-content {{
+                    .key-findings-box ul {{
                         grid-template-columns: 1fr;
+                    }}
+                    .abstract-text {{
+                        column-count: 1;
                     }}
                     .interpretation-section {{
                         grid-template-columns: 1fr;
@@ -2624,20 +2748,22 @@ class ReportAgent(BaseAgent):
         <section class="network-section" id="network-analysis">
             <h2>6. 네트워크 분석</h2>
 
-            <div class="figure-grid">
-                <div class="figure-panel network-container">
-                    <div class="figure-header">유전자 공발현 네트워크</div>
-                    <div class="figure-container">
-                        {network_html if network_html else '<p class="no-data">네트워크 시각화를 사용할 수 없음</p>'}
-                    </div>
-                    <div class="figure-caption">DEG 기반 공발현 네트워크. 연결선은 유전자 간 발현 상관관계를 나타냄.</div>
-                    {network_ai_section}
-                </div>
-
-                <div>
-                    {hub_table if hub_table else '<p class="no-data">Hub 유전자가 확인되지 않음</p>'}
-                </div>
+            <!-- 1. Hub 유전자 테이블 먼저 -->
+            <div style="margin-bottom: 32px;">
+                {hub_table if hub_table else '<p class="no-data">Hub 유전자가 확인되지 않음</p>'}
             </div>
+
+            <!-- 2. 네트워크 시각화 -->
+            <div class="figure-panel network-container" style="margin-bottom: 24px;">
+                <div class="figure-header">유전자 공발현 네트워크</div>
+                <div class="figure-container">
+                    {network_html if network_html else '<p class="no-data">네트워크 시각화를 사용할 수 없음</p>'}
+                </div>
+                <div class="figure-caption">DEG 기반 공발현 네트워크. 연결선은 유전자 간 발현 상관관계를 나타냄.</div>
+            </div>
+
+            <!-- 3. AI 분석 마지막 -->
+            {network_ai_section}
         </section>
         '''
 
@@ -6121,117 +6247,188 @@ class ReportAgent(BaseAgent):
                 border-bottom: none;
             }
 
-            /* ========== AI ANALYSIS BOX (DETAILED) ========== */
+            /* ========== AI ANALYSIS BOX (DETAILED) - Spacious & Clean ========== */
             .ai-analysis-box.detailed {
-                background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-                border: 1px solid #0ea5e9;
-                border-radius: 12px;
-                padding: var(--spacing-lg);
-                margin: var(--spacing-lg) 0;
-                box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+                background: white;
+                border: none;
+                border-radius: 16px;
+                padding: 60px 72px;
+                margin: 48px 0;
+                box-shadow: 0 2px 16px rgba(14, 165, 233, 0.08);
+                position: relative;
+            }
+
+            .ai-analysis-box.detailed::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 72px;
+                right: 72px;
+                height: 3px;
+                background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 50%, #7dd3fc 100%);
+                border-radius: 0 0 3px 3px;
             }
 
             .ai-analysis-box.detailed.green-theme {
-                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                border-color: #22c55e;
-                box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
+                box-shadow: 0 2px 16px rgba(34, 197, 94, 0.08);
+            }
+
+            .ai-analysis-box.detailed.green-theme::before {
+                background: linear-gradient(90deg, #22c55e 0%, #4ade80 50%, #86efac 100%);
             }
 
             .ai-analysis-box.detailed.orange-theme {
-                background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-                border-color: #f97316;
-                box-shadow: 0 2px 8px rgba(249, 115, 22, 0.1);
+                box-shadow: 0 2px 16px rgba(249, 115, 22, 0.08);
+            }
+
+            .ai-analysis-box.detailed.orange-theme::before {
+                background: linear-gradient(90deg, #f97316 0%, #fb923c 50%, #fdba74 100%);
             }
 
             .ai-analysis-header {
                 display: flex;
                 align-items: center;
-                gap: 10px;
-                margin-bottom: var(--spacing-md);
-                padding-bottom: var(--spacing-sm);
-                border-bottom: 2px solid rgba(14, 165, 233, 0.2);
+                gap: 14px;
+                margin-bottom: 40px;
+                padding-bottom: 28px;
+                border-bottom: 1px solid #e2e8f0;
             }
 
             .green-theme .ai-analysis-header {
-                border-bottom-color: rgba(34, 197, 94, 0.2);
+                border-bottom-color: #ecfdf5;
             }
 
             .orange-theme .ai-analysis-header {
-                border-bottom-color: rgba(249, 115, 22, 0.2);
+                border-bottom-color: #fff7ed;
             }
 
             .ai-icon {
                 font-size: 24px;
             }
 
+            .green-theme .ai-icon {
+                color: #22c55e;
+            }
+
+            .orange-theme .ai-icon {
+                color: #f97316;
+            }
+
             .ai-title {
-                font-size: 16px;
-                font-weight: 700;
-                color: #0369a1;
+                font-size: 17px;
+                font-weight: 600;
+                color: #334155;
+                letter-spacing: -0.2px;
             }
 
             .green-theme .ai-title {
-                color: #15803d;
+                color: #166534;
             }
 
             .orange-theme .ai-title {
-                color: #c2410c;
+                color: #9a3412;
             }
 
             .ai-analysis-content {
                 display: flex;
                 flex-direction: column;
-                gap: var(--spacing-md);
+                gap: 36px;
             }
 
             .ai-section {
-                background: rgba(255, 255, 255, 0.7);
-                border-radius: 8px;
-                padding: var(--spacing-md);
+                background: transparent;
+                border-radius: 0;
+                padding: 0;
+                border: none;
+                border-bottom: 1px solid #f1f5f9;
+                padding-bottom: 36px;
+            }
+
+            .ai-section:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+
+            .ai-section:hover {
+                background: transparent;
+            }
+
+            .green-theme .ai-section {
+                background: transparent;
+                border-color: #ecfdf5;
+            }
+
+            .green-theme .ai-section:hover {
+                background: transparent;
+            }
+
+            .orange-theme .ai-section {
+                background: transparent;
+                border-color: #fff7ed;
+            }
+
+            .orange-theme .ai-section:hover {
+                background: transparent;
             }
 
             .ai-section h4 {
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: 600;
-                color: var(--gray-800);
-                margin: 0 0 var(--spacing-sm) 0;
+                color: #94a3b8;
+                margin: 0 0 20px 0;
+                padding-top: 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
             }
 
             .ai-section p {
-                font-size: 13px;
-                color: var(--gray-700);
-                line-height: 1.7;
+                font-size: 15px;
+                color: #475569;
+                line-height: 2.2;
                 margin: 0;
+                max-width: 75ch;
+                padding: 4px 0;
             }
 
             .ai-summary-text {
-                font-size: 14px !important;
-                font-weight: 500;
+                font-size: 16px !important;
+                font-weight: 400;
+                color: #334155 !important;
+                line-height: 2.3 !important;
+                padding: 8px 0 !important;
             }
 
             .ai-observations-list {
                 list-style: none;
                 padding: 0;
                 margin: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
             }
 
             .ai-observations-list li {
-                font-size: 13px;
-                color: var(--gray-700);
-                padding: 8px 0 8px 24px;
+                font-size: 15px;
+                color: #334155;
+                padding: 0 0 0 28px;
                 position: relative;
-                border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+                line-height: 1.8;
             }
 
-            .ai-observations-list li:last-child {
-                border-bottom: none;
+            .ai-observations-list li:hover {
+                color: #1e293b;
             }
 
             .ai-observations-list li::before {
-                content: "▸";
+                content: "•";
                 position: absolute;
-                left: 0;
+                left: 8px;
+                top: 0;
                 color: #0ea5e9;
+                font-size: 18px;
                 font-weight: bold;
             }
 
@@ -6244,21 +6441,28 @@ class ReportAgent(BaseAgent):
             }
 
             .ai-section.guide {
-                background: rgba(255, 255, 255, 0.9);
+                background: #f8fafc;
+                border: none;
                 border-left: 3px solid #0ea5e9;
+                padding: 20px 24px;
+                margin-top: 8px;
+                border-radius: 0 8px 8px 0;
             }
 
             .green-theme .ai-section.guide {
+                background: #f0fdf4;
                 border-left-color: #22c55e;
             }
 
             .orange-theme .ai-section.guide {
+                background: #fff7ed;
                 border-left-color: #f97316;
             }
 
             .guide-text {
                 font-style: italic;
-                color: var(--gray-600) !important;
+                color: #64748b !important;
+                font-size: 14px !important;
             }
 
             /* ========== RESPONSIVE ========== */

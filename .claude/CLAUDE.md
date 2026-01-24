@@ -803,21 +803,86 @@ output_dir/
     └── network_3d_interactive.html
 ```
 
-### HTML 리포트 섹션 구조 (v4.0)
+### 통합 리포트 시스템 (v3.0)
 
-| 섹션 | 내용 |
-|------|------|
-| 1. Executive Summary | Extended Abstract, 핵심 발견 요약 |
-| 2. Quality Control | PCA plot, 샘플 품질 분석 |
-| 3. Differential Expression | Volcano plot, Heatmap, DEG 통계 |
-| 4. Pathway Analysis | GO/KEGG enrichment, Pathway barplot |
-| 5. Database Validation | COSMIC/OncoKB 매칭, 문헌 근거 |
-| 6. Network Analysis | Hub genes 테이블 (Gene Symbol), 3D network |
-| 7. ML Prediction | Pan-cancer 예측, SHAP 해석 |
-| **8. Clinical Implications** | 바이오마커 후보, 치료 표적, 약물 재목적화 테이블 |
-| **9. Follow-up Experiments** | 발현 검증, 기능 연구, 임상 검증 프로토콜 |
-| 10. Research Recommendations | 단기/중기/장기 연구 방향 |
-| 11. Methods & References | 분석 파라미터, 참고 문헌 |
+리포트 생성은 통합 시스템(`rnaseq_pipeline/reports/`)을 사용합니다.
+Bulk/Single-cell 모두 동일한 CSS/스타일을 공유하며, 데이터 타입에 따라 섹션이 자동 선택됩니다.
+
+**사용법**:
+```python
+from rnaseq_pipeline.reports import UnifiedReportGenerator, ReportConfig
+
+config = ReportConfig(
+    data_type="bulk",  # or "singlecell"
+    cancer_type="BRCA",
+    language="ko",
+)
+generator = UnifiedReportGenerator(input_dir, output_dir, config)
+report_path = generator.generate()
+```
+
+**기존 Agent 호환 (Adapter)**:
+```python
+from rnaseq_pipeline.reports.adapter import ReportAdapter
+
+adapter = ReportAdapter(input_dir, output_dir)
+result = adapter.generate_bulk_report(cancer_type="BRCA")
+```
+
+### Bulk RNA-seq 리포트 섹션
+
+| # | 섹션 | 내용 |
+|---|------|------|
+| - | Cover | 제목, 날짜, 암종, 요약 통계 |
+| 1 | Summary | DEG 수, Hub genes 수 통계 카드 |
+| 2 | Abstract | LLM 생성 확장 초록 |
+| 3 | QC | PCA plot, 샘플 품질 분석 |
+| 4 | DEG Analysis | Volcano plot, Heatmap, DEG 테이블 |
+| 5 | Pathway | GO/KEGG enrichment, Pathway barplot |
+| 6 | Driver | Known drivers, Candidate regulators |
+| 7 | Network | Hub genes 테이블, 3D interactive network |
+| 8 | Clinical | 치료 표적, 바이오마커 후보 |
+| 9 | Follow-up | 검증 실험 제안 |
+| 10 | Research | 단기/중기/장기 연구 방향 |
+| 11 | Methods | 분석 파라미터 |
+| 12 | References | RAG 문헌 해석 (PMID 인용) |
+| 13 | Appendix | 전체 DEG 테이블 |
+
+### Single-cell RNA-seq 리포트 섹션
+
+| # | 섹션 | 내용 |
+|---|------|------|
+| - | Cover | 제목, 세포 수, 클러스터 수 |
+| 1 | Summary | Cells, Genes, Clusters, Cell Types 카드 |
+| 2 | Abstract | LLM 생성 확장 초록 |
+| 3 | QC | Violin QC metrics |
+| 4 | Cell Type | UMAP, Cell type composition |
+| 5 | Markers | 클러스터별 마커 유전자, Heatmap, Dotplot |
+| 6 | Driver | COSMIC/OncoKB 매칭 driver genes |
+| 7 | Trajectory | Pseudotime 분석 |
+| 8 | TME | 종양 미세환경 구성 |
+| 9 | GRN | 유전자 조절 네트워크, TF-target |
+| 10 | Ploidy | CNV 추론, 악성세포 감별 |
+| 11 | Interaction | Cell-cell interaction |
+| 12 | Clinical | 임상적 시사점 |
+| 13 | Follow-up | 검증 실험 제안 |
+| 14 | Research | 후속 연구 추천 |
+| 15 | Methods | 분석 파라미터 |
+
+### 리포트 파일 구조
+
+```
+rnaseq_pipeline/reports/
+├── __init__.py
+├── base_report.py          # ReportConfig, ReportData, BaseReportGenerator
+├── unified_report.py       # UnifiedReportGenerator (통합 생성기)
+├── adapter.py              # 기존 Agent 호환 어댑터
+└── sections/
+    ├── __init__.py
+    ├── common.py           # 공통 섹션 (Cover, Summary, QC, Driver, Clinical, Methods...)
+    ├── bulk.py             # Bulk 전용 (DEG, Pathway, Network)
+    └── singlecell.py       # Single-cell 전용 (CellType, Marker, TME, GRN, Ploidy...)
+```
 
 ### Daily Briefing 데이터 형식
 
@@ -832,6 +897,70 @@ clinical_trials = {"phase3_results": [...], "new_trials": [...]}
 clinical_trials = [
     {"type": "phase3_completed", "title": "...", "description": "..."}
 ]
+```
+
+---
+
+## 리포트 UI/CSS 가이드라인
+
+### CSS 파일 구조
+
+리포트 스타일은 **외부 CSS 파일**에서 관리됩니다:
+
+```
+rnaseq_pipeline/assets/claude_report_style.css  # 메인 CSS (실제 적용됨)
+rnaseq_pipeline/agents/agent6_report.py         # Fallback CSS (파일 없을 때만)
+```
+
+**중요**: CSS 수정 시 반드시 `claude_report_style.css` 파일을 수정해야 합니다!
+
+### AI 분석 박스 스타일
+
+```css
+.ai-analysis-box.detailed {
+    padding: 28px 32px;      /* 컴팩트한 여백 */
+    margin: 24px 0;
+    border-radius: 12px;
+}
+
+.ai-analysis-header {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+}
+
+.ai-section {
+    padding-bottom: 20px;
+    gap: 20px;
+}
+
+.ai-section p {
+    font-size: 14px;
+    line-height: 1.8;
+}
+```
+
+### 네트워크 섹션 레이아웃 순서
+
+1. **Hub 유전자 테이블** (먼저 표시)
+2. **네트워크 시각화** (그 다음)
+3. **AI 분석** (마지막)
+
+### LLM 모델 선택 (Extended Abstract)
+
+| 용도 | 모델 | 비용 | 품질 |
+|------|------|------|------|
+| Extended Abstract | Claude Opus 4 | ~$0.30/report | 최상 (스토리텔링) |
+| 일반 해석 | Claude Sonnet 4 | ~$0.06/report | 양호 |
+| 빠른 응답 | GPT-4o-mini | ~$0.01/report | 기본 |
+
+```python
+# Opus 사용 예시
+response = call_llm_with_rag(
+    prompt=prompt,
+    cancer_type=cancer_type,
+    max_tokens=8000,
+    use_opus=True  # Extended Abstract에만 사용
+)
 ```
 
 ---
