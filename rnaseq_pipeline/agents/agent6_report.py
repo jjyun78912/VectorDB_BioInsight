@@ -83,7 +83,8 @@ def get_rag_context_for_report(cancer_type: str, key_genes: list = None) -> str:
 
 
 def call_llm_with_rag(prompt: str, cancer_type: str = None, key_genes: list = None,
-                      max_tokens: int = 4000, logger=None) -> Optional[str]:
+                      max_tokens: int = 4000, logger=None,
+                      use_opus: bool = False) -> Optional[str]:
     """Call LLM (Claude preferred) with RAG context for grounded responses.
 
     Args:
@@ -92,6 +93,7 @@ def call_llm_with_rag(prompt: str, cancer_type: str = None, key_genes: list = No
         key_genes: Key genes for RAG context retrieval
         max_tokens: Maximum tokens for response
         logger: Logger instance for logging
+        use_opus: If True, use Claude Opus 4 for highest quality writing (5x cost)
 
     Returns:
         LLM response text or None if failed
@@ -156,8 +158,20 @@ def call_llm_with_rag(prompt: str, cancer_type: str = None, key_genes: list = No
         if use_anthropic:
             import anthropic as anthropic_module
             client = anthropic_module.Anthropic(api_key=anthropic_key)
+
+            # Select model based on use_opus flag
+            if use_opus:
+                model_id = "claude-opus-4-20250514"
+                model_name = "Claude Opus 4"
+            else:
+                model_id = "claude-sonnet-4-20250514"
+                model_name = "Claude Sonnet 4"
+
+            if logger:
+                logger.info(f"Using {model_name} for generation")
+
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=model_id,
                 max_tokens=max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": full_prompt}]
@@ -7431,26 +7445,34 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 3. Driver Gene Analysis 섹션 필수 - Known Driver/Candidate Regulator 구분하여 상위 유전자 명시
 4. Hub 유전자와 Driver 후보를 validation_priorities에 실제 유전자명으로 포함
 5. PMID 인용 형식 사용 (예: PMID 35409110)
-6. abstract_extended는 최소 2500자 이상으로 매우 상세하게 작성 (1페이지 분량, A4 기준)
-7. key_findings는 8개 이상, 각 섹션에서 핵심 발견 포함
-8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 검증 제안, 결론)은 각각 3-5문장 이상으로 상세히 기술
+6. abstract_extended는 최소 3000자 이상으로 매우 상세하게 작성 (A4 1페이지 이상)
+7. key_findings는 10개 이상, 각 섹션에서 핵심 발견 포함
+8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 검증 제안, 결론)은 각각 4-6문장 이상으로 상세히 기술
 
-문체 지침:
+문체 지침 (매우 중요):
+- 학술 논문이면서도 읽는 이를 사로잡는 매력적인 글쓰기를 해주세요
+- 단순한 사실 나열이 아닌, 발견의 의미와 맥락을 이야기처럼 풀어가세요
+- 각 발견이 왜 중요한지, 어떤 새로운 가능성을 열어주는지 설명하세요
+- 데이터 뒤에 숨겨진 생물학적 스토리를 끌어내세요
+- "~입니다", "~했습니다"의 단조로운 반복을 피하고, 문장 구조와 어미를 다양하게 사용하세요
 - 마크다운 특수기호 사용 금지 (**, __, ##, [], () 등)
-- 학술 논문처럼 자연스럽고 격식있는 문체 사용
 - 괄호 안의 영문 병기는 최소화하고 필요시 한글로 풀어 설명
-- 불필요한 강조나 꾸밈 없이 명료하게 기술
+- 독자가 "이 연구를 더 알고 싶다"는 마음이 들도록 흥미를 유발하세요
+- 결론부에서는 이 연구가 환자 치료에 어떤 기여를 할 수 있는지 비전을 제시하세요
 """
 
         try:
-            # Call LLM API with RAG context (Claude preferred)
+            # Call LLM API with RAG context
+            # Use Claude Opus 4 for Extended Abstract (highest quality writing)
             cancer_type = self.config.get('cancer_type', 'unknown')
+            self.logger.info("Using Claude Opus 4 for Extended Abstract generation (premium quality)")
             response_text = call_llm_with_rag(
                 prompt=prompt,
                 cancer_type=cancer_type,
                 key_genes=hub_gene_names[:10],
-                max_tokens=6000,  # Increased for longer 1-page abstract
-                logger=self.logger
+                max_tokens=8000,  # Increased for longer, more eloquent abstract
+                logger=self.logger,
+                use_opus=True  # Use Opus for best writing quality
             )
 
             if not response_text:
