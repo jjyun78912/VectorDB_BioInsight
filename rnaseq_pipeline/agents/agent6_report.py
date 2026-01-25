@@ -531,7 +531,7 @@ class ReportAgent(BaseAgent):
         <section class="rag-summary" id="rag-summary">
             <div class="rag-summary-header">
                 <div class="rag-title-section">
-                    <h2>📚 Literature-Based Gene Interpretation (RAG + LLM)</h2>
+                    <h2>10. 문헌 기반 해석</h2>
                     <p class="rag-subtitle">Vector DB 검색 + Claude API 기반 문헌 해석</p>
                 </div>
                 <div class="rag-stats">
@@ -986,13 +986,60 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="detailed-findings" id="detailed-table">
-            <h2>Detailed Gene Analysis</h2>
+            <h2>전체 DEG 유전자 목록</h2>
+
+            <div class="section-description">
+                <p>DESeq2 분석에서 통계적으로 유의한 발현 변화를 보인 모든 유전자입니다 (padj &lt; 0.05).</p>
+            </div>
+
+            <!-- 점수 체계 설명 -->
+            <div class="score-explanation">
+                <div class="score-header">
+                    <span class="score-icon">📊</span>
+                    <span class="score-title">종합 점수 산정 기준 (총 6.5점)</span>
+                </div>
+                <div class="score-grid">
+                    <div class="score-item">
+                        <span class="score-label">Hub 유전자</span>
+                        <span class="score-value">+2.0</span>
+                        <span class="score-desc">네트워크 중심 유전자</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-label">DB 매칭</span>
+                        <span class="score-value">+2.0</span>
+                        <span class="score-desc">COSMIC/OncoKB 등록</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-label">암종 일치</span>
+                        <span class="score-value">+1.5</span>
+                        <span class="score-desc">해당 암종 연관 기록</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-label">Pathway 연관</span>
+                        <span class="score-value">+0.5</span>
+                        <span class="score-desc">3개 이상 경로 포함</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-label">발현 방향</span>
+                        <span class="score-value">+0.5</span>
+                        <span class="score-desc">문헌과 방향 일치</span>
+                    </div>
+                </div>
+                <div class="confidence-legend">
+                    <span class="legend-title">신뢰도 등급:</span>
+                    <span class="badge high">HIGH</span> DB 매칭 + 5점 이상
+                    <span class="badge medium">MEDIUM</span> DB 매칭 + 3점 이상
+                    <span class="badge novel_candidate">CANDIDATE</span> Hub 유전자 (DB 미등록)
+                    <span class="badge low">LOW</span> 1.5점 이상
+                    <span class="badge requires_validation">REQUIRES VALIDATION</span> 추가 검증 필요
+                </div>
+            </div>
 
             <div class="table-controls">
                 <input type="text" id="gene-search" class="search-input"
                        placeholder="🔍 유전자 검색..." onkeyup="filterTable()">
                 <div class="filter-buttons">
-                    <button class="filter-btn active" onclick="filterByConfidence('all')">All</button>
+                    <button class="filter-btn active" onclick="filterByConfidence('all')">전체</button>
                     <button class="filter-btn" onclick="filterByConfidence('high')">High</button>
                     <button class="filter-btn" onclick="filterByConfidence('medium')">Medium</button>
                     <button class="filter-btn" onclick="filterByConfidence('novel_candidate')">Candidate</button>
@@ -1003,13 +1050,13 @@ class ReportAgent(BaseAgent):
                 <table id="gene-table">
                     <thead>
                         <tr>
-                            <th onclick="sortTable(0)">Gene ↕</th>
+                            <th onclick="sortTable(0)">유전자 ↕</th>
                             <th onclick="sortTable(1)">Log2FC ↕</th>
                             <th onclick="sortTable(2)">P-adj ↕</th>
                             <th onclick="sortTable(3)">Hub ↕</th>
-                            <th onclick="sortTable(4)">DB Match ↕</th>
-                            <th onclick="sortTable(5)">Confidence</th>
-                            <th onclick="sortTable(6)">Score ↕</th>
+                            <th onclick="sortTable(4)">DB 매칭 ↕</th>
+                            <th onclick="sortTable(5)">신뢰도</th>
+                            <th onclick="sortTable(6)">점수 ↕</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1019,7 +1066,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="table-footer">
-                <span>총 {len(integrated):,}개 유전자 표시 (상위 {self.config['max_table_rows']}개)</span>
+                <span>총 {len(integrated):,}개 유전자 (상위 {self.config['max_table_rows']}개 표시)</span>
                 <button class="download-btn" onclick="downloadCSV()">📥 CSV 다운로드</button>
             </div>
         </section>
@@ -1198,7 +1245,7 @@ class ReportAgent(BaseAgent):
         return f'''
         <section class="driver-analysis" id="driver-analysis">
             <div class="driver-header-section">
-                <h2>🎯 Driver 유전자 분석</h2>
+                <h2>5. Driver 유전자 분석</h2>
                 <p class="driver-subtitle">RNA-seq 발현 패턴 + TCGA 돌연변이 데이터 기반 Driver 예측</p>
             </div>
 
@@ -2911,7 +2958,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="clinical-section" id="clinical-implications">
-            <h2>8. 임상적 시사점</h2>
+            <h2>7. 임상적 시사점</h2>
 
             <div class="ai-box orange" style="margin-bottom: 20px;">
                 <div class="ai-box-header">임상적 의미 요약</div>
@@ -2990,219 +3037,6 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
-    def _generate_followup_experiments_html(self, data: Dict) -> str:
-        """Generate Suggested Follow-up Experiments section with detailed protocols."""
-        driver_known = data.get('driver_known', [])
-        driver_novel = data.get('driver_novel', [])
-        hub_df = data.get('hub_genes_df')
-        integrated_df = data.get('integrated_gene_table_df')
-        recommendations = data.get('research_recommendations', {})
-
-        # Build gene_id to symbol mapping
-        id_to_symbol = {}
-        if integrated_df is not None and len(integrated_df) > 0:
-            for _, row in integrated_df.iterrows():
-                gene_id = str(row.get('gene_id', ''))
-                gene_symbol = row.get('gene_symbol', '')
-                if gene_id and gene_symbol and str(gene_symbol) != 'nan':
-                    id_to_symbol[gene_id] = gene_symbol
-
-        # Get top genes to validate (with symbol conversion)
-        top_genes = []
-        if driver_known:
-            for d in driver_known[:3]:
-                gene = str(d.get('gene_symbol', d.get('gene', '')))
-                if gene.isdigit():
-                    gene = id_to_symbol.get(gene, gene)
-                if gene:
-                    top_genes.append(gene)
-        if driver_novel:
-            for d in driver_novel[:3]:
-                gene = str(d.get('gene_symbol', d.get('gene', '')))
-                if gene.isdigit():
-                    gene = id_to_symbol.get(gene, gene)
-                if gene:
-                    top_genes.append(gene)
-        if hub_df is not None and len(hub_df) > 0:
-            for _, row in hub_df.head(3).iterrows():
-                gene_id = str(row.get('gene_id', ''))
-                gene = id_to_symbol.get(gene_id, gene_id)
-                if gene and not gene.isdigit():
-                    top_genes.append(gene)
-
-        top_genes = list(dict.fromkeys(top_genes))[:5]  # Unique, preserve order
-        genes_str = ', '.join(top_genes) if top_genes else '분석된 후보 유전자들'
-
-        # Get experimental validation from research_recommendations
-        exp_validation = recommendations.get('experimental_validation', {})
-        immediate_val = exp_validation.get('immediate_validation', {})
-        functional_studies = exp_validation.get('functional_studies', {})
-        clinical_val = exp_validation.get('clinical_validation', {})
-
-        # qPCR genes
-        qpcr_genes = immediate_val.get('qPCR', {}).get('genes', top_genes[:3])
-        qpcr_genes_str = ', '.join(qpcr_genes) if qpcr_genes else genes_str
-
-        # Western blot genes
-        wb_genes = immediate_val.get('western_blot', {}).get('genes', [])
-        wb_genes_str = ', '.join(wb_genes) if wb_genes else top_genes[0] if top_genes else 'target genes'
-
-        # Knockdown genes
-        kd_info = functional_studies.get('knockdown_knockout', {})
-        kd_genes = kd_info.get('genes', [])
-        kd_method = kd_info.get('method', 'siRNA')
-        kd_readout = kd_info.get('readout', '세포 성장 및 사멸 비율')
-
-        # Overexpression genes
-        oe_info = functional_studies.get('overexpression', {})
-        oe_genes = oe_info.get('genes', [])
-        oe_method = oe_info.get('method', 'plasmid')
-        oe_readout = oe_info.get('readout', '세포 성장 변화')
-
-        return f'''
-        <section class="followup-section" id="followup-experiments">
-            <h2>9. Suggested Follow-up Experiments</h2>
-
-            <div class="ai-box green" style="margin-bottom: 20px;">
-                <div class="ai-box-header">실험 검증 전략 요약</div>
-                <div class="ai-box-content">
-                    <p>본 분석에서 식별된 <strong>{genes_str}</strong>에 대해 아래와 같은 단계적 검증 실험을 권장합니다.
-                    발현 수준 검증 → 기능 연구 → 임상 검증 순서로 진행하는 것이 효율적입니다.</p>
-                </div>
-            </div>
-
-            <div class="table-wrapper">
-                <div class="table-header">
-                    <span class="table-title">9.1 발현 수준 검증 (Expression Validation)</span>
-                </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Method</th>
-                            <th>Target Genes</th>
-                            <th>Purpose</th>
-                            <th>Sample Type</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>qRT-PCR</strong></td>
-                            <td class="cell-gene">{qpcr_genes_str}</td>
-                            <td>mRNA 발현 수준 정량적 검증</td>
-                            <td>세포주, 종양 조직</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Western Blot</strong></td>
-                            <td class="cell-gene">{wb_genes_str}</td>
-                            <td>단백질 발현 수준 확인</td>
-                            <td>세포 용해물</td>
-                        </tr>
-                        <tr>
-                            <td><strong>IHC</strong></td>
-                            <td class="cell-gene">{top_genes[0] if top_genes else 'target genes'}</td>
-                            <td>조직 내 발현 위치 및 패턴 확인</td>
-                            <td>FFPE 조직</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="table-wrapper" style="margin-top: 24px;">
-                <div class="table-header">
-                    <span class="table-title">9.2 기능 연구 (Functional Studies)</span>
-                </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Experiment</th>
-                            <th>Target Genes</th>
-                            <th>Method</th>
-                            <th>Readout</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>Knockdown</strong></td>
-                            <td class="cell-gene">{', '.join(kd_genes) if kd_genes else top_genes[0] if top_genes else 'target gene'}</td>
-                            <td>{kd_method}</td>
-                            <td>{kd_readout}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Overexpression</strong></td>
-                            <td class="cell-gene">{', '.join(oe_genes) if oe_genes else (top_genes[1] if len(top_genes) > 1 else 'target gene')}</td>
-                            <td>{oe_method}</td>
-                            <td>{oe_readout}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>CRISPR-Cas9 KO</strong></td>
-                            <td class="cell-gene">{top_genes[0] if top_genes else 'target gene'}</td>
-                            <td>sgRNA guide design</td>
-                            <td>Complete loss-of-function 표현형</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Proliferation Assay</strong></td>
-                            <td class="cell-gene">KD/OE cells</td>
-                            <td>MTT/CCK-8 assay</td>
-                            <td>세포 생존율 및 증식 속도</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Migration/Invasion</strong></td>
-                            <td class="cell-gene">KD/OE cells</td>
-                            <td>Transwell assay</td>
-                            <td>세포 이동 및 침윤 능력</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="table-wrapper" style="margin-top: 24px;">
-                <div class="table-header">
-                    <span class="table-title">9.3 임상 검증 및 In Vivo 연구</span>
-                </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Study Type</th>
-                            <th>Description</th>
-                            <th>Expected Outcome</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>Xenograft Model</strong></td>
-                            <td>KD/OE 세포를 이용한 마우스 이종이식 모델</td>
-                            <td>종양 성장 속도 및 크기 변화</td>
-                        </tr>
-                        <tr>
-                            <td><strong>PDX Model</strong></td>
-                            <td>환자 유래 이종이식 모델에서 타겟 유전자 발현 분석</td>
-                            <td>임상 관련성 검증</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Clinical Cohort</strong></td>
-                            <td>독립적 환자 코호트에서 발현-예후 연관성 분석</td>
-                            <td>바이오마커 가치 검증</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Liquid Biopsy</strong></td>
-                            <td>ctDNA/cfRNA에서 타겟 유전자 검출</td>
-                            <td>비침습적 모니터링 가능성</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="ai-box" style="margin-top: 24px;">
-                <div class="ai-box-header">우선순위 권장사항</div>
-                <div class="ai-box-content">
-                    <p><strong>1순위:</strong> <span class="cell-gene">{qpcr_genes_str}</span>에 대한 qRT-PCR 발현 검증</p>
-                    <p><strong>2순위:</strong> 발현 검증된 유전자에 대한 siRNA knockdown 기능 연구</p>
-                    <p><strong>3순위:</strong> 양성 결과 시 CRISPR-Cas9 knockout 및 in vivo 검증</p>
-                </div>
-            </div>
-        </section>
-        '''
-
     def _generate_recommended_papers_html(self, data: Dict) -> str:
         """Generate Recommended Papers section based on PubMed search."""
         papers_data = data.get('recommended_papers', {})
@@ -3210,7 +3044,7 @@ class ReportAgent(BaseAgent):
         if not papers_data or not papers_data.get('papers'):
             return '''
             <section class="recommended-papers-section" id="recommended-papers">
-                <h2>9.6 추천 논문 (Recommended Papers)</h2>
+                <h2>8.4 추천 논문</h2>
                 <p class="no-data">PubMed 검색을 통한 추천 논문이 없습니다.</p>
             </section>
             '''
@@ -3258,7 +3092,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <section class="recommended-papers-section" id="recommended-papers">
-            <h2>9.6 추천 논문 (Recommended Papers)</h2>
+            <h2>8.4 추천 논문</h2>
 
             <div class="papers-intro">
                 <p>아래 논문들은 <strong>{cancer_type}</strong> 및 분석에서 도출된 주요 유전자
@@ -3395,7 +3229,7 @@ class ReportAgent(BaseAgent):
         if not recommendations:
             return '''
             <section class="research-recommendations-section" id="research-recommendations">
-                <h2>9.5 후속 연구 추천 (Research Recommendations)</h2>
+                <h2>8. 후속 연구 제안</h2>
                 <p class="no-data">연구 추천 데이터가 없습니다. LLM API를 통해 생성됩니다.</p>
             </section>
             '''
@@ -3425,15 +3259,12 @@ class ReportAgent(BaseAgent):
         # Build HTML for future research directions
         future_html = self._build_future_research_html(future)
 
-        # Build HTML for collaboration and funding
-        collab_funding_html = self._build_collab_funding_html(collaboration, funding)
-
         # Build HTML for cautions
         cautions_html = self._build_cautions_html(cautions)
 
         return f'''
         <section class="research-recommendations-section" id="research-recommendations">
-            <h2>9.5 후속 연구 추천 (Research Recommendations)</h2>
+            <h2>8. 후속 연구 제안</h2>
 
             <div class="rec-intro">
                 <p>본 섹션은 RNA-seq 분석 결과를 바탕으로 AI가 생성한 후속 연구 추천입니다.
@@ -3445,7 +3276,6 @@ class ReportAgent(BaseAgent):
             {experimental_html}
             {biomarker_html}
             {future_html}
-            {collab_funding_html}
             {cautions_html}
         </section>
         '''
@@ -3712,47 +3542,6 @@ class ReportAgent(BaseAgent):
         </div>
         '''
 
-    def _build_collab_funding_html(self, collaboration: Dict, funding: Dict) -> str:
-        """Build HTML for collaboration and funding section."""
-        collab_desc = collaboration.get('description', '') if collaboration else ''
-        expertise = collaboration.get('expertise_needed', []) if collaboration else []
-        partnerships = collaboration.get('potential_partnerships', []) if collaboration else []
-
-        funding_desc = funding.get('description', '') if funding else ''
-        grant_types = funding.get('suitable_grant_types', []) if funding else []
-        selling_points = funding.get('key_selling_points', []) if funding else []
-
-        expertise_list = ''.join([f'<li>{e}</li>' for e in expertise]) or '<li>데이터 없음</li>'
-        partnerships_list = ''.join([f'<li>{p}</li>' for p in partnerships]) or '<li>데이터 없음</li>'
-        grants_list = ''.join([f'<li>{g}</li>' for g in grant_types]) or '<li>데이터 없음</li>'
-        selling_list = ''.join([f'<li>{s}</li>' for s in selling_points]) or '<li>데이터 없음</li>'
-
-        return f'''
-        <div class="rec-subsection">
-            <h3>🤝 협력 및 연구비 (Collaboration & Funding)</h3>
-
-            <div class="collab-grid">
-                <div class="collab-panel">
-                    <h4>협력 연구 제안</h4>
-                    <p>{collab_desc}</p>
-                    <h5>필요 전문성</h5>
-                    <ul>{expertise_list}</ul>
-                    <h5>잠재적 협력 파트너</h5>
-                    <ul>{partnerships_list}</ul>
-                </div>
-
-                <div class="collab-panel">
-                    <h4>연구비 지원 기회</h4>
-                    <p>{funding_desc}</p>
-                    <h5>적합한 연구비 유형</h5>
-                    <ul>{grants_list}</ul>
-                    <h5>연구의 강점</h5>
-                    <ul>{selling_list}</ul>
-                </div>
-            </div>
-        </div>
-        '''
-
     def _build_cautions_html(self, cautions: Dict) -> str:
         """Build HTML for cautions and limitations section."""
         if not cautions:
@@ -3793,7 +3582,7 @@ class ReportAgent(BaseAgent):
         """Generate Level 4: Methods & Appendix."""
         return '''
         <section class="methods-section" id="methods">
-            <h2>10. 분석 방법 및 파라미터</h2>
+            <h2>9. 분석 방법</h2>
 
             <div class="methods-grid">
                 <div class="method-card">
@@ -7073,11 +6862,11 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             <span class="nav-brand">BioInsight 보고서</span>
             <div class="nav-links">
                 <a href="#study-overview">개요</a>
-                <a href="#qc-section">QC</a>
+                <a href="#qc">QC</a>
                 <a href="#deg-analysis">DEG</a>
-                <a href="#pathway-section">경로</a>
+                <a href="#pathway-analysis">경로</a>
                 <a href="#driver-analysis">Driver</a>
-                <a href="#network-section">네트워크</a>
+                <a href="#network-analysis">네트워크</a>
                 <a href="#clinical-implications">임상</a>
                 <a href="#research-recommendations">연구</a>
                 <a href="#methods">방법</a>
@@ -7107,27 +6896,24 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
         <!-- 6. Network Analysis -->
         {self._generate_network_section_html(data)}
 
-        <!-- 8. Clinical Implications -->
+        <!-- 7. Clinical Implications -->
         {self._generate_clinical_implications_html(data)}
 
-        <!-- 9. Suggested Follow-up Experiments -->
-        {self._generate_followup_experiments_html(data)}
-
-        <!-- 9.5 Research Recommendations -->
+        <!-- 8. Research Recommendations (통합) -->
         {self._generate_research_recommendations_html(data)}
 
-        <!-- 9.6 Recommended Papers -->
+        <!-- 8.4 Recommended Papers (내부 통합) -->
         {self._generate_recommended_papers_html(data)}
 
-        <!-- 10. Methods Summary -->
+        <!-- 9. Methods Summary -->
         {self._generate_methods_html() if self.config["include_methods"] else ""}
 
-        <!-- 11. References (Literature via RAG) -->
+        <!-- 10. Literature-Based Interpretation (RAG) -->
         {self._generate_rag_summary_html(data)}
 
         <!-- 12. Appendix / Supplementary Data -->
         <section class="data-section" id="detailed-table">
-            <h2>12. 부록: 보충 데이터</h2>
+            <h2>11. 부록</h2>
             {self._generate_detailed_table_html(data)}
         </section>
     </main>
