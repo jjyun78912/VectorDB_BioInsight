@@ -3038,7 +3038,7 @@ class ReportAgent(BaseAgent):
         '''
 
     def _generate_recommended_papers_html(self, data: Dict) -> str:
-        """Generate Recommended Papers section based on PubMed search."""
+        """Generate Recommended Papers section with Classic/Breakthrough classification."""
         papers_data = data.get('recommended_papers', {})
 
         if not papers_data or not papers_data.get('papers'):
@@ -3053,9 +3053,13 @@ class ReportAgent(BaseAgent):
         cancer_type = papers_data.get('cancer_type', 'cancer')
         search_genes = papers_data.get('search_genes', [])
 
-        # Build paper cards
-        paper_cards = ''
-        for i, paper in enumerate(papers[:5], 1):
+        # Check for enhanced format (classic_papers, breakthrough_papers)
+        classic_papers = papers_data.get('classic_papers', [])
+        breakthrough_papers = papers_data.get('breakthrough_papers', [])
+        has_enhanced = bool(classic_papers or breakthrough_papers)
+
+        def build_paper_card(paper: Dict, idx: int, paper_type: str = "") -> str:
+            """Build HTML for a single paper card."""
             title = paper.get('title', 'No title')
             authors = paper.get('authors', 'Unknown')
             journal = paper.get('journal', '')
@@ -3068,10 +3072,38 @@ class ReportAgent(BaseAgent):
             doi = paper.get('doi', '')
             relevance = paper.get('relevance_reason', '')
 
-            paper_cards += f'''
-            <div class="paper-card">
-                <div class="paper-number">{i}</div>
+            # Citation info (for enhanced papers)
+            citation_count = paper.get('citation_count', 0)
+            citation_velocity = paper.get('citation_velocity', 0)
+            quality_score = paper.get('quality_score', 0)
+
+            # Determine paper type badge
+            p_type = paper.get('paper_type', paper_type)
+            if 'classic' in p_type:
+                type_badge = '<span class="paper-type-badge classic">📚 Classic Study</span>'
+                type_class = "classic"
+            elif 'breakthrough' in p_type:
+                type_badge = '<span class="paper-type-badge breakthrough">🚀 Emerging Research</span>'
+                type_class = "breakthrough"
+            else:
+                type_badge = ''
+                type_class = ""
+
+            # Citation metrics display
+            citation_html = ''
+            if citation_count > 0 or citation_velocity > 0:
+                citation_html = f'''
+                <div class="citation-metrics">
+                    <span class="citation-count" title="Total citations">📊 인용: {citation_count:,}회</span>
+                    {f'<span class="citation-velocity" title="Citations per year">({citation_velocity:.1f}회/년)</span>' if citation_velocity > 0 else ''}
+                </div>
+                '''
+
+            return f'''
+            <div class="paper-card {type_class}">
+                <div class="paper-number">{idx}</div>
                 <div class="paper-content">
+                    {type_badge}
                     <h4 class="paper-title">
                         <a href="{pubmed_url}" target="_blank" rel="noopener">{title}</a>
                     </h4>
@@ -3080,6 +3112,7 @@ class ReportAgent(BaseAgent):
                         <span class="journal">{journal}</span>
                         <span class="year">({year})</span>
                     </p>
+                    {citation_html}
                     <p class="paper-abstract">{abstract}</p>
                     <div class="paper-footer">
                         <span class="relevance-tag">{relevance}</span>
@@ -3090,23 +3123,70 @@ class ReportAgent(BaseAgent):
             </div>
             '''
 
+        # Build paper cards
+        if has_enhanced:
+            # Build separate sections for classic and breakthrough
+            classic_cards = ''
+            for i, paper in enumerate(classic_papers[:3], 1):
+                classic_cards += build_paper_card(paper, i, "classic")
+
+            breakthrough_cards = ''
+            for i, paper in enumerate(breakthrough_papers[:3], 1):
+                breakthrough_cards += build_paper_card(paper, i, "breakthrough")
+
+            paper_sections = f'''
+            <div class="paper-category">
+                <h3 class="category-title">📚 필수 참고 논문 (Classic Studies)</h3>
+                <p class="category-desc">해당 분야의 기초가 되는 고인용 논문들입니다.</p>
+                <div class="paper-list">
+                    {classic_cards if classic_cards else '<p class="no-papers">해당 조건을 만족하는 논문이 없습니다.</p>'}
+                </div>
+            </div>
+
+            <div class="paper-category">
+                <h3 class="category-title">🚀 최신 주목 논문 (Emerging Research)</h3>
+                <p class="category-desc">빠르게 인용되고 있는 최근 연구들입니다.</p>
+                <div class="paper-list">
+                    {breakthrough_cards if breakthrough_cards else '<p class="no-papers">해당 조건을 만족하는 논문이 없습니다.</p>'}
+                </div>
+            </div>
+            '''
+        else:
+            # Legacy format - single list
+            paper_cards = ''
+            for i, paper in enumerate(papers[:6], 1):
+                paper_cards += build_paper_card(paper, i)
+            paper_sections = f'<div class="paper-list">{paper_cards}</div>'
+
+        # Stats summary for enhanced format
+        stats_html = ''
+        if has_enhanced:
+            classic_count = papers_data.get('classic_count', len(classic_papers))
+            breakthrough_count = papers_data.get('breakthrough_count', len(breakthrough_papers))
+            stats_html = f'''
+            <div class="papers-stats">
+                <span class="stat-item"><span class="stat-icon">📚</span> Classic: {classic_count}편</span>
+                <span class="stat-item"><span class="stat-icon">🚀</span> Emerging: {breakthrough_count}편</span>
+            </div>
+            '''
+
         return f'''
         <section class="recommended-papers-section" id="recommended-papers">
             <h2>8.4 추천 논문</h2>
 
             <div class="papers-intro">
                 <p>아래 논문들은 <strong>{cancer_type}</strong> 및 분석에서 도출된 주요 유전자
-                ({', '.join(search_genes[:5])})를 기반으로 PubMed에서 실시간 검색된 결과입니다.
-                최근 5년 내 출판된 관련성 높은 연구들을 우선적으로 선정하였습니다.</p>
+                ({', '.join(search_genes[:5])})를 기반으로 PubMed/Semantic Scholar에서 검색 및 평가된 결과입니다.
+                인용 지표와 학술적 영향력을 기준으로 선정되었습니다.</p>
+                {stats_html}
             </div>
 
-            <div class="paper-list">
-                {paper_cards}
-            </div>
+            {paper_sections}
 
             <div class="papers-disclaimer">
-                <p><strong>참고:</strong> 추천 논문은 자동화된 검색 알고리즘에 의해 선정되었으며,
-                연구자의 판단에 따라 추가적인 문헌 검토가 필요할 수 있습니다.</p>
+                <p><strong>참고:</strong> 논문 분류는 인용수와 출판연도를 기반으로 자동 산정되었습니다.
+                Classic Study는 3년 이상 경과 및 100회 이상 인용된 논문,
+                Emerging Research는 2년 이내 출판되어 빠르게 인용되는 논문입니다.</p>
             </div>
         </section>
 
@@ -3124,10 +3204,43 @@ class ReportAgent(BaseAgent):
             border-left: 4px solid #2196F3;
             border-radius: 4px;
         }}
+        .papers-stats {{
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 0.75rem;
+            font-size: 0.9rem;
+        }}
+        .stat-item {{
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }}
+        .paper-category {{
+            margin-bottom: 2rem;
+        }}
+        .category-title {{
+            font-size: 1.1rem;
+            color: #333;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e0e0e0;
+        }}
+        .category-desc {{
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }}
         .paper-list {{
             display: flex;
             flex-direction: column;
             gap: 1rem;
+        }}
+        .no-papers {{
+            color: #888;
+            font-style: italic;
+            padding: 1rem;
+            background: #f5f5f5;
+            border-radius: 4px;
         }}
         .paper-card {{
             display: flex;
@@ -3137,8 +3250,30 @@ class ReportAgent(BaseAgent):
             padding: 1rem;
             transition: box-shadow 0.2s;
         }}
+        .paper-card.classic {{
+            border-left: 4px solid #9c27b0;
+        }}
+        .paper-card.breakthrough {{
+            border-left: 4px solid #ff9800;
+        }}
         .paper-card:hover {{
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }}
+        .paper-type-badge {{
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }}
+        .paper-type-badge.classic {{
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }}
+        .paper-type-badge.breakthrough {{
+            background: #fff3e0;
+            color: #e65100;
         }}
         .paper-number {{
             flex-shrink: 0;
@@ -3184,6 +3319,23 @@ class ReportAgent(BaseAgent):
         .paper-meta .year {{
             color: #888;
             margin-left: 0.25rem;
+        }}
+        .citation-metrics {{
+            display: flex;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: #555;
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0.5rem;
+            background: #f5f5f5;
+            border-radius: 4px;
+            width: fit-content;
+        }}
+        .citation-count {{
+            font-weight: 500;
+        }}
+        .citation-velocity {{
+            color: #888;
         }}
         .paper-abstract {{
             font-size: 0.9rem;
@@ -8507,21 +8659,25 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         return candidates
 
     def _fetch_paper_recommendations(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Fetch paper recommendations from PubMed based on analysis results.
+        """Fetch paper recommendations with citation-based quality filtering.
 
-        Searches PubMed in real-time for papers related to:
-        - Cancer type
-        - Top hub genes
-        - Key pathways
+        Searches PubMed and enriches with Semantic Scholar citation data to provide:
+        - Classic papers: High-citation foundational studies (100+ citations, 3+ years)
+        - Breakthrough papers: Recent rapidly-cited research (1-2 years, high velocity)
 
         Returns:
-            Dictionary containing recommended papers and metadata
+            Dictionary containing recommended papers organized by type
         """
         try:
-            from ..rag.paper_recommender import recommend_papers_sync
+            from ..rag.paper_recommender import recommend_papers_enhanced_sync, recommend_papers_sync
+            use_enhanced = True
         except ImportError:
-            self.logger.warning("Paper recommender module not available")
-            return None
+            try:
+                from ..rag.paper_recommender import recommend_papers_sync
+                use_enhanced = False
+            except ImportError:
+                self.logger.warning("Paper recommender module not available")
+                return None
 
         # Get cancer type
         cancer_type = self.config.get('cancer_type', 'unknown')
@@ -8577,29 +8733,50 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
         self.logger.info(f"Fetching papers for cancer_type={cancer_type}, genes={hub_genes[:5]}")
 
         try:
-            # Use synchronous wrapper
             run_dir = self.input_dir.parent if self.input_dir.name == 'accumulated' else self.input_dir
-            papers = recommend_papers_sync(
-                cancer_type=cancer_type,
-                hub_genes=hub_genes,
-                pathways=pathways,
-                output_dir=run_dir,
-                max_papers=5
-            )
 
-            if papers:
-                result = {
-                    "cancer_type": cancer_type,
-                    "search_genes": hub_genes[:5],
-                    "search_pathways": pathways[:3] if pathways else [],
-                    "paper_count": len(papers),
-                    "papers": papers
-                }
-                self.logger.info(f"Retrieved {len(papers)} paper recommendations")
-                return result
+            if use_enhanced:
+                # Use enhanced version with citation-based quality filtering
+                self.logger.info("Using enhanced paper recommendations with citation filtering")
+                result = recommend_papers_enhanced_sync(
+                    cancer_type=cancer_type,
+                    hub_genes=hub_genes,
+                    pathways=pathways,
+                    output_dir=run_dir,
+                    max_papers=6,
+                    quality_filter=True,
+                    balance_classic_breakthrough=True
+                )
+
+                if result and result.get('papers'):
+                    classic_count = result.get('classic_count', 0)
+                    breakthrough_count = result.get('breakthrough_count', 0)
+                    self.logger.info(f"Retrieved {result.get('paper_count', 0)} papers "
+                                   f"(Classic: {classic_count}, Breakthrough: {breakthrough_count})")
+                    return result
             else:
-                self.logger.warning("No papers found from PubMed search")
-                return None
+                # Fallback to basic version
+                papers = recommend_papers_sync(
+                    cancer_type=cancer_type,
+                    hub_genes=hub_genes,
+                    pathways=pathways,
+                    output_dir=run_dir,
+                    max_papers=5
+                )
+
+                if papers:
+                    result = {
+                        "cancer_type": cancer_type,
+                        "search_genes": hub_genes[:5],
+                        "search_pathways": pathways[:3] if pathways else [],
+                        "paper_count": len(papers),
+                        "papers": papers
+                    }
+                    self.logger.info(f"Retrieved {len(papers)} paper recommendations (basic mode)")
+                    return result
+
+            self.logger.warning("No papers found from search")
+            return None
 
         except Exception as e:
             self.logger.error(f"Error fetching paper recommendations: {e}")
