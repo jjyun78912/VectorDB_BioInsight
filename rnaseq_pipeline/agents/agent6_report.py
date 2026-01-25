@@ -1830,6 +1830,47 @@ class ReportAgent(BaseAgent):
                 </div>
                 '''
 
+        # Recommended papers section
+        papers_html = ''
+        recommended_papers = data.get('recommended_papers', {})
+        if recommended_papers and recommended_papers.get('paper_count', 0) > 0:
+            classic_papers = recommended_papers.get('classic_papers', [])
+            breakthrough_papers = recommended_papers.get('breakthrough_papers', [])
+
+            classic_items = []
+            for p in classic_papers[:3]:
+                title = p.get('title', '')[:80]
+                pmid = p.get('pmid', '')
+                citations = p.get('citation_count', 0)
+                year = p.get('year', '')
+                pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+                classic_items.append(f'<li><a href="{pubmed_url}" target="_blank">{title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
+
+            breakthrough_items = []
+            for p in breakthrough_papers[:3]:
+                title = p.get('title', '')[:80]
+                pmid = p.get('pmid', '')
+                citations = p.get('citation_count', 0)
+                year = p.get('year', '')
+                pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+                breakthrough_items.append(f'<li><a href="{pubmed_url}" target="_blank">{title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
+
+            papers_html = f'''
+            <div class="papers-box">
+                <h4>📄 추천 논문</h4>
+                <div class="papers-grid">
+                    <div class="paper-category classic">
+                        <h5>📚 교과서적 연구 (Classic)</h5>
+                        <ul>{''.join(classic_items) if classic_items else '<li>없음</li>'}</ul>
+                    </div>
+                    <div class="paper-category emerging">
+                        <h5>🚀 최신 주목 연구 (Emerging)</h5>
+                        <ul>{''.join(breakthrough_items) if breakthrough_items else '<li>없음</li>'}</ul>
+                    </div>
+                </div>
+            </div>
+            '''
+
         # Title section
         title_html = ''
         if title:
@@ -1863,6 +1904,8 @@ class ReportAgent(BaseAgent):
             </div>
 
             {validation_html}
+
+            {papers_html}
 
             <div class="abstract-note">
                 <span class="note-icon">ℹ️</span>
@@ -2122,6 +2165,89 @@ class ReportAgent(BaseAgent):
                     margin-bottom: 6px;
                     text-transform: uppercase;
                     letter-spacing: 0.5px;
+                }}
+                /* 추천 논문 박스 */
+                .papers-box {{
+                    background: white;
+                    padding: 24px 28px;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+                    margin-top: 20px;
+                    position: relative;
+                    overflow: hidden;
+                }}
+                .papers-box::before {{
+                    content: "";
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 4px;
+                    background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #93c5fd 100%);
+                }}
+                .papers-box h4 {{
+                    font-size: 16px;
+                    font-weight: 700;
+                    color: #1d4ed8;
+                    margin: 0 0 16px 0;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }}
+                .papers-grid {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 20px;
+                }}
+                .paper-category {{
+                    padding: 16px;
+                    border-radius: 8px;
+                }}
+                .paper-category.classic {{
+                    background: #fef3c7;
+                    border: 1px solid #fcd34d;
+                }}
+                .paper-category.emerging {{
+                    background: #dbeafe;
+                    border: 1px solid #93c5fd;
+                }}
+                .paper-category h5 {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                }}
+                .paper-category.classic h5 {{
+                    color: #b45309;
+                }}
+                .paper-category.emerging h5 {{
+                    color: #1d4ed8;
+                }}
+                .paper-category ul {{
+                    list-style: none;
+                    padding: 0;
+                    margin: 0;
+                }}
+                .paper-category li {{
+                    font-size: 13px;
+                    padding: 8px 0;
+                    border-bottom: 1px solid rgba(0,0,0,0.1);
+                }}
+                .paper-category li:last-child {{
+                    border-bottom: none;
+                }}
+                .paper-category a {{
+                    color: #374151;
+                    text-decoration: none;
+                }}
+                .paper-category a:hover {{
+                    color: #1d4ed8;
+                    text-decoration: underline;
+                }}
+                .paper-meta {{
+                    display: block;
+                    font-size: 11px;
+                    color: #6b7280;
+                    margin-top: 4px;
                 }}
                 .abstract-note {{
                     display: flex;
@@ -7014,14 +7140,17 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
             <span class="nav-brand">BioInsight 보고서</span>
             <div class="nav-links">
                 <a href="#study-overview">개요</a>
+                <a href="#brief-abstract">요약</a>
                 <a href="#qc">QC</a>
                 <a href="#deg-analysis">DEG</a>
                 <a href="#pathway-analysis">경로</a>
                 <a href="#driver-analysis">Driver</a>
                 <a href="#network-analysis">네트워크</a>
                 <a href="#clinical-implications">임상</a>
+                <a href="#recommended-papers">논문</a>
                 <a href="#research-recommendations">연구</a>
                 <a href="#methods">방법</a>
+                <a href="#detailed-table">부록</a>
             </div>
         </div>
     </nav>
@@ -7496,6 +7625,43 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 - Figure 종류: {', '.join(figure_types[:6])}
 """
 
+        # Paper recommendations info
+        papers_info = ""
+        recommended_papers = data.get('recommended_papers', {})
+        if recommended_papers:
+            classic_papers = recommended_papers.get('classic_papers', [])
+            breakthrough_papers = recommended_papers.get('breakthrough_papers', [])
+
+            classic_summary = []
+            for p in classic_papers[:3]:
+                title = p.get('title', '')[:80]
+                citations = p.get('citation_count', 0)
+                year = p.get('year', '')
+                pmid = p.get('pmid', '')
+                classic_summary.append(f"- {title}... ({year}, 인용 {citations}회, PMID: {pmid})")
+
+            breakthrough_summary = []
+            for p in breakthrough_papers[:3]:
+                title = p.get('title', '')[:80]
+                citations = p.get('citation_count', 0)
+                year = p.get('year', '')
+                pmid = p.get('pmid', '')
+                velocity = p.get('citation_velocity', 0)
+                breakthrough_summary.append(f"- {title}... ({year}, 인용 {citations}회, 연간 {velocity:.1f}회, PMID: {pmid})")
+
+            papers_info = f"""
+## 추천 논문 (참고 문헌)
+총 {recommended_papers.get('paper_count', 0)}편의 논문이 분석 결과와 관련하여 추천되었습니다.
+
+### 교과서적 논문 (Classic Studies) - {len(classic_papers)}편
+해당 분야의 기반이 되는 필수 논문들 (100회 이상 인용):
+{chr(10).join(classic_summary) if classic_summary else '없음'}
+
+### 최신 주목 논문 (Emerging Research) - {len(breakthrough_papers)}편
+빠르게 인용되고 있는 최근 연구:
+{chr(10).join(breakthrough_summary) if breakthrough_summary else '없음'}
+"""
+
         # Study info from config
         study_name = self.config.get('report_title', self.config.get('study_name', 'RNA-seq Analysis'))
         cancer_type = self.config.get('cancer_type', 'cancer')
@@ -7539,6 +7705,8 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 
 {figures_info}
 
+{papers_info}
+
 ## 요청 사항
 위 분석 결과를 종합하여 학술 논문 수준의 Extended Abstract를 JSON 형식으로 작성해주세요.
 
@@ -7548,14 +7716,15 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 3. 결과 (Results) - DEG 수, Hub 유전자, 주요 Pathway, Driver 후보 등 핵심 수치 포함
 4. Driver Gene Analysis - Known Driver와 Candidate Regulator 후보 구분하여 설명
 5. 문헌 기반 해석 - RAG 분석 결과 요약
-6. 검증 제안 - 실험적 검증 방법 제안
-7. 결론 (Conclusions) - 연구의 의의와 향후 방향
+6. 추천 논문 - 교과서적 논문과 최신 연구 논문 간략히 언급 (PMID 포함)
+7. 검증 제안 - 실험적 검증 방법 제안
+8. 결론 (Conclusions) - 연구의 의의와 향후 방향
 
 ```json
 {{
   "title": "한국어 제목 (암종, DEG 수, 주요 발견 포함)",
   "title_en": "English Title",
-  "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nDriver Gene Analysis: ...\\n\\n문헌 기반 해석: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
+  "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nDriver Gene Analysis: ...\\n\\n문헌 기반 해석: ...\\n\\n추천 논문: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
   "key_findings": [
     "주요 발견 1 (DEG 관련)",
     "주요 발견 2 (Hub 유전자 관련)",
@@ -7589,7 +7758,8 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 5. PMID 인용 형식 사용 (예: PMID 35409110)
 6. abstract_extended는 최소 3000자 이상으로 매우 상세하게 작성 (A4 1페이지 이상)
 7. key_findings는 10개 이상, 각 섹션에서 핵심 발견 포함
-8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 검증 제안, 결론)은 각각 4-6문장 이상으로 상세히 기술
+8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 추천 논문, 검증 제안, 결론)은 각각 4-6문장 이상으로 상세히 기술
+9. 추천 논문 섹션에서는 위에 제공된 논문 목록을 반드시 활용하여 구체적인 제목과 PMID를 명시할 것 (예: "PMID 34976204의 연구는...")
 
 문체 지침 (매우 중요):
 - 학술 논문이면서도 읽는 이를 사로잡는 매력적인 글쓰기를 해주세요
