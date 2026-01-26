@@ -431,15 +431,15 @@ class ReportAgent(BaseAgent):
         # Determine level
         if score >= 4:
             level = "high"
-            emoji = "🟢"
+            emoji = "[G]"
             label = "높음"
         elif score >= 2:
             level = "medium"
-            emoji = "🟡"
+            emoji = "[Y]"
             label = "중간"
         else:
             level = "low"
-            emoji = "🔴"
+            emoji = "[R]"
             label = "낮음"
 
         return level, emoji, label, score, reasons
@@ -551,7 +551,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="rag-method-note">
-                <span class="method-icon">🔬</span>
+                <span class="method-icon">[Lab]</span>
                 <div class="method-text">
                     <strong>분석 방법:</strong> PubMedBERT 임베딩 기반 Vector Search로 관련 논문을 검색하고,
                     Claude API를 통해 유전자별 문헌 기반 해석을 생성했습니다.
@@ -564,7 +564,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="rag-disclaimer">
-                <span class="disclaimer-icon">⚠️</span>
+                <span class="disclaimer-icon">[!]</span>
                 AI 생성 해석입니다. 모든 내용은 원문 논문을 통해 검증이 필요합니다.
             </div>
         </section>
@@ -621,7 +621,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="warning-box">
-                <span class="warning-icon">⚠️</span>
+                <span class="warning-icon">[!]</span>
                 <span>이 분석 결과는 연구 참고용이며, 임상 진단 목적으로 사용할 수 없습니다. 모든 결론은 실험적 검증이 필요합니다.</span>
             </div>
         </section>
@@ -645,7 +645,7 @@ class ReportAgent(BaseAgent):
             return (
                 '<div id="network-interactive" class="network-view active">'
                 f'<iframe id="network-iframe" srcdoc="{escaped_html}" style="width:100%; height:500px; border:none; border-radius:8px;"></iframe>'
-                '<p class="panel-note">💡 마우스 드래그로 회전, 스크롤로 확대/축소, 유전자 클릭으로 포커스</p>'
+                '<p class="panel-note">[Tip] 마우스 드래그로 회전, 스크롤로 확대/축소, 유전자 클릭으로 포커스</p>'
                 '</div>'
                 '<div id="network-static" class="network-view" style="display:none;">'
                 f'<img src="{network_src}" alt="Network" />'
@@ -663,7 +663,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="ai-interpretation">
-            <div class="ai-header">🤖 AI 해석</div>
+            <div class="ai-header">[AI] AI 해석</div>
             <p class="ai-summary">{interp.get('summary', '')}</p>
             <p><strong>Hub 유전자 분석:</strong> {interp.get('hub_gene_analysis', '')}</p>
             <p><strong>네트워크 구조:</strong> {interp.get('network_topology', '')}</p>
@@ -681,7 +681,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="ai-interpretation">
-            <div class="ai-header">🤖 AI 해석</div>
+            <div class="ai-header">[AI] AI 해석</div>
             <p class="ai-summary">{interp.get('summary', '')}</p>
             <ul class="ai-observations">{observations_html}</ul>
             <p><strong>발현 패턴:</strong> {interp.get('pattern_analysis', '')}</p>
@@ -756,7 +756,7 @@ class ReportAgent(BaseAgent):
             observations_html = "".join([f"<li>{obs}</li>" for obs in observations[:3]])
             volcano_llm_section = f'''
             <div class="ai-interpretation">
-                <div class="ai-header">🤖 AI 해석</div>
+                <div class="ai-header">[AI] AI 해석</div>
                 <p class="ai-summary">{volcano_interp.get('summary', '')}</p>
                 <ul class="ai-observations">{observations_html}</ul>
                 <p class="ai-significance"><strong>생물학적 의미:</strong> {volcano_interp.get('biological_significance', '')}</p>
@@ -779,7 +779,7 @@ class ReportAgent(BaseAgent):
                     {volcano_desc}
                     <div id="volcano-interactive" class="volcano-view active">
                         <iframe id="volcano-iframe" srcdoc="{volcano_interactive.replace('"', '&quot;')}" style="width:100%; height:450px; border:none; border-radius:8px;"></iframe>
-                        <p class="panel-note">💡 마우스 드래그로 확대, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
+                        <p class="panel-note">[Tip] 마우스 드래그로 확대, 유전자 위에 마우스를 올리면 상세 정보 표시</p>
                     </div>
                     <div id="volcano-static" class="volcano-view" style="display:none;">
                         {f'<img src="{volcano_src}" alt="Volcano Plot" />' if volcano_src else '<p class="no-data">No plot available</p>'}
@@ -809,7 +809,7 @@ class ReportAgent(BaseAgent):
                     <div class="gene-bars">
                         {top_genes_html if top_genes_html else '<p class="no-data">No data</p>'}
                     </div>
-                    <p class="panel-note">⚠️ 발현 변화량 기준 정렬 (생물학적 중요도와 다를 수 있음)</p>
+                    <p class="panel-note">[!] 발현 변화량 기준 정렬 (생물학적 중요도와 다를 수 있음)</p>
                 </div>
 
                 <div class="dashboard-panel">
@@ -885,7 +885,7 @@ class ReportAgent(BaseAgent):
 
             # Calculate confidence dots (1-5)
             conf_dots = min(5, max(1, int(score)))
-            conf_dots_html = "🟢" * conf_dots + "⚪" * (5 - conf_dots)
+            conf_dots_html = "[G]" * conf_dots + "[O]" * (5 - conf_dots)
 
             # Expression bar (relative to max)
             expr_width = min(100, int(abs(log2fc) / 5 * 100))
@@ -897,7 +897,7 @@ class ReportAgent(BaseAgent):
                 pmid_links = ' '.join([f'<a href="https://pubmed.ncbi.nlm.nih.gov/{pmid}" target="_blank" class="pmid-link">PMID:{pmid}</a>' for pmid in rag_pmids[:3]])
                 rag_section = f'''
                     <div class="rag-interpretation">
-                        <span class="rag-label">📚 Literature Insight</span>
+                        <span class="rag-label">[Ref] Literature Insight</span>
                         <p class="rag-text">{rag_preview}</p>
                         <div class="rag-citations">{pmid_links if pmid_links else f'<span class="citation-count">{len(rag_citations)} citations</span>'}</div>
                     </div>
@@ -926,7 +926,7 @@ class ReportAgent(BaseAgent):
                         <span class="stat-label">DB Source</span>
                         <span class="stat-value db-tags">
                             {' '.join([f'<span class="db-tag">{db}</span>' for db in db_sources.split(';') if db])}
-                            {'<span class="cancer-match">✓ Cancer Match</span>' if cancer_match else ''}
+                            {'<span class="cancer-match">[OK] Cancer Match</span>' if cancer_match else ''}
                         </span>
                     </div>
 
@@ -941,7 +941,7 @@ class ReportAgent(BaseAgent):
                 <div class="card-footer">
                     <div class="tags">
                         {' '.join([f'<span class="tag">{tag}</span>' for tag in tags[:3]])}
-                        {'<span class="tag rag-tag">📚 RAG</span>' if has_rag else ''}
+                        {'<span class="tag rag-tag">[Ref] RAG</span>' if has_rag else ''}
                     </div>
                 </div>
             </div>
@@ -995,7 +995,7 @@ class ReportAgent(BaseAgent):
             <!-- 점수 체계 설명 -->
             <div class="score-explanation">
                 <div class="score-header">
-                    <span class="score-icon">📊</span>
+                    <span class="score-icon">[Chart]</span>
                     <span class="score-title">종합 점수 산정 기준 (총 6.5점)</span>
                 </div>
                 <div class="score-grid">
@@ -1037,7 +1037,7 @@ class ReportAgent(BaseAgent):
 
             <div class="table-controls">
                 <input type="text" id="gene-search" class="search-input"
-                       placeholder="🔍 유전자 검색..." onkeyup="filterTable()">
+                       placeholder="[Search] 유전자 검색..." onkeyup="filterTable()">
                 <div class="filter-buttons">
                     <button class="filter-btn active" onclick="filterByConfidence('all')">전체</button>
                     <button class="filter-btn" onclick="filterByConfidence('high')">High</button>
@@ -1067,7 +1067,7 @@ class ReportAgent(BaseAgent):
 
             <div class="table-footer">
                 <span>총 {len(integrated):,}개 유전자 (상위 {self.config['max_table_rows']}개 표시)</span>
-                <button class="download-btn" onclick="downloadCSV()">📥 CSV 다운로드</button>
+                <button class="download-btn" onclick="downloadCSV()">[Download] CSV 다운로드</button>
             </div>
         </section>
         '''
@@ -1128,7 +1128,7 @@ class ReportAgent(BaseAgent):
             # Gene function description
             function_html = ""
             if gene_function:
-                function_html = f'<div class="gene-function"><span class="function-icon">📖</span><span class="function-text">{gene_function}</span></div>'
+                function_html = f'<div class="gene-function"><span class="function-icon">[Book]</span><span class="function-text">{gene_function}</span></div>'
 
             known_cards_html += f'''
             <div class="driver-card known">
@@ -1158,7 +1158,7 @@ class ReportAgent(BaseAgent):
                         {f'<div class="evidence-row"><span class="evidence-label">Hotspots</span><span class="evidence-value">{hotspot_chips}</span></div>' if hotspot_chips else ''}
                     </div>
                     <div class="driver-validation">
-                        <span class="validation-icon">🧪</span>
+                        <span class="validation-icon">[Test]</span>
                         <div class="validation-text">
                             <strong>{val_method}</strong>
                             <span>{val_detail}</span>
@@ -1194,7 +1194,7 @@ class ReportAgent(BaseAgent):
             # Gene function description
             function_html = ""
             if gene_function:
-                function_html = f'<div class="gene-function"><span class="function-icon">📖</span><span class="function-text">{gene_function}</span></div>'
+                function_html = f'<div class="gene-function"><span class="function-icon">[Book]</span><span class="function-text">{gene_function}</span></div>'
 
             novel_cards_html += f'''
             <div class="driver-card novel">
@@ -1224,7 +1224,7 @@ class ReportAgent(BaseAgent):
                         </div>
                     </div>
                     <div class="driver-validation novel-validation">
-                        <span class="validation-icon">🔬</span>
+                        <span class="validation-icon">[Lab]</span>
                         <div class="validation-text">
                             <strong>{val_method}</strong>
                             <span>{val_detail}</span>
@@ -1268,7 +1268,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="driver-method-note">
-                <span class="method-icon">📊</span>
+                <span class="method-icon">[Chart]</span>
                 <div class="method-text">
                     <strong>알려진 Driver Track:</strong> COSMIC Cancer Gene Census + TCGA 돌연변이 빈도 + 발현 변화량 기반 scoring<br>
                     <strong>후보 조절자 Track:</strong> Hub Gene 점수 + 발현 변화량 + Pathway 영향력 + 문헌 지지도 기반 scoring
@@ -1277,7 +1277,7 @@ class ReportAgent(BaseAgent):
 
             <div class="driver-tracks">
                 <div class="driver-track known-track">
-                    <h3>🏆 알려진 Driver Track</h3>
+                    <h3>[Trophy] 알려진 Driver Track</h3>
                     <p class="track-desc">COSMIC/OncoKB에서 검증된 암 드라이버 유전자. 타겟 치료제 개발 후보.</p>
                     <div class="driver-cards-grid">
                         {known_cards_html if known_cards_html else '<p class="no-data">DEG 목록에서 알려진 driver가 발견되지 않음</p>'}
@@ -1285,7 +1285,7 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="driver-track novel-track">
-                    <h3>🔬 후보 조절자 Track</h3>
+                    <h3>[Lab] 후보 조절자 Track</h3>
                     <p class="track-desc">네트워크 분석 기반 핵심 조절인자 후보. 문헌 검증 및 기능 연구가 필요한 유전자.</p>
                     <div class="driver-cards-grid">
                         {novel_cards_html if novel_cards_html else '<p class="no-data">후보 조절자가 발견되지 않음</p>'}
@@ -1295,7 +1295,7 @@ class ReportAgent(BaseAgent):
 
             {self._generate_multiomic_section_html(data) if has_multiomic else '''
             <div class="driver-disclaimer">
-                <span class="disclaimer-icon">⚠️</span>
+                <span class="disclaimer-icon">[!]</span>
                 <div class="disclaimer-text">
                     <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
                     후보 조절자는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
@@ -1363,23 +1363,23 @@ class ReportAgent(BaseAgent):
                 validation_badges = ""
                 if db_validated:
                     if hotspot_validated:
-                        validation_badges += f'<span class="validation-badge validated">✓ Hotspot 검증됨</span>'
+                        validation_badges += f'<span class="validation-badge validated">[OK] Hotspot 검증됨</span>'
                     if cosmic_tier:
                         validation_badges += f'<span class="validation-badge cosmic">COSMIC {cosmic_tier}</span>'
                     if oncokb_level:
                         validation_badges += f'<span class="validation-badge oncokb">OncoKB Lv{oncokb_level}</span>'
                     if drug_validated:
-                        validation_badges += f'<span class="validation-badge dgidb">DGIdb ✓</span>'
+                        validation_badges += f'<span class="validation-badge dgidb">DGIdb [OK]</span>'
                 else:
-                    validation_badges = '<span class="validation-badge unvalidated">⚠️ 외부 검증 필요</span>'
+                    validation_badges = '<span class="validation-badge unvalidated">[!] 외부 검증 필요</span>'
 
                 confirmed_cards_html += f'''
                 <div class="driver-card confirmed-driver {'validated' if db_validated else 'needs-validation'}">
                     <div class="driver-header">
                         <div class="driver-title">
                             <span class="driver-gene">{gene}</span>
-                            <span class="confirmed-badge">✓ CONFIRMED</span>
-                            {'<span class="hotspot-badge">🔥 Hotspot</span>' if is_hotspot else ''}
+                            <span class="confirmed-badge">[OK] CONFIRMED</span>
+                            {'<span class="hotspot-badge">[Hot] Hotspot</span>' if is_hotspot else ''}
                         </div>
                         <span class="driver-score high">{score:.0f}/100</span>
                     </div>
@@ -1389,17 +1389,17 @@ class ReportAgent(BaseAgent):
                     <div class="driver-body">
                         <div class="evidence-grid">
                             <div class="evidence-item mutation">
-                                <span class="evidence-icon">🧬</span>
+                                <span class="evidence-icon">[DNA]</span>
                                 <span class="evidence-label">Mutation</span>
                                 <span class="evidence-value">{mutation_score:.0f}점</span>
                             </div>
                             <div class="evidence-item expression">
-                                <span class="evidence-icon">📊</span>
+                                <span class="evidence-icon">[Chart]</span>
                                 <span class="evidence-label">Expression</span>
                                 <span class="evidence-value {dir_class}">{direction} {abs(log2fc):.2f}</span>
                             </div>
                         </div>
-                        {f'<div class="drug-info"><span class="drug-icon">💊</span><span class="drug-list">{drugs}</span></div>' if drugs else ''}
+                        {f'<div class="drug-info"><span class="drug-icon">[Drug]</span><span class="drug-list">{drugs}</span></div>' if drugs else ''}
                     </div>
                 </div>
                 '''
@@ -1417,7 +1417,7 @@ class ReportAgent(BaseAgent):
                 db_validated = row.get('db_validated', False)
 
                 class_badge = "confirmed" if "confirmed" in classification else "candidate"
-                validation_icon = "✓" if drug_validated else ("△" if db_validated else "⚠️")
+                validation_icon = "[OK]" if drug_validated else ("△" if db_validated else "[!]")
                 validation_class = "validated" if drug_validated else ("partial" if db_validated else "unvalidated")
 
                 rows_html += f'''
@@ -1432,8 +1432,8 @@ class ReportAgent(BaseAgent):
 
             actionable_table_html = f'''
             <div class="actionable-targets">
-                <h4>💊 Actionable 치료 표적</h4>
-                <p class="table-note">✓ = DGIdb 검증됨, △ = DB 부분 검증, ⚠️ = 검증 필요</p>
+                <h4>[Drug] Actionable 치료 표적</h4>
+                <p class="table-note">[OK] = DGIdb 검증됨, △ = DB 부분 검증, [!] = 검증 필요</p>
                 <table class="actionable-table">
                     <thead>
                         <tr>
@@ -1466,13 +1466,13 @@ class ReportAgent(BaseAgent):
                     <span class="mutation-gene">{gene}</span>
                     <span class="mutation-change">{aa_change}</span>
                     <span class="mutation-vaf">VAF: {vaf:.1%}</span>
-                    {'<span class="hotspot-marker">🔥</span>' if is_hotspot else ''}
+                    {'<span class="hotspot-marker">[Hot]</span>' if is_hotspot else ''}
                 </div>
                 '''
 
             mutation_summary_html = f'''
             <div class="mutation-summary">
-                <h4>🔬 검출된 Driver Mutations</h4>
+                <h4>[Lab] 검출된 Driver Mutations</h4>
                 <div class="mutation-list">
                     {mutation_list}
                 </div>
@@ -1482,9 +1482,9 @@ class ReportAgent(BaseAgent):
         return f'''
         <div class="multiomic-integration">
             <div class="multiomic-header">
-                <h3>🧬 Multi-omic 통합 분석 (RNA-seq + WGS/WES)</h3>
+                <h3>[DNA] Multi-omic 통합 분석 (RNA-seq + WGS/WES)</h3>
                 <p class="multiomic-subtitle">
-                    <span class="highlight">✓ 실제 변이 데이터 기반</span> -
+                    <span class="highlight">[OK] 실제 변이 데이터 기반</span> -
                     RNA-seq 발현 변화와 WGS/WES 변이 데이터를 통합하여
                     <strong>확정된 Driver 유전자</strong>를 식별했습니다.
                     <span class="validation-highlight">외부 DB 검증 완료: {n_validated}개</span>
@@ -1493,7 +1493,7 @@ class ReportAgent(BaseAgent):
 
             <div class="multiomic-stats">
                 <div class="stat-card confirmed">
-                    <span class="stat-icon">✓</span>
+                    <span class="stat-icon">[OK]</span>
                     <span class="stat-value">{n_confirmed}</span>
                     <span class="stat-label">Confirmed Driver</span>
                     <span class="stat-desc">변이 + 발현 + DB검증</span>
@@ -1505,13 +1505,13 @@ class ReportAgent(BaseAgent):
                     <span class="stat-desc">강한 증거 1개 이상</span>
                 </div>
                 <div class="stat-card validated">
-                    <span class="stat-icon">🔬</span>
+                    <span class="stat-icon">[Lab]</span>
                     <span class="stat-value">{n_validated}</span>
                     <span class="stat-label">DB 검증됨</span>
                     <span class="stat-desc">COSMIC/OncoKB/DGIdb</span>
                 </div>
                 <div class="stat-card actionable">
-                    <span class="stat-icon">💊</span>
+                    <span class="stat-icon">[Drug]</span>
                     <span class="stat-value">{n_actionable}</span>
                     <span class="stat-label">Actionable</span>
                     <span class="stat-desc">표적 약물 존재</span>
@@ -1519,7 +1519,7 @@ class ReportAgent(BaseAgent):
             </div>
 
             <div class="validation-info-box">
-                <h5>🔍 외부 데이터베이스 검증</h5>
+                <h5>[Search] 외부 데이터베이스 검증</h5>
                 <p>Driver 유전자와 약물 정보는 다음 데이터베이스에서 검증됩니다:</p>
                 <ul>
                     <li><strong>COSMIC</strong>: 암 체세포 변이 데이터베이스 (Tier 1 암 유전자)</li>
@@ -1527,7 +1527,7 @@ class ReportAgent(BaseAgent):
                     <li><strong>DGIdb</strong>: 약물-유전자 상호작용 데이터베이스 (FDA 승인 약물)</li>
                     <li><strong>ClinVar</strong>: 임상 변이 해석 데이터베이스</li>
                 </ul>
-                <p class="validation-note">⚠️ "Confirmed Driver"는 반드시 외부 DB 검증이 필요합니다. 검증되지 않은 경우 "High Confidence"로 분류됩니다.</p>
+                <p class="validation-note">[!] "Confirmed Driver"는 반드시 외부 DB 검증이 필요합니다. 검증되지 않은 경우 "High Confidence"로 분류됩니다.</p>
             </div>
 
             <div class="confirmed-drivers-section">
@@ -1543,7 +1543,7 @@ class ReportAgent(BaseAgent):
             {actionable_table_html}
 
             <div class="multiomic-note">
-                <span class="note-icon">ℹ️</span>
+                <span class="note-icon">[Info]</span>
                 <div class="note-text">
                     <strong>Multi-omic + DB 검증의 중요성:</strong>
                     <ul>
@@ -1586,10 +1586,10 @@ class ReportAgent(BaseAgent):
                     prediction_method = "사용자 지정 + ML 검증"
                     prediction_note = f"<small>ML 예측: {ml_predicted} (샘플 일치율: {agreement_ratio:.1%})</small>"
                 else:
-                    confidence_badge = f'<span class="confidence-badge low">⚠️ ML 불일치</span>'
+                    confidence_badge = f'<span class="confidence-badge low">[!] ML 불일치</span>'
                     prediction_method = "사용자 지정 (ML 검증 불일치)"
                     ml_korean = cancer_prediction.get('predicted_cancer_korean', ml_predicted)
-                    prediction_note = f"<small>⚠️ ML 예측: {ml_predicted} ({ml_korean}) - 신뢰도: {confidence:.1%}</small>"
+                    prediction_note = f"<small>[!] ML 예측: {ml_predicted} ({ml_korean}) - 신뢰도: {confidence:.1%}</small>"
             else:
                 # ML prediction only (no user specification)
                 if cancer_korean:
@@ -1605,7 +1605,7 @@ class ReportAgent(BaseAgent):
                 else:
                     confidence_badge = f'<span class="confidence-badge low">신뢰도: {confidence:.1%}</span>'
 
-                prediction_method = "🤖 ML 예측 (Pan-Cancer Classifier)"
+                prediction_method = "[AI] ML 예측 (Pan-Cancer Classifier)"
                 prediction_note = f"<small>샘플 일치율: {agreement_ratio:.1%}</small>"
         else:
             # Fallback to config-specified cancer type (no ML prediction available)
@@ -1613,7 +1613,7 @@ class ReportAgent(BaseAgent):
             if cancer_type_display.lower() == 'unknown':
                 cancer_type_display = '암종 미확인'
                 confidence_badge = '<span class="confidence-badge low">예측 불가</span>'
-                prediction_method = "⚠️ ML 예측 실패"
+                prediction_method = "[!] ML 예측 실패"
                 prediction_note = "<small>count matrix 확인 필요</small>"
             else:
                 confidence_badge = '<span class="confidence-badge medium">사용자 지정</span>'
@@ -1644,7 +1644,7 @@ class ReportAgent(BaseAgent):
             ml_performance_html = f'''
             <div class="ml-performance-card" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;">
                 <h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                    <span>📊</span> Pan-Cancer Classifier 성능 지표
+                    <span>[Chart]</span> Pan-Cancer Classifier 성능 지표
                 </h4>
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
                     <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
@@ -1670,7 +1670,7 @@ class ReportAgent(BaseAgent):
                 cancer_type = per_class.get('cancer_type', '')
                 ml_performance_html += f'''
                 <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <div style="font-size: 0.9em; margin-bottom: 8px;">📌 <b>{cancer_type}</b> 분류 성능</div>
+                    <div style="font-size: 0.9em; margin-bottom: 8px;">[Pin] <b>{cancer_type}</b> 분류 성능</div>
                     <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; font-size: 0.85em;">
                         <div style="text-align: center;">
                             <div style="font-weight: bold;">{per_class.get('f1', 0):.3f}</div>
@@ -1785,7 +1785,7 @@ class ReportAgent(BaseAgent):
             findings_items = ''.join([f'<li>{highlight_numbers(f)}</li>' for f in key_findings[:10]])
             findings_html = f'''
             <div class="key-findings-box">
-                <h4>📌 핵심 발견 <span class="findings-count">{len(key_findings)}건</span></h4>
+                <h4>[Pin] 핵심 발견 <span class="findings-count">{len(key_findings)}건</span></h4>
                 <ul>{findings_items}</ul>
             </div>
             '''
@@ -1795,7 +1795,7 @@ class ReportAgent(BaseAgent):
         if driver_interp:
             driver_html = f'''
             <div class="interpretation-box driver">
-                <h4>🧬 Driver Gene 연관성 분석</h4>
+                <h4>[DNA] Driver Gene 연관성 분석</h4>
                 <p>{driver_interp}</p>
             </div>
             '''
@@ -1805,7 +1805,7 @@ class ReportAgent(BaseAgent):
         if rag_interp:
             rag_html = f'''
             <div class="interpretation-box literature">
-                <h4>📚 문헌 기반 해석</h4>
+                <h4>[Ref] 문헌 기반 해석</h4>
                 <p>{rag_interp}</p>
             </div>
             '''
@@ -1825,7 +1825,7 @@ class ReportAgent(BaseAgent):
             if val_items:
                 validation_html = f'''
                 <div class="validation-box">
-                    <h4>🔬 실험적 검증 제안</h4>
+                    <h4>[Lab] 실험적 검증 제안</h4>
                     <div class="val-grid">{''.join(val_items)}</div>
                 </div>
                 '''
@@ -1860,7 +1860,7 @@ class ReportAgent(BaseAgent):
                 <h4>📄 추천 논문</h4>
                 <div class="papers-grid">
                     <div class="paper-category classic">
-                        <h5>📚 교과서급 핵심 연구 (Classic)</h5>
+                        <h5>[Ref] 교과서급 핵심 연구 (Classic)</h5>
                         <ul>{''.join(classic_items) if classic_items else '<li>없음</li>'}</ul>
                     </div>
                     <div class="paper-category emerging">
@@ -1908,7 +1908,7 @@ class ReportAgent(BaseAgent):
             {papers_html}
 
             <div class="abstract-note">
-                <span class="note-icon">ℹ️</span>
+                <span class="note-icon">[Info]</span>
                 <span>본 요약은 Claude AI + RAG 문헌 검색을 통해 자동 생성되었습니다.</span>
             </div>
 
@@ -2028,7 +2028,7 @@ class ReportAgent(BaseAgent):
                     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
                 }}
                 .abstract-main-full::before {{
-                    content: "📋 연구 요약";
+                    content: "[List] 연구 요약";
                     display: block;
                     font-size: 16px;
                     font-weight: 700;
@@ -2300,7 +2300,7 @@ class ReportAgent(BaseAgent):
             </div>
             <div id="pca-interactive" class="pca-view active" style="display:flex; flex-direction:column; align-items:center;">
                 <iframe id="pca-iframe" srcdoc="{escaped_html}" style="width:100%; max-width:720px; height:420px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스를 올리면 샘플 ID를 확인할 수 있습니다</p>
+                <p class="panel-note">[Tip] 마우스를 올리면 샘플 ID를 확인할 수 있습니다</p>
             </div>
             <div id="pca-static" class="pca-view" style="display:none; text-align:center;">
                 <img src="{pca_fig}" alt="PCA Plot" class="figure-img" style="max-width:100%;">
@@ -2322,12 +2322,12 @@ class ReportAgent(BaseAgent):
             pca_ai_section = f'''
             <div class="ai-analysis-box detailed">
                 <div class="ai-analysis-header">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon">[AI]</span>
                     <span class="ai-title">AI 상세 분석: PCA</span>
                 </div>
                 <div class="ai-analysis-content">
                     <div class="ai-section">
-                        <h4>📊 분석 요약</h4>
+                        <h4>[Chart] 분석 요약</h4>
                         <p class="ai-summary-text">{pca_interp.get('summary', '')}</p>
                     </div>
 
@@ -2337,15 +2337,15 @@ class ReportAgent(BaseAgent):
                     </div>
 
                     <div class="ai-section">
-                        <h4>📈 분산 설명</h4>
+                        <h4>[Up] 분산 설명</h4>
                         <p>{pca_interp.get('variance_explanation', '')}</p>
                     </div>
 
                     {f'<div class="ai-section"><h4>✅ 샘플 품질 평가</h4><p>{sample_quality}</p></div>' if sample_quality else ''}
 
-                    {f'<div class="ai-section"><h4>🧬 생물학적 의미</h4><p>{biological_meaning}</p></div>' if biological_meaning else ''}
+                    {f'<div class="ai-section"><h4>[DNA] 생물학적 의미</h4><p>{biological_meaning}</p></div>' if biological_meaning else ''}
 
-                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
+                    {f'<div class="ai-section guide"><h4>[Book] 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -2396,7 +2396,7 @@ class ReportAgent(BaseAgent):
             </div>
             <div id="volcano-interactive" class="volcano-view active" style="display:flex; flex-direction:column; align-items:center;">
                 <iframe id="volcano-iframe" srcdoc="{escaped_html}" style="width:100%; max-width:900px; height:500px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스를 올리면 유전자 정보를 확인할 수 있습니다. 드래그하여 확대/축소 가능합니다.</p>
+                <p class="panel-note">[Tip] 마우스를 올리면 유전자 정보를 확인할 수 있습니다. 드래그하여 확대/축소 가능합니다.</p>
             </div>
             <div id="volcano-static" class="volcano-view" style="display:none; text-align:center;">
                 <img src="{volcano_fig}" alt="Volcano Plot" class="figure-img" style="max-width:100%;">
@@ -2417,7 +2417,7 @@ class ReportAgent(BaseAgent):
             </div>
             <div id="heatmap-interactive" class="heatmap-view active" style="display:flex; flex-direction:column; align-items:center;">
                 <iframe id="heatmap-iframe" srcdoc="{escaped_heatmap_html}" style="width:100%; max-width:1000px; height:600px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스를 올리면 유전자/샘플 정보를 확인할 수 있습니다.</p>
+                <p class="panel-note">[Tip] 마우스를 올리면 유전자/샘플 정보를 확인할 수 있습니다.</p>
             </div>
             <div id="heatmap-static" class="heatmap-view" style="display:none; text-align:center;">
                 <img src="{heatmap_fig}" alt="Heatmap" class="figure-img" style="max-width:100%;">
@@ -2441,28 +2441,28 @@ class ReportAgent(BaseAgent):
             volcano_ai_section = f'''
             <div class="ai-analysis-box detailed">
                 <div class="ai-analysis-header">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon">[AI]</span>
                     <span class="ai-title">AI 상세 분석: Volcano Plot</span>
                 </div>
                 <div class="ai-analysis-content">
                     <div class="ai-section">
-                        <h4>📊 분석 요약</h4>
+                        <h4>[Chart] 분석 요약</h4>
                         <p class="ai-summary-text">{volcano_interp.get('summary', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🔍 주요 관찰 사항</h4>
+                        <h4>[Search] 주요 관찰 사항</h4>
                         <ul class="ai-observations-list">{observations_html}</ul>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🧬 생물학적 의의</h4>
+                        <h4>[DNA] 생물학적 의의</h4>
                         <p>{volcano_interp.get('biological_significance', '')}</p>
                     </div>
 
-                    {f'<div class="ai-section"><h4>💊 임상적 관련성</h4><p>{clinical_relevance}</p></div>' if clinical_relevance else ''}
+                    {f'<div class="ai-section"><h4>[Drug] 임상적 관련성</h4><p>{clinical_relevance}</p></div>' if clinical_relevance else ''}
 
-                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
+                    {f'<div class="ai-section guide"><h4>[Book] 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -2480,28 +2480,28 @@ class ReportAgent(BaseAgent):
             heatmap_ai_section = f'''
             <div class="ai-analysis-box detailed">
                 <div class="ai-analysis-header">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon">[AI]</span>
                     <span class="ai-title">AI 상세 분석: 발현 히트맵</span>
                 </div>
                 <div class="ai-analysis-content">
                     <div class="ai-section">
-                        <h4>📊 분석 요약</h4>
+                        <h4>[Chart] 분석 요약</h4>
                         <p class="ai-summary-text">{heatmap_interp.get('summary', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🔍 주요 관찰 사항</h4>
+                        <h4>[Search] 주요 관찰 사항</h4>
                         <ul class="ai-observations-list">{observations_html}</ul>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🧬 발현 패턴 분석</h4>
+                        <h4>[DNA] 발현 패턴 분석</h4>
                         <p>{heatmap_interp.get('pattern_analysis', '')}</p>
                     </div>
 
-                    {f'<div class="ai-section"><h4>📈 샘플 클러스터링</h4><p>{sample_clustering}</p></div>' if sample_clustering else ''}
+                    {f'<div class="ai-section"><h4>[Up] 샘플 클러스터링</h4><p>{sample_clustering}</p></div>' if sample_clustering else ''}
 
-                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
+                    {f'<div class="ai-section guide"><h4>[Book] 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -2642,33 +2642,33 @@ class ReportAgent(BaseAgent):
             pathway_ai_section = f'''
             <div class="ai-analysis-box detailed green-theme">
                 <div class="ai-analysis-header">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon">[AI]</span>
                     <span class="ai-title">AI 상세 분석: Pathway 분석</span>
                 </div>
                 <div class="ai-analysis-content">
                     <div class="ai-section">
-                        <h4>📊 분석 요약</h4>
+                        <h4>[Chart] 분석 요약</h4>
                         <p class="ai-summary-text">{pathway_interp.get('summary', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🔬 주요 Pathway 상세 설명</h4>
+                        <h4>[Lab] 주요 Pathway 상세 설명</h4>
                         <ul class="ai-observations-list">{pathways_html}</ul>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🧬 기능적 테마</h4>
+                        <h4>[DNA] 기능적 테마</h4>
                         <p>{pathway_interp.get('functional_theme', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>💊 치료적 함의</h4>
+                        <h4>[Drug] 치료적 함의</h4>
                         <p>{pathway_interp.get('therapeutic_implications', '')}</p>
                     </div>
 
-                    {f'<div class="ai-section"><h4>🔗 Pathway 간 상호작용</h4><p>{cross_pathway}</p></div>' if cross_pathway else ''}
+                    {f'<div class="ai-section"><h4>[Link] Pathway 간 상호작용</h4><p>{cross_pathway}</p></div>' if cross_pathway else ''}
 
-                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
+                    {f'<div class="ai-section guide"><h4>[Book] 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -2781,11 +2781,11 @@ class ReportAgent(BaseAgent):
             </div>
             <div id="network-2d-view" style="display:flex; flex-direction:column; align-items:center;">
                 <iframe id="network-2d-iframe" srcdoc="{escaped_2d}" style="width:100%; max-width:800px; height:570px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스를 올리면 유전자 정보 확인</p>
+                <p class="panel-note">[Tip] 마우스를 올리면 유전자 정보 확인</p>
             </div>
             <div id="network-3d-view" style="display:none; flex-direction:column; align-items:center;">
                 <iframe id="network-3d-iframe" srcdoc="{escaped_3d}" style="width:100%; max-width:800px; height:600px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능</p>
+                <p class="panel-note">[Tip] 마우스로 회전, 확대/축소 가능</p>
             </div>
             '''
         elif network_3d_interactive:
@@ -2793,7 +2793,7 @@ class ReportAgent(BaseAgent):
             network_html = f'''
             <div style="display:flex; flex-direction:column; align-items:center;">
                 <iframe srcdoc="{escaped_html}" style="width:100%; max-width:800px; height:600px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스로 회전, 확대/축소 가능</p>
+                <p class="panel-note">[Tip] 마우스로 회전, 확대/축소 가능</p>
             </div>
             '''
         elif network_2d_interactive:
@@ -2801,7 +2801,7 @@ class ReportAgent(BaseAgent):
             network_html = f'''
             <div style="display:flex; flex-direction:column; align-items:center;">
                 <iframe srcdoc="{escaped_html}" style="width:100%; max-width:800px; height:570px; border:none; border-radius:8px;"></iframe>
-                <p class="panel-note">💡 마우스를 올리면 유전자 정보 확인</p>
+                <p class="panel-note">[Tip] 마우스를 올리면 유전자 정보 확인</p>
             </div>
             '''
         elif network_fig:
@@ -2828,33 +2828,33 @@ class ReportAgent(BaseAgent):
             network_ai_section = f'''
             <div class="ai-analysis-box detailed orange-theme">
                 <div class="ai-analysis-header">
-                    <span class="ai-icon">🤖</span>
+                    <span class="ai-icon">[AI]</span>
                     <span class="ai-title">AI 상세 분석: 유전자 네트워크</span>
                 </div>
                 <div class="ai-analysis-content">
                     <div class="ai-section">
-                        <h4>📊 분석 요약</h4>
+                        <h4>[Chart] 분석 요약</h4>
                         <p class="ai-summary-text">{network_interp.get('summary', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🌐 Hub 유전자 심층 분석</h4>
+                        <h4>[Network] Hub 유전자 심층 분석</h4>
                         <p>{network_interp.get('hub_gene_analysis', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🔗 네트워크 토폴로지</h4>
+                        <h4>[Link] 네트워크 토폴로지</h4>
                         <p>{network_interp.get('network_topology', '')}</p>
                     </div>
 
                     <div class="ai-section">
-                        <h4>🧬 생물학적 의미</h4>
+                        <h4>[DNA] 생물학적 의미</h4>
                         <p>{network_interp.get('biological_implications', '')}</p>
                     </div>
 
-                    {f'<div class="ai-section"><h4>💊 치료적 잠재력</h4><p>{therapeutic_potential}</p></div>' if therapeutic_potential else ''}
+                    {f'<div class="ai-section"><h4>[Drug] 치료적 잠재력</h4><p>{therapeutic_potential}</p></div>' if therapeutic_potential else ''}
 
-                    {f'<div class="ai-section guide"><h4>📖 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
+                    {f'<div class="ai-section guide"><h4>[Book] 해석 가이드</h4><p class="guide-text">{interpretation_guide}</p></div>' if interpretation_guide else ''}
                 </div>
             </div>
             '''
@@ -3156,7 +3156,7 @@ class ReportAgent(BaseAgent):
             """ if repurposing_rows else ''}
 
             <div class="disclaimer-box" style="margin-top: 24px;">
-                <strong>⚠️ 중요 안내:</strong> 모든 임상적 의미는 계산적 예측이며, 진단 또는 치료 적용 전에
+                <strong>[!] 중요 안내:</strong> 모든 임상적 의미는 계산적 예측이며, 진단 또는 치료 적용 전에
                 반드시 실험적·임상적 검증이 필요합니다. 본 분석은 연구 참고용이며 의학적 조언이 아닙니다.
             </div>
         </section>
@@ -3205,7 +3205,7 @@ class ReportAgent(BaseAgent):
             # Determine paper type badge
             p_type = paper.get('paper_type', paper_type)
             if 'classic' in p_type:
-                type_badge = '<span class="paper-type-badge classic">📚 Classic Study</span>'
+                type_badge = '<span class="paper-type-badge classic">[Ref] Classic Study</span>'
                 type_class = "classic"
             elif 'breakthrough' in p_type:
                 type_badge = '<span class="paper-type-badge breakthrough">🚀 Emerging Research</span>'
@@ -3222,7 +3222,7 @@ class ReportAgent(BaseAgent):
             if citation_count > 0 or citation_velocity > 0:
                 citation_html = f'''
                 <div class="citation-metrics">
-                    <span class="citation-count" title="Total citations">📊 인용: {citation_count:,}회</span>
+                    <span class="citation-count" title="Total citations">[Chart] 인용: {citation_count:,}회</span>
                     {f'<span class="citation-velocity" title="Citations per year">({citation_velocity:.1f}회/년)</span>' if citation_velocity > 0 else ''}
                 </div>
                 '''
@@ -3270,7 +3270,7 @@ class ReportAgent(BaseAgent):
 
             paper_sections = f'''
             <div class="paper-category">
-                <h3 class="category-title">📚 필수 참고 논문 (Classic Studies)</h3>
+                <h3 class="category-title">[Ref] 필수 참고 논문 (Classic Studies)</h3>
                 <p class="category-desc">해당 분야의 기초가 되는 고인용 논문들입니다. (50회 이상 인용, 3년 이상 경과)</p>
                 <div class="paper-list">
                     {classic_cards if classic_cards else '<p class="no-papers">인용 데이터 기준을 만족하는 Classic 논문이 없습니다.</p>'}
@@ -3307,7 +3307,7 @@ class ReportAgent(BaseAgent):
             breakthrough_count = papers_data.get('breakthrough_count', len(breakthrough_papers))
             stats_html = f'''
             <div class="papers-stats">
-                <span class="stat-item"><span class="stat-icon">📚</span> Classic: {classic_count}편</span>
+                <span class="stat-item"><span class="stat-icon">[Ref]</span> Classic: {classic_count}편</span>
                 <span class="stat-item"><span class="stat-icon">🚀</span> Emerging: {breakthrough_count}편</span>
             </div>
             '''
@@ -3622,7 +3622,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="rec-subsection">
-            <h3>🎯 치료 타겟 후보 (Therapeutic Targets)</h3>
+            <h3>[Target] 치료 타겟 후보 (Therapeutic Targets)</h3>
             <p class="rec-description">{description}</p>
 
             <h4>High Priority</h4>
@@ -3670,7 +3670,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="rec-subsection">
-            <h3>💊 약물 재목적화 후보 (Drug Repurposing)</h3>
+            <h3>[Drug] 약물 재목적화 후보 (Drug Repurposing)</h3>
             <p class="rec-description">{description}</p>
 
             <table class="rec-table">
@@ -3720,7 +3720,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="rec-subsection">
-            <h3>🔬 실험 검증 전략 (Experimental Validation)</h3>
+            <h3>[Lab] 실험 검증 전략 (Experimental Validation)</h3>
             <p class="rec-description">{description}</p>
 
             <div class="validation-grid">
@@ -3777,7 +3777,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="rec-subsection">
-            <h3>🧬 바이오마커 개발 (Biomarker Development)</h3>
+            <h3>[DNA] 바이오마커 개발 (Biomarker Development)</h3>
             <p class="rec-description">{description}</p>
 
             <h4>진단 바이오마커 후보</h4>
@@ -3859,7 +3859,7 @@ class ReportAgent(BaseAgent):
 
         return f'''
         <div class="rec-subsection cautions-section">
-            <h3>⚠️ 주의사항 및 한계점 (Cautions & Limitations)</h3>
+            <h3>[!] 주의사항 및 한계점 (Cautions & Limitations)</h3>
             <p class="rec-description">{description}</p>
 
             <div class="cautions-grid">
@@ -3887,7 +3887,7 @@ class ReportAgent(BaseAgent):
 
             <div class="methods-grid">
                 <div class="method-card">
-                    <h4>🧬 차등발현 분석</h4>
+                    <h4>[DNA] 차등발현 분석</h4>
                     <ul>
                         <li>도구: DESeq2</li>
                         <li>기준값: |log2FC| > 1, padj < 0.05</li>
@@ -3896,7 +3896,7 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="method-card">
-                    <h4>🕸️ 네트워크 분석</h4>
+                    <h4>[Web] 네트워크 분석</h4>
                     <ul>
                         <li>도구: NetworkX</li>
                         <li>상관계수: Spearman > 0.7</li>
@@ -3905,7 +3905,7 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="method-card">
-                    <h4>📊 경로 농축 분석</h4>
+                    <h4>[Chart] 경로 농축 분석</h4>
                     <ul>
                         <li>도구: gseapy (Enrichr)</li>
                         <li>DB: GO (BP/MF/CC), KEGG</li>
@@ -3934,11 +3934,11 @@ class ReportAgent(BaseAgent):
                 </table>
 
                 <div class="confidence-legend">
-                    <span>🟢🟢🟢🟢🟢 5/5 매우 높음</span>
-                    <span>🟢🟢🟢🟢⚪ 4/5 높음</span>
-                    <span>🟢🟢🟢⚪⚪ 3/5 중간</span>
-                    <span>🟢🟢⚪⚪⚪ 2/5 낮음</span>
-                    <span>🟢⚪⚪⚪⚪ 1/5 검증 필요</span>
+                    <span>[G][G][G][G][G] 5/5 매우 높음</span>
+                    <span>[G][G][G][G][O] 4/5 높음</span>
+                    <span>[G][G][G][O][O] 3/5 중간</span>
+                    <span>[G][G][O][O][O] 2/5 낮음</span>
+                    <span>[G][O][O][O][O] 1/5 검증 필요</span>
                 </div>
             </div>
         </section>
@@ -6236,11 +6236,11 @@ class ReportAgent(BaseAgent):
             }
 
             .clinical-card h4.biomarkers::before {
-                content: "🎯 ";
+                content: "[Target] ";
             }
 
             .clinical-card h4.therapeutic::before {
-                content: "💊 ";
+                content: "[Drug] ";
             }
 
             .clinical-item {
@@ -6299,11 +6299,11 @@ class ReportAgent(BaseAgent):
             }
 
             .followup-card.validation h4::before {
-                content: "🧪";
+                content: "[Test]";
             }
 
             .followup-card.functional h4::before {
-                content: "🔬";
+                content: "[Lab]";
             }
 
             .followup-card.invivo h4::before {
@@ -6875,7 +6875,7 @@ class ReportAgent(BaseAgent):
             # Key findings list
             findings_html = ''
             if key_findings:
-                findings_html = '<div class="key-findings"><h4>📌 주요 발견</h4><ul>'
+                findings_html = '<div class="key-findings"><h4>[Pin] 주요 발견</h4><ul>'
                 for finding in key_findings[:8]:
                     findings_html += f'<li>{finding}</li>'
                 findings_html += '</ul></div>'
@@ -6883,17 +6883,17 @@ class ReportAgent(BaseAgent):
             # Driver Gene interpretation
             driver_html = ''
             if driver_interp:
-                driver_html = f'<div class="driver-interpretation"><h4>🧬 Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
+                driver_html = f'<div class="driver-interpretation"><h4>[DNA] Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
 
             # RAG Literature interpretation
             rag_html = ''
             if rag_interp:
-                rag_html = f'<div class="rag-interpretation"><h4>📚 문헌 기반 해석</h4><p>{rag_interp}</p></div>'
+                rag_html = f'<div class="rag-interpretation"><h4>[Ref] 문헌 기반 해석</h4><p>{rag_interp}</p></div>'
 
             # Validation priorities
             validation_html = ''
             if validation:
-                validation_html = '<div class="validation-priorities"><h4>🔬 실험적 검증 제안</h4><div class="validation-grid">'
+                validation_html = '<div class="validation-priorities"><h4>[Lab] 실험적 검증 제안</h4><div class="validation-grid">'
                 if validation.get('qPCR'):
                     validation_html += f'<div class="validation-item"><strong>qRT-PCR:</strong> {", ".join(validation["qPCR"][:5])}</div>'
                 if validation.get('western_blot'):
@@ -6909,7 +6909,7 @@ class ReportAgent(BaseAgent):
             # ML interpretation
             ml_html = ''
             if ml_interp:
-                ml_html = f'<div class="ml-interpretation"><h4>🤖 ML 예측 해석</h4><p>{ml_interp}</p></div>'
+                ml_html = f'<div class="ml-interpretation"><h4>[AI] ML 예측 해석</h4><p>{ml_interp}</p></div>'
 
             return f'''
         <section class="extended-abstract-section" id="abstract">
@@ -6939,7 +6939,7 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="abstract-note">
-                    <span class="note-icon">ℹ️</span>
+                    <span class="note-icon">[Info]</span>
                     <span>본 요약은 Claude AI + RAG 문헌 검색을 통해 자동 생성되었습니다. 상세 내용은 각 섹션을 참조하세요.</span>
                 </div>
             </div>
@@ -7079,7 +7079,7 @@ Candidate Regulator 후보들은 문헌 검토 후 기능적 검증 실험을 �
 
         findings_html = ''
         if key_findings:
-            findings_html = '<div class="key-findings"><h4>📌 주요 발견</h4><ul>'
+            findings_html = '<div class="key-findings"><h4>[Pin] 주요 발견</h4><ul>'
             for finding in key_findings[:8]:
                 findings_html += f'<li>{finding}</li>'
             findings_html += '</ul></div>'
@@ -7091,10 +7091,10 @@ Candidate Regulator 후보들은 문헌 검토 후 기능적 검증 실험을 �
 이들은 기존에 알려진 암 유전자로서 Targeted NGS 패널을 통한 변이 확인이 권장됩니다.
 Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hub gene 특성과 발현 패턴 분석을 통해 도출되었으며,
 이들은 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"로, 문헌 검토 후 기능적 검증 실험이 필요합니다."""
-            driver_html = f'<div class="driver-interpretation"><h4>🧬 Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
+            driver_html = f'<div class="driver-interpretation"><h4>[DNA] Driver Gene Analysis 해석</h4><p>{driver_interp}</p></div>'
 
         # Validation suggestions
-        validation_html = '<div class="validation-priorities"><h4>🔬 실험적 검증 제안</h4><div class="validation-grid">'
+        validation_html = '<div class="validation-priorities"><h4>[Lab] 실험적 검증 제안</h4><div class="validation-grid">'
         if hub_names:
             validation_html += f'<div class="validation-item"><strong>qRT-PCR:</strong> {", ".join(hub_names[:5])}</div>'
         if known_names:
