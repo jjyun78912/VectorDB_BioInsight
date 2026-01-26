@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; }
+h2 { color: #292929; font-size: 13pt; margin: 0 0 10pt 0; }
+.metric-card { background: #E33737; color: #FFFFFF; padding: 10pt; border-radius: 6pt; margin-bottom: 10pt; text-align: center; }
+.metric-card h3 { font-size: 18pt; margin: 0 0 4pt 0; }
+.metric-card p { font-size: 9pt; margin: 0; }
+.hub-card { background: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; }
+.hub-card h3 { color: #292929; font-size: 10pt; margin: 0 0 4pt 0; }
+.hub-card p { color: #566573; font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Network Analysis Results</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>Network Metrics</h2>
+    <div class="metric-card"><h3>3.38M</h3><p>Total Edges</p></div>
+    <div class="metric-card"><h3>20</h3><p>Hub Genes Identified</p></div>
+    <div class="metric-card"><h3>~2 min</h3><p>Computation Time</p></div>
+  </div>
+  <div class="col">
+    <h2>Top Hub Genes</h2>
+    <div class="hub-card"><h3>ESR1</h3><p>Estrogen receptor, key breast cancer driver</p></div>
+    <div class="hub-card"><h3>GATA3</h3><p>Transcription factor, luminal marker</p></div>
+    <div class="hub-card"><h3>FOXA1</h3><p>Chromatin remodeling, ER signaling</p></div>
+    <div class="hub-card"><h3>ERBB2</h3><p>HER2, therapeutic target</p></div>
+  </div>
+</div>
+</body>
+</html>

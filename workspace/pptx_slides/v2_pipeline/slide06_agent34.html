@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.agent-col {
+  flex: 1;
+  background: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+  border-top: 3pt solid #4E9F3D;
+}
+.agent-col h2 {
+  color: #1E5128;
+  font-size: 13pt;
+  margin: 0 0 10pt 0;
+}
+.agent-col h3 {
+  color: #4E9F3D;
+  font-size: 10pt;
+  margin: 10pt 0 4pt 0;
+}
+.agent-col p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Agent 3-4: Pathway and Validation</h1>
+</div>
+<div class="content">
+  <div class="agent-col">
+    <h2>Agent 3: Pathway Enrichment</h2>
+    <h3>Input</h3>
+    <p>DEG list (up/down separated)</p>
+    <h3>Process</h3>
+    <p>Enrichr API for GO Biological Process, KEGG Pathways. FDR correction, term filtering.</p>
+    <h3>Output</h3>
+    <p>pathway_summary.csv with 66+ enriched terms</p>
+  </div>
+  <div class="agent-col">
+    <h2>Agent 4: DB Validation</h2>
+    <h3>Cancer DBs</h3>
+    <p>COSMIC Cancer Gene Census, OncoKB Actionable Genes</p>
+    <h3>RAG Interpretation</h3>
+    <p>PubMedBERT + ChromaDB vector search for literature context</p>
+    <h3>Output</h3>
+    <p>Driver/TSG classification, PMID citations</p>
+  </div>
+</div>
+</body>
+</html>

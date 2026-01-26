@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #181B24; padding: 18pt 30pt; }
+.header h1 { color: #B165FB; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; }
+h2 { color: #181B24; font-size: 13pt; margin: 0 0 10pt 0; }
+.flow-box { background: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; text-align: center; }
+.flow-box p { color: #566573; font-size: 9pt; margin: 0; }
+.arrow { color: #B165FB; font-size: 14pt; text-align: center; margin: 4pt 0; }
+.stats-card { background: #40695B; color: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; }
+.stats-card h3 { font-size: 10pt; margin: 0 0 4pt 0; }
+.stats-card p { font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>RAG Interpretation System</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>RAG Pipeline</h2>
+    <div class="flow-box"><p>Gene + Cancer + Direction</p></div>
+    <p class="arrow">v</p>
+    <div class="flow-box"><p>PubMedBERT Embedding</p></div>
+    <p class="arrow">v</p>
+    <div class="flow-box"><p>ChromaDB Vector Search</p></div>
+    <p class="arrow">v</p>
+    <div class="flow-box"><p>Claude API Interpretation</p></div>
+    <p class="arrow">v</p>
+    <div class="flow-box"><p>Output with PMID citations</p></div>
+  </div>
+  <div class="col">
+    <h2>Vector DB Stats</h2>
+    <div class="stats-card"><h3>Cancer Collections</h3><p>17 types indexed</p></div>
+    <div class="stats-card"><h3>Total Papers</h3><p>~850 RNA-seq papers</p></div>
+    <div class="stats-card"><h3>Total Chunks</h3><p>53,000+ searchable chunks</p></div>
+    <div class="stats-card"><h3>Embedding Model</h3><p>PubMedBERT 768-dim</p></div>
+  </div>
+</div>
+</body>
+</html>

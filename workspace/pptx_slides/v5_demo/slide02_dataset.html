@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; }
+h2 { color: #292929; font-size: 13pt; margin: 0 0 10pt 0; }
+.stat-card { background: #E33737; color: #FFFFFF; padding: 12pt; border-radius: 6pt; margin-bottom: 10pt; text-align: center; }
+.stat-card h3 { font-size: 22pt; margin: 0 0 4pt 0; }
+.stat-card p { font-size: 10pt; margin: 0; }
+.info-card { background: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; }
+.info-card h3 { color: #292929; font-size: 10pt; margin: 0 0 4pt 0; }
+.info-card p { color: #566573; font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Demo Dataset: TCGA-BRCA</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>Dataset Statistics</h2>
+    <div class="stat-card"><h3>50</h3><p>Samples (25 Tumor, 25 Normal)</p></div>
+    <div class="stat-card"><h3>7,583</h3><p>Significant DEGs</p></div>
+  </div>
+  <div class="col">
+    <h2>Data Source</h2>
+    <div class="info-card"><h3>TCGA GDC Portal</h3><p>The Cancer Genome Atlas breast cancer cohort</p></div>
+    <div class="info-card"><h3>Data Type</h3><p>RNA-seq count matrix (HTSeq-counts)</p></div>
+    <div class="info-card"><h3>Preprocessing</h3><p>DESeq2 normalization, apeglm shrinkage</p></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; }
+h2 { color: #292929; font-size: 13pt; margin: 0 0 10pt 0; }
+.result-card { background: #FFFFFF; padding: 12pt; border-radius: 6pt; margin-bottom: 10pt; }
+.result-card h3 { color: #E33737; font-size: 11pt; margin: 0 0 6pt 0; }
+.result-card p { color: #566573; font-size: 9pt; margin: 2pt 0; line-height: 1.4; }
+.stat-box { background: #292929; color: #FFFFFF; padding: 10pt; border-radius: 4pt; text-align: center; }
+.stat-box h3 { color: #E33737; font-size: 18pt; margin: 0 0 4pt 0; }
+.stat-box p { font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>DEG Analysis Results</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>DEG Statistics</h2>
+    <div class="stat-box"><h3>7,583</h3><p>Total Significant DEGs</p></div>
+    <div class="result-card">
+      <h3>Up-regulated</h3>
+      <p>3,892 genes (log2FC &gt; 1, padj &lt; 0.05)</p>
+    </div>
+    <div class="result-card">
+      <h3>Down-regulated</h3>
+      <p>3,691 genes (log2FC &lt; -1, padj &lt; 0.05)</p>
+    </div>
+  </div>
+  <div class="col">
+    <h2>Top DEGs</h2>
+    <div class="result-card">
+      <h3>Top Up-regulated</h3>
+      <p>ESR1, GATA3, FOXA1, AGR2, TFF1</p>
+    </div>
+    <div class="result-card">
+      <h3>Top Down-regulated</h3>
+      <p>KRT14, KRT5, TP63, MYH11, CNN1</p>
+    </div>
+    <div class="result-card">
+      <h3>Known Cancer Genes</h3>
+      <p>ERBB2, MYC, CCND1 identified in DEG list</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

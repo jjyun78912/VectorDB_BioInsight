@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 12pt 25pt;
+  gap: 10pt;
+}
+.step-card {
+  background: #FFFFFF;
+  border-radius: 4pt;
+  padding: 10pt;
+  width: 145pt;
+  border-left: 3pt solid #4E9F3D;
+}
+.step-card h3 {
+  color: #1E5128;
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.step-card p {
+  color: #566573;
+  font-size: 8pt;
+  margin: 0;
+  line-height: 1.3;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Single-cell Pipeline (1-Step)</h1>
+</div>
+<div class="content">
+  <div class="step-card">
+    <h3>QC Filtering</h3>
+    <p>Gene/cell counts, mitochondrial %</p>
+  </div>
+  <div class="step-card">
+    <h3>Normalization</h3>
+    <p>Scanpy normalize_total, log1p</p>
+  </div>
+  <div class="step-card">
+    <h3>HVG Selection</h3>
+    <p>Highly variable genes for PCA</p>
+  </div>
+  <div class="step-card">
+    <h3>Batch Correction</h3>
+    <p>Harmony integration</p>
+  </div>
+  <div class="step-card">
+    <h3>Dimension Reduction</h3>
+    <p>PCA, UMAP, t-SNE</p>
+  </div>
+  <div class="step-card">
+    <h3>Clustering</h3>
+    <p>Leiden algorithm</p>
+  </div>
+  <div class="step-card">
+    <h3>Cell Annotation</h3>
+    <p>CellTypist automated</p>
+  </div>
+  <div class="step-card">
+    <h3>Marker Genes</h3>
+    <p>Wilcoxon rank-sum test</p>
+  </div>
+</div>
+</body>
+</html>

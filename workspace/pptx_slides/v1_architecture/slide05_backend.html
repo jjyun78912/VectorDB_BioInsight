@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 15pt;
+}
+.api-col {
+  flex: 1;
+}
+h2 {
+  color: #1C2833;
+  font-size: 13pt;
+  margin: 0 0 8pt 0;
+}
+.endpoint-group {
+  background: #FFFFFF;
+  padding: 10pt;
+  border-radius: 4pt;
+  margin-bottom: 8pt;
+}
+.endpoint-group h3 {
+  color: #2E4053;
+  font-size: 11pt;
+  margin: 0 0 6pt 0;
+}
+.endpoint {
+  font-family: Courier New, monospace;
+  font-size: 8pt;
+  color: #566573;
+  margin: 3pt 0;
+}
+.endpoint p {
+  margin: 0;
+}
+.tech-note {
+  background: #1C2833;
+  color: #AAB7B8;
+  padding: 10pt;
+  border-radius: 4pt;
+  font-size: 9pt;
+}
+.tech-note p {
+  margin: 0;
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Backend API Layer</h1>
+</div>
+<div class="content">
+  <div class="api-col">
+    <h2>Core API Endpoints</h2>
+    <div class="endpoint-group">
+      <h3>Paper Analysis</h3>
+      <div class="endpoint"><p>POST /api/paper/upload</p></div>
+      <div class="endpoint"><p>POST /api/paper/analyze</p></div>
+      <div class="endpoint"><p>POST /api/chat/ask</p></div>
+    </div>
+    <div class="endpoint-group">
+      <h3>Real-time Search</h3>
+      <div class="endpoint"><p>GET /api/crawler/search</p></div>
+      <div class="endpoint"><p>GET /api/crawler/trending</p></div>
+    </div>
+  </div>
+  <div class="api-col">
+    <h2>RNA-seq API</h2>
+    <div class="endpoint-group">
+      <h3>Analysis Pipeline</h3>
+      <div class="endpoint"><p>POST /api/rnaseq/upload</p></div>
+      <div class="endpoint"><p>POST /api/rnaseq/start/{job}</p></div>
+      <div class="endpoint"><p>GET /api/rnaseq/progress (SSE)</p></div>
+      <div class="endpoint"><p>GET /api/rnaseq/report</p></div>
+    </div>
+    <div class="tech-note">
+      <p>FastAPI async + Uvicorn ASGI + Pydantic + SSE streaming</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

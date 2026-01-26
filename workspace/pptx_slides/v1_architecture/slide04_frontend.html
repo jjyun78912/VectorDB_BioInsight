@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.components {
+  flex: 1;
+}
+.features {
+  flex: 1;
+  background: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+}
+h2 {
+  color: #1C2833;
+  font-size: 14pt;
+  margin: 0 0 10pt 0;
+}
+.comp-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8pt;
+}
+.comp-item {
+  background: #2E4053;
+  color: #FFFFFF;
+  padding: 8pt 10pt;
+  border-radius: 4pt;
+  font-size: 9pt;
+  width: 115pt;
+}
+.comp-item p {
+  margin: 0;
+}
+.features ul {
+  margin: 0;
+  padding-left: 16pt;
+}
+.features li {
+  color: #566573;
+  font-size: 10pt;
+  margin-bottom: 6pt;
+  line-height: 1.3;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Frontend Layer</h1>
+</div>
+<div class="content">
+  <div class="components">
+    <h2>Key Components</h2>
+    <div class="comp-grid">
+      <div class="comp-item"><p>Hero Search</p></div>
+      <div class="comp-item"><p>Knowledge Graph 3D</p></div>
+      <div class="comp-item"><p>Daily Briefing</p></div>
+      <div class="comp-item"><p>RNA-seq Upload</p></div>
+      <div class="comp-item"><p>Trending Papers</p></div>
+      <div class="comp-item"><p>Paper Agent Chat</p></div>
+      <div class="comp-item"><p>Pipeline Progress</p></div>
+      <div class="comp-item"><p>Chat Interface</p></div>
+    </div>
+  </div>
+  <div class="features">
+    <h2>Key Features</h2>
+    <ul>
+      <li>Real-time SSE streaming</li>
+      <li>3D force-directed graph</li>
+      <li>Responsive Tailwind CSS</li>
+      <li>TypeScript type safety</li>
+      <li>Vite fast HMR</li>
+      <li>Modular architecture</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

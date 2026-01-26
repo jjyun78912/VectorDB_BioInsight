@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F9F9; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F9F9; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #277884; padding: 18pt 30pt; }
+.header h1 { color: #FFFFFF; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 15pt; }
+.phase { flex: 1; background: #FFFFFF; padding: 12pt; border-radius: 6pt; }
+.phase h2 { color: #277884; font-size: 12pt; margin: 0 0 8pt 0; }
+.phase h3 { color: #5EA8A7; font-size: 10pt; margin: 8pt 0 4pt 0; }
+.phase p { color: #566573; font-size: 9pt; margin: 0; }
+.done { color: #27AE60; font-size: 8pt; }
+.planned { color: #F39C12; font-size: 8pt; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Roadmap</h1></div>
+<div class="content">
+  <div class="phase">
+    <h2>Completed</h2>
+    <h3>Paper RAG</h3><p class="done">Done</p>
+    <h3>RNA-seq 6-Agent</h3><p class="done">Done</p>
+    <h3>ML Prediction</h3><p class="done">Done</p>
+    <h3>Knowledge Graph</h3><p class="done">Done</p>
+  </div>
+  <div class="phase">
+    <h2>In Progress</h2>
+    <h3>Single-cell Pipeline</h3><p class="planned">Scanpy/CellTypist</p>
+    <h3>Multi-omic Integration</h3><p class="planned">WGS/WES variant</p>
+  </div>
+  <div class="phase">
+    <h2>Planned</h2>
+    <h3>Proteomics</h3><p class="planned">MS data analysis</p>
+    <h3>Drug Discovery</h3><p class="planned">Virtual screening</p>
+    <h3>Clinical Integration</h3><p class="planned">EHR connectivity</p>
+  </div>
+</div>
+</body>
+</html>

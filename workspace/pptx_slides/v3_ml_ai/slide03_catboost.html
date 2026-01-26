@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #181B24; padding: 18pt 30pt; }
+.header h1 { color: #B165FB; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.left-col { flex: 1; }
+.right-col { flex: 1; }
+h2 { color: #181B24; font-size: 13pt; margin: 0 0 10pt 0; }
+.step-box { background: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; border-left: 3pt solid #B165FB; }
+.step-box h3 { color: #181B24; font-size: 10pt; margin: 0 0 4pt 0; }
+.step-box p { color: #566573; font-size: 9pt; margin: 0; }
+.perf-card { background: #B165FB; color: #FFFFFF; padding: 12pt; border-radius: 6pt; margin-bottom: 8pt; }
+.perf-card h3 { font-size: 11pt; margin: 0 0 4pt 0; }
+.perf-card p { font-size: 10pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>CatBoost Cancer Classifier</h1></div>
+<div class="content">
+  <div class="left-col">
+    <h2>Training Pipeline</h2>
+    <div class="step-box"><h3>1. Data</h3><p>TCGA RNA-seq (TPM normalized)</p></div>
+    <div class="step-box"><h3>2. Preprocess</h3><p>log2 transform, standardization</p></div>
+    <div class="step-box"><h3>3. HPO</h3><p>Optuna hyperparameter tuning</p></div>
+    <div class="step-box"><h3>4. Train</h3><p>CatBoost gradient boosting</p></div>
+  </div>
+  <div class="right-col">
+    <h2>Performance</h2>
+    <div class="perf-card"><h3>Pan-Cancer (17 types)</h3><p>AUC: 0.988 | 11,000+ samples</p></div>
+    <div class="perf-card"><h3>Breast Cancer (BRCA)</h3><p>AUC: 0.998 | 1,222 samples</p></div>
+  </div>
+</div>
+</body>
+</html>

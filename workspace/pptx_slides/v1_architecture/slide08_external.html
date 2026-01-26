@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 12pt 25pt;
+  gap: 10pt;
+}
+.service-card {
+  background: #FFFFFF;
+  border-radius: 4pt;
+  padding: 8pt 10pt;
+  width: 150pt;
+}
+.service-card h3 {
+  color: #1C2833;
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.service-card p {
+  color: #566573;
+  font-size: 8pt;
+  margin: 0;
+  line-height: 1.3;
+}
+.category-label {
+  color: #5DADE2;
+  font-size: 7pt;
+  margin: 0 0 4pt 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>External Services</h1>
+</div>
+<div class="content">
+  <div class="service-card">
+    <p class="category-label">LLM</p>
+    <h3>Claude API</h3>
+    <p>Primary for RAG, reports</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">LLM</p>
+    <h3>OpenAI</h3>
+    <p>gpt-4o-mini, fast queries</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">LITERATURE</p>
+    <h3>PubMed</h3>
+    <p>E-utilities paper search</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">LITERATURE</p>
+    <h3>Semantic Scholar</h3>
+    <p>Citation data, scoring</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">CANCER DB</p>
+    <h3>COSMIC</h3>
+    <p>Cancer Gene Census</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">CANCER DB</p>
+    <h3>OncoKB</h3>
+    <p>Actionable genes, drugs</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">GENOMICS</p>
+    <h3>TCGA GDC</h3>
+    <p>Reference cancer data</p>
+  </div>
+  <div class="service-card">
+    <p class="category-label">PATHWAY</p>
+    <h3>Enrichr</h3>
+    <p>GO/KEGG enrichment</p>
+  </div>
+</div>
+</body>
+</html>

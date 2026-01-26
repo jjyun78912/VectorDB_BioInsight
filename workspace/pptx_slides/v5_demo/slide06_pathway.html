@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; background: #FFFFFF; padding: 12pt; border-radius: 6pt; }
+.col h2 { color: #292929; font-size: 12pt; margin: 0 0 10pt 0; }
+.pathway-item { border-left: 3pt solid #E33737; padding-left: 8pt; margin-bottom: 8pt; }
+.pathway-item h3 { color: #292929; font-size: 9pt; margin: 0 0 2pt 0; }
+.pathway-item p { color: #566573; font-size: 8pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Pathway Enrichment Results</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>GO Biological Process</h2>
+    <div class="pathway-item"><h3>Cell cycle regulation</h3><p>FDR: 1.2e-15</p></div>
+    <div class="pathway-item"><h3>DNA replication</h3><p>FDR: 3.4e-12</p></div>
+    <div class="pathway-item"><h3>Mitotic nuclear division</h3><p>FDR: 8.7e-11</p></div>
+    <div class="pathway-item"><h3>Chromosome segregation</h3><p>FDR: 2.1e-10</p></div>
+    <div class="pathway-item"><h3>Cell proliferation</h3><p>FDR: 5.6e-09</p></div>
+  </div>
+  <div class="col">
+    <h2>KEGG Pathways</h2>
+    <div class="pathway-item"><h3>Cell cycle</h3><p>FDR: 4.5e-14</p></div>
+    <div class="pathway-item"><h3>p53 signaling pathway</h3><p>FDR: 1.8e-08</p></div>
+    <div class="pathway-item"><h3>DNA replication</h3><p>FDR: 3.2e-07</p></div>
+    <div class="pathway-item"><h3>PI3K-Akt signaling</h3><p>FDR: 7.9e-06</p></div>
+    <div class="pathway-item"><h3>Estrogen signaling</h3><p>FDR: 2.3e-05</p></div>
+  </div>
+</div>
+</body>
+</html>

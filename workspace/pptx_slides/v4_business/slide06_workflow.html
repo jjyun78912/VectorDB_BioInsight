@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F9F9; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F9F9; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #277884; padding: 18pt 30pt; }
+.header h1 { color: #FFFFFF; font-size: 26pt; margin: 0; }
+.content { padding: 15pt 25pt; }
+h2 { color: #277884; font-size: 14pt; margin: 0 0 12pt 0; }
+.workflow { display: flex; align-items: center; gap: 8pt; }
+.step { background: #FFFFFF; padding: 12pt 15pt; border-radius: 6pt; text-align: center; flex: 1; }
+.step h3 { color: #277884; font-size: 10pt; margin: 0 0 4pt 0; }
+.step p { color: #566573; font-size: 8pt; margin: 0; }
+.arrow { color: #5EA8A7; font-size: 16pt; }
+</style>
+</head>
+<body>
+<div class="header"><h1>User Workflow</h1></div>
+<div class="content">
+  <h2>From Data to Insights in Minutes</h2>
+  <div class="workflow">
+    <div class="step"><h3>Upload</h3><p>count_matrix.csv + metadata.csv</p></div>
+    <p class="arrow">→</p>
+    <div class="step"><h3>Process</h3><p>6-Agent pipeline runs</p></div>
+    <p class="arrow">→</p>
+    <div class="step"><h3>Analyze</h3><p>DEG, Pathway, Network</p></div>
+    <p class="arrow">→</p>
+    <div class="step"><h3>Interpret</h3><p>RAG literature context</p></div>
+    <p class="arrow">→</p>
+    <div class="step"><h3>Report</h3><p>Interactive HTML output</p></div>
+  </div>
+</div>
+</body>
+</html>

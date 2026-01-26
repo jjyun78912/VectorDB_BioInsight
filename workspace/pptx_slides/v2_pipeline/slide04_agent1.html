@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.left-col {
+  flex: 1;
+}
+.right-col {
+  flex: 1;
+}
+h2 {
+  color: #1E5128;
+  font-size: 13pt;
+  margin: 0 0 10pt 0;
+}
+.step-box {
+  background: #FFFFFF;
+  padding: 10pt;
+  border-radius: 4pt;
+  margin-bottom: 8pt;
+  border-left: 3pt solid #4E9F3D;
+}
+.step-box h3 {
+  color: #1E5128;
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.step-box p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+}
+.output-box {
+  background: #4E9F3D;
+  color: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+}
+.output-box h3 {
+  font-size: 11pt;
+  margin: 0 0 8pt 0;
+}
+.output-box p {
+  font-size: 9pt;
+  margin: 4pt 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Agent 1: DEG Analysis</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>Analysis Steps</h2>
+    <div class="step-box">
+      <h3>1. Data Loading</h3>
+      <p>count_matrix.csv + metadata.csv input</p>
+    </div>
+    <div class="step-box">
+      <h3>2. DESeq2 Normalization</h3>
+      <p>Size factor estimation, dispersion</p>
+    </div>
+    <div class="step-box">
+      <h3>3. apeglm Shrinkage</h3>
+      <p>Log fold change shrinkage for stability</p>
+    </div>
+    <div class="step-box">
+      <h3>4. Filtering</h3>
+      <p>|log2FC| &gt; 1, padj &lt; 0.05</p>
+    </div>
+  </div>
+  <div class="right-col">
+    <h2>Output</h2>
+    <div class="output-box">
+      <h3>deg_significant.csv</h3>
+      <p>Gene symbol, log2FC, pvalue, padj</p>
+      <p>baseMean, stat, lfcSE</p>
+      <p>Typical: 5,000-10,000 DEGs</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

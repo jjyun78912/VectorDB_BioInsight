@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.agent-col {
+  flex: 1;
+  background: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+  border-top: 3pt solid #4E9F3D;
+}
+.agent-col h2 {
+  color: #1E5128;
+  font-size: 13pt;
+  margin: 0 0 10pt 0;
+}
+.agent-col h3 {
+  color: #4E9F3D;
+  font-size: 10pt;
+  margin: 10pt 0 4pt 0;
+}
+.agent-col p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Agent 5-6: Visualization and Report</h1>
+</div>
+<div class="content">
+  <div class="agent-col">
+    <h2>Agent 5: Visualization</h2>
+    <h3>Static Plots</h3>
+    <p>Volcano plot, Expression heatmap, Pathway barplot, PCA plot</p>
+    <h3>Interactive</h3>
+    <p>3D Network visualization with Plotly, Hub gene connections</p>
+    <h3>Output</h3>
+    <p>16 figures in figures/ directory</p>
+  </div>
+  <div class="agent-col">
+    <h2>Agent 6: Report Generation</h2>
+    <h3>Extended Abstract</h3>
+    <p>Claude Opus 4 for narrative summary</p>
+    <h3>Research Recommendations</h3>
+    <p>Therapeutic targets, Drug repurposing, Validation protocols</p>
+    <h3>Output</h3>
+    <p>Interactive HTML report (~11MB)</p>
+  </div>
+</div>
+</body>
+</html>

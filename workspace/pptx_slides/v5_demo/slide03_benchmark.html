@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { padding: 12pt 25pt; }
+h2 { color: #292929; font-size: 13pt; margin: 0 0 10pt 0; }
+.bench-table { background: #FFFFFF; border-radius: 6pt; padding: 10pt; }
+.bench-row { display: flex; padding: 6pt 0; border-bottom: 1pt solid #E8E8E8; }
+.bench-row:last-child { border-bottom: none; }
+.bench-cell { flex: 1; }
+.bench-cell p { margin: 0; font-size: 9pt; color: #566573; }
+.bench-header .bench-cell p { color: #292929; font-weight: bold; }
+.total { background: #E33737; color: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-top: 10pt; text-align: center; }
+.total p { margin: 0; font-size: 12pt; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Pipeline Benchmark</h1></div>
+<div class="content">
+  <h2>Execution Time by Agent</h2>
+  <div class="bench-table">
+    <div class="bench-row bench-header">
+      <div class="bench-cell"><p>Agent</p></div>
+      <div class="bench-cell"><p>Time</p></div>
+      <div class="bench-cell"><p>Output</p></div>
+    </div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 1 (DEG)</p></div><div class="bench-cell"><p>~30 sec</p></div><div class="bench-cell"><p>7,583 DEGs identified</p></div></div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 2 (Network)</p></div><div class="bench-cell"><p>~2 min</p></div><div class="bench-cell"><p>3.38M edges, 20 hub genes</p></div></div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 3 (Pathway)</p></div><div class="bench-cell"><p>~22 sec</p></div><div class="bench-cell"><p>66 enriched terms</p></div></div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 4 (Validation)</p></div><div class="bench-cell"><p>~2 min</p></div><div class="bench-cell"><p>20 RAG interpretations</p></div></div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 5 (Visualization)</p></div><div class="bench-cell"><p>~2 min</p></div><div class="bench-cell"><p>16 publication figures</p></div></div>
+    <div class="bench-row"><div class="bench-cell"><p>Agent 6 (Report)</p></div><div class="bench-cell"><p>~1 min</p></div><div class="bench-cell"><p>11MB interactive HTML</p></div></div>
+  </div>
+  <div class="total"><p>Total: ~8 minutes for complete analysis</p></div>
+</div>
+</body>
+</html>

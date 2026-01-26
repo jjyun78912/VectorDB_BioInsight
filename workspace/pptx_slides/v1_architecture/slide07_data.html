@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 15pt;
+}
+.data-col {
+  flex: 1;
+}
+h2 {
+  color: #1C2833;
+  font-size: 13pt;
+  margin: 0 0 8pt 0;
+}
+.db-card {
+  background: #FFFFFF;
+  padding: 10pt;
+  border-radius: 4pt;
+  margin-bottom: 8pt;
+  border-left: 3pt solid #2E4053;
+}
+.db-card h3 {
+  color: #1C2833;
+  font-size: 11pt;
+  margin: 0 0 4pt 0;
+}
+.db-card p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.3;
+}
+.stats-box {
+  background: #2E4053;
+  color: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+}
+.stats-box h3 {
+  font-size: 12pt;
+  margin: 0 0 8pt 0;
+}
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  margin: 4pt 0;
+}
+.stat-item p {
+  margin: 0;
+  font-size: 10pt;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Data Layer</h1>
+</div>
+<div class="content">
+  <div class="data-col">
+    <h2>Storage Systems</h2>
+    <div class="db-card">
+      <h3>ChromaDB</h3>
+      <p>PubMedBERT 768-dim, 17 cancer collections, 53K+ chunks</p>
+    </div>
+    <div class="db-card">
+      <h3>PostgreSQL</h3>
+      <p>User data, sessions, paper metadata, analysis history</p>
+    </div>
+    <div class="db-card">
+      <h3>File Storage</h3>
+      <p>PDFs, RNA-seq files, reports, visualizations</p>
+    </div>
+  </div>
+  <div class="data-col">
+    <h2>Vector DB Stats</h2>
+    <div class="stats-box">
+      <h3>Paper Collections</h3>
+      <div class="stat-item">
+        <p>Cancer Types</p>
+        <p>17</p>
+      </div>
+      <div class="stat-item">
+        <p>Total Papers</p>
+        <p>~850</p>
+      </div>
+      <div class="stat-item">
+        <p>Total Chunks</p>
+        <p>53,000+</p>
+      </div>
+      <div class="stat-item">
+        <p>Embedding</p>
+        <p>PubMedBERT</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

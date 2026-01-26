@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.left-col {
+  flex: 1;
+}
+.right-col {
+  flex: 1;
+}
+h2 {
+  color: #1E5128;
+  font-size: 14pt;
+  margin: 0 0 10pt 0;
+}
+.detect-box {
+  background: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+  border-left: 4pt solid #4E9F3D;
+  margin-bottom: 10pt;
+}
+.detect-box h3 {
+  color: #1E5128;
+  font-size: 11pt;
+  margin: 0 0 6pt 0;
+}
+.detect-box p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.4;
+}
+.route-card {
+  background: #4E9F3D;
+  color: #FFFFFF;
+  padding: 12pt;
+  border-radius: 6pt;
+  margin-bottom: 8pt;
+}
+.route-card h3 {
+  font-size: 12pt;
+  margin: 0 0 4pt 0;
+}
+.route-card p {
+  font-size: 9pt;
+  margin: 0;
+  opacity: 0.9;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Pipeline Overview</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>Automatic Data Detection</h2>
+    <div class="detect-box">
+      <h3>Matrix Shape Analysis</h3>
+      <p>genes x samples (rows x cols) determines data type</p>
+    </div>
+    <div class="detect-box">
+      <h3>Bulk RNA-seq</h3>
+      <p>20,000 genes x 6-100 samples</p>
+    </div>
+    <div class="detect-box">
+      <h3>Single-cell RNA-seq</h3>
+      <p>20,000 genes x 1,000+ cells</p>
+    </div>
+  </div>
+  <div class="right-col">
+    <h2>Pipeline Routing</h2>
+    <div class="route-card">
+      <h3>Bulk: 2-Step Process</h3>
+      <p>Step 1: DEG Analysis, Step 2: Interpretation</p>
+    </div>
+    <div class="route-card">
+      <h3>Single-cell: 1-Step Process</h3>
+      <p>QC - Clustering - Annotation - Report</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 12pt 25pt;
+  gap: 10pt;
+}
+.feature-card {
+  background: #FFFFFF;
+  border-radius: 6pt;
+  padding: 10pt;
+  width: 310pt;
+  border-top: 3pt solid #5DADE2;
+}
+.feature-card h3 {
+  color: #1C2833;
+  font-size: 12pt;
+  margin: 0 0 6pt 0;
+}
+.feature-card p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.4;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Core Features</h1>
+</div>
+<div class="content">
+  <div class="feature-card">
+    <h3>Paper Search and RAG</h3>
+    <p>ChromaDB vector search with PubMedBERT. Local DB + real-time PubMed search with KO-EN translation.</p>
+  </div>
+  <div class="feature-card">
+    <h3>RNA-seq Analysis</h3>
+    <p>6-Agent pipeline: DEG, Network, Pathway, Validation, Visualization, Report generation.</p>
+  </div>
+  <div class="feature-card">
+    <h3>Knowledge Graph</h3>
+    <p>3D visualization with react-force-graph-3d. Papers, genes, diseases, pathways.</p>
+  </div>
+  <div class="feature-card">
+    <h3>Daily Briefing</h3>
+    <p>Auto newsletter from FDA, ClinicalTrials, bioRxiv, PubMed. Scheduled 6 AM weekdays.</p>
+  </div>
+</div>
+</body>
+</html>

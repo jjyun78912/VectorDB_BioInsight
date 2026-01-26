@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #1C2833; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #1C2833; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 40pt 50pt;
+}
+h1 {
+  color: #FFFFFF;
+  font-size: 32pt;
+  margin: 0 0 25pt 0;
+}
+.summary-grid {
+  display: flex;
+  gap: 20pt;
+}
+.summary-item {
+  flex: 1;
+  background: rgba(255,255,255,0.1);
+  padding: 20pt;
+  border-radius: 6pt;
+  border-left: 4pt solid #5DADE2;
+}
+.summary-item h3 {
+  color: #5DADE2;
+  font-size: 14pt;
+  margin: 0 0 10pt 0;
+}
+.summary-item p {
+  color: #AAB7B8;
+  font-size: 11pt;
+  margin: 0;
+  line-height: 1.5;
+}
+.bottom-note {
+  margin-top: 30pt;
+  text-align: center;
+}
+.bottom-note p {
+  color: #AAB7B8;
+  font-size: 12pt;
+  margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="content">
+  <h1>Architecture Summary</h1>
+  <div class="summary-grid">
+    <div class="summary-item">
+      <h3>Scalable</h3>
+      <p>Modular 4-layer architecture with clear separation of concerns</p>
+    </div>
+    <div class="summary-item">
+      <h3>AI-First</h3>
+      <p>LLM fallback chain, RAG-based interpretation, ML predictions</p>
+    </div>
+    <div class="summary-item">
+      <h3>Real-time</h3>
+      <p>SSE streaming, live search, async processing</p>
+    </div>
+  </div>
+  <div class="bottom-note">
+    <p>BioInsight AI - Empowering Biomedical Research with AI</p>
+  </div>
+</div>
+</body>
+</html>

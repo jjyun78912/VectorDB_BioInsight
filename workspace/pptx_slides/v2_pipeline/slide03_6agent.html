@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 12pt 20pt;
+  gap: 8pt;
+  justify-content: center;
+}
+.agent-card {
+  background: #FFFFFF;
+  border-radius: 6pt;
+  padding: 10pt;
+  width: 200pt;
+  border-top: 3pt solid #4E9F3D;
+}
+.agent-num {
+  color: #4E9F3D;
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.agent-card h3 {
+  color: #1E5128;
+  font-size: 12pt;
+  margin: 0 0 6pt 0;
+}
+.agent-card p {
+  color: #566573;
+  font-size: 8pt;
+  margin: 0;
+  line-height: 1.3;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>6-Agent Pipeline</h1>
+</div>
+<div class="content">
+  <div class="agent-card">
+    <p class="agent-num">AGENT 1</p>
+    <h3>DEG Analysis</h3>
+    <p>DESeq2 normalization, apeglm shrinkage, |log2FC| &gt; 1, padj &lt; 0.05</p>
+  </div>
+  <div class="agent-card">
+    <p class="agent-num">AGENT 2</p>
+    <h3>Network Analysis</h3>
+    <p>Spearman correlation, Hub gene centrality, NetworkX graph</p>
+  </div>
+  <div class="agent-card">
+    <p class="agent-num">AGENT 3</p>
+    <h3>Pathway Enrichment</h3>
+    <p>Enrichr API, GO/KEGG terms, FDR &lt; 0.05 filtering</p>
+  </div>
+  <div class="agent-card">
+    <p class="agent-num">AGENT 4</p>
+    <h3>DB Validation</h3>
+    <p>COSMIC, OncoKB matching, RAG literature interpretation</p>
+  </div>
+  <div class="agent-card">
+    <p class="agent-num">AGENT 5</p>
+    <h3>Visualization</h3>
+    <p>Volcano, Heatmap, 3D Network, Pathway barplot</p>
+  </div>
+  <div class="agent-card">
+    <p class="agent-num">AGENT 6</p>
+    <h3>Report Generation</h3>
+    <p>Interactive HTML, Extended Abstract, Research Recommendations</p>
+  </div>
+</div>
+</body>
+</html>

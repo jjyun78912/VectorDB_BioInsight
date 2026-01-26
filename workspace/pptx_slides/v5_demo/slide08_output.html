@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; flex-wrap: wrap; padding: 12pt 25pt; gap: 10pt; }
+.output-card { background: #FFFFFF; padding: 10pt; border-radius: 4pt; width: 200pt; border-top: 3pt solid #E33737; }
+.output-card h3 { color: #292929; font-size: 10pt; margin: 0 0 4pt 0; }
+.output-card p { color: #566573; font-size: 8pt; margin: 0; line-height: 1.3; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Pipeline Outputs</h1></div>
+<div class="content">
+  <div class="output-card"><h3>deg_significant.csv</h3><p>7,583 genes with log2FC, pvalue, padj</p></div>
+  <div class="output-card"><h3>hub_genes.csv</h3><p>20 hub genes with centrality scores</p></div>
+  <div class="output-card"><h3>pathway_summary.csv</h3><p>66 enriched GO/KEGG terms</p></div>
+  <div class="output-card"><h3>integrated_gene_table.csv</h3><p>Combined analysis with Entrez IDs</p></div>
+  <div class="output-card"><h3>volcano_plot.png</h3><p>Up/down regulated visualization</p></div>
+  <div class="output-card"><h3>heatmap.png</h3><p>Top 50 DEGs expression</p></div>
+  <div class="output-card"><h3>network_3d.html</h3><p>Interactive Plotly network</p></div>
+  <div class="output-card"><h3>report.html</h3><p>11MB interactive final report</p></div>
+  <div class="output-card"><h3>research_recommendations.json</h3><p>LLM-generated research directions</p></div>
+</div>
+</body>
+</html>

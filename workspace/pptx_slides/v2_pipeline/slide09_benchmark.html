@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  padding: 15pt 25pt;
+}
+h2 {
+  color: #1E5128;
+  font-size: 14pt;
+  margin: 0 0 12pt 0;
+}
+.bench-table {
+  background: #FFFFFF;
+  border-radius: 6pt;
+  padding: 12pt;
+}
+.bench-row {
+  display: flex;
+  padding: 6pt 0;
+  border-bottom: 1pt solid #E8E8E8;
+}
+.bench-row:last-child {
+  border-bottom: none;
+}
+.bench-cell {
+  flex: 1;
+}
+.bench-cell p {
+  margin: 0;
+  font-size: 10pt;
+  color: #566573;
+}
+.bench-header .bench-cell p {
+  color: #1E5128;
+  font-weight: bold;
+}
+.total-row {
+  background: #4E9F3D;
+  border-radius: 4pt;
+  margin-top: 8pt;
+  padding: 8pt 12pt;
+}
+.total-row p {
+  color: #FFFFFF;
+  font-size: 11pt;
+  margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Performance Benchmarks</h1>
+</div>
+<div class="content">
+  <h2>TCGA-BRCA (50 samples, 7.5K genes)</h2>
+  <div class="bench-table">
+    <div class="bench-row bench-header">
+      <div class="bench-cell"><p>Agent</p></div>
+      <div class="bench-cell"><p>Time</p></div>
+      <div class="bench-cell"><p>Output</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 1 (DEG)</p></div>
+      <div class="bench-cell"><p>~30s</p></div>
+      <div class="bench-cell"><p>7,583 DEGs</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 2 (Network)</p></div>
+      <div class="bench-cell"><p>~2min</p></div>
+      <div class="bench-cell"><p>3.38M edges</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 3 (Pathway)</p></div>
+      <div class="bench-cell"><p>~22s</p></div>
+      <div class="bench-cell"><p>66 terms</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 4 (Validation)</p></div>
+      <div class="bench-cell"><p>~2min</p></div>
+      <div class="bench-cell"><p>20 RAG interp</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 5 (Viz)</p></div>
+      <div class="bench-cell"><p>~2min</p></div>
+      <div class="bench-cell"><p>16 figures</p></div>
+    </div>
+    <div class="bench-row">
+      <div class="bench-cell"><p>Agent 6 (Report)</p></div>
+      <div class="bench-cell"><p>~1min</p></div>
+      <div class="bench-cell"><p>11MB HTML</p></div>
+    </div>
+  </div>
+  <div class="total-row">
+    <p>Total Pipeline: ~8 minutes for complete analysis</p>
+  </div>
+</div>
+</body>
+</html>

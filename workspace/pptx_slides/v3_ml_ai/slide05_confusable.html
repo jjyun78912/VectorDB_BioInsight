@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #181B24; padding: 18pt 30pt; }
+.header h1 { color: #B165FB; font-size: 26pt; margin: 0; }
+.content { padding: 15pt 25pt; }
+h2 { color: #181B24; font-size: 13pt; margin: 0 0 10pt 0; }
+.pair-grid { display: flex; flex-wrap: wrap; gap: 10pt; }
+.pair-card { background: #FFFFFF; padding: 10pt; border-radius: 4pt; width: 200pt; border-left: 3pt solid #40695B; }
+.pair-card h3 { color: #181B24; font-size: 10pt; margin: 0 0 4pt 0; }
+.pair-card p { color: #566573; font-size: 8pt; margin: 0; }
+.note { background: #181B24; color: #B165FB; padding: 10pt; border-radius: 4pt; margin-top: 12pt; font-size: 9pt; }
+.note p { margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>Confusable Cancer Pairs</h1></div>
+<div class="content">
+  <h2>Biologically Similar Cancer Types</h2>
+  <div class="pair-grid">
+    <div class="pair-card"><h3>Squamous Cell (SCC)</h3><p>HNSC - LUSC - SKCM (same histology)</p></div>
+    <div class="pair-card"><h3>Adenocarcinoma</h3><p>LUAD - PAAD (gland tissue origin)</p></div>
+    <div class="pair-card"><h3>GI Tract</h3><p>COAD - STAD (digestive system)</p></div>
+    <div class="pair-card"><h3>Gynecologic</h3><p>OV - UCEC (Mullerian origin)</p></div>
+    <div class="pair-card"><h3>Brain Tumors</h3><p>GBM - LGG (neural tissue)</p></div>
+    <div class="pair-card"><h3>Renal/Liver</h3><p>KIRC - LIHC (metabolic organs)</p></div>
+  </div>
+  <div class="note"><p>Secondary validation: confidence gap analysis + tissue-specific marker expression check</p></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F8FFF8; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F8FFF8; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1E5128;
+  padding: 18pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 26pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  padding: 15pt 25pt;
+  gap: 20pt;
+}
+.left-col {
+  flex: 1;
+}
+.right-col {
+  flex: 1;
+}
+h2 {
+  color: #1E5128;
+  font-size: 13pt;
+  margin: 0 0 10pt 0;
+}
+.opt-box {
+  background: #FFFFFF;
+  padding: 10pt;
+  border-radius: 4pt;
+  margin-bottom: 8pt;
+}
+.opt-box h3 {
+  color: #1E5128;
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.opt-box p {
+  color: #566573;
+  font-size: 9pt;
+  margin: 0;
+  line-height: 1.4;
+}
+.perf-card {
+  background: #4E9F3D;
+  color: #FFFFFF;
+  padding: 10pt;
+  border-radius: 6pt;
+  margin-bottom: 8pt;
+}
+.perf-card h3 {
+  font-size: 10pt;
+  margin: 0 0 4pt 0;
+}
+.perf-card p {
+  font-size: 9pt;
+  margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Agent 2: Network Analysis</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>Optimization Strategies</h2>
+    <div class="opt-box">
+      <h3>Vectorized Correlation</h3>
+      <p>numpy matrix ops instead of loops (100x faster)</p>
+    </div>
+    <div class="opt-box">
+      <h3>Adaptive Centrality</h3>
+      <p>Dense graph: weighted degree, Large: k-sampling, Small: exact betweenness</p>
+    </div>
+    <div class="opt-box">
+      <h3>Graph Building</h3>
+      <p>from_pandas_edgelist() vectorized (10x faster)</p>
+    </div>
+  </div>
+  <div class="right-col">
+    <h2>Performance (BRCA 50 samples)</h2>
+    <div class="perf-card">
+      <h3>Input</h3>
+      <p>7,583 DEGs, 7.5K genes</p>
+    </div>
+    <div class="perf-card">
+      <h3>Output</h3>
+      <p>3.38M edges, 20 hub genes</p>
+    </div>
+    <div class="perf-card">
+      <h3>Time</h3>
+      <p>~2 minutes total</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

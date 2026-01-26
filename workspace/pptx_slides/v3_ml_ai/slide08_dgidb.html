@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #181B24; padding: 18pt 30pt; }
+.header h1 { color: #B165FB; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; background: #FFFFFF; padding: 12pt; border-radius: 6pt; }
+.col h2 { color: #181B24; font-size: 13pt; margin: 0 0 10pt 0; }
+.col h3 { color: #B165FB; font-size: 10pt; margin: 10pt 0 4pt 0; }
+.col p { color: #566573; font-size: 9pt; margin: 0; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="header"><h1>DGIdb Drug-Gene Integration</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>API Features</h2>
+    <h3>Drug-Gene Interactions</h3>
+    <p>Interaction types, scores, evidence</p>
+    <h3>Gene Categories</h3>
+    <p>KINASE, RECEPTOR, DRUGGABLE</p>
+    <h3>FDA Approval Status</h3>
+    <p>Approved drugs flagged</p>
+  </div>
+  <div class="col">
+    <h2>Data Sources</h2>
+    <h3>Primary</h3>
+    <p>DrugBank, PharmGKB, ChEMBL</p>
+    <h3>Oncology</h3>
+    <p>OncoKB, CIViC, Cancer Commons</p>
+    <h3>Output</h3>
+    <p>Therapeutic targets with PMIDs</p>
+  </div>
+</div>
+</body>
+</html>

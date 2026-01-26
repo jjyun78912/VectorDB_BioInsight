@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F5F5F5; }
+body { width: 720pt; height: 405pt; margin: 0; padding: 0; background: #F5F5F5; font-family: Arial, sans-serif; display: flex; flex-direction: column; }
+.header { background: #292929; padding: 18pt 30pt; }
+.header h1 { color: #E33737; font-size: 26pt; margin: 0; }
+.content { display: flex; padding: 15pt 25pt; gap: 20pt; }
+.col { flex: 1; }
+h2 { color: #292929; font-size: 13pt; margin: 0 0 10pt 0; }
+.perf-card { background: #E33737; color: #FFFFFF; padding: 15pt; border-radius: 6pt; margin-bottom: 12pt; text-align: center; }
+.perf-card h3 { font-size: 28pt; margin: 0 0 4pt 0; }
+.perf-card p { font-size: 11pt; margin: 0; }
+.model-card { background: #FFFFFF; padding: 10pt; border-radius: 4pt; margin-bottom: 8pt; }
+.model-card h3 { color: #292929; font-size: 10pt; margin: 0 0 4pt 0; }
+.model-card p { color: #566573; font-size: 9pt; margin: 0; }
+</style>
+</head>
+<body>
+<div class="header"><h1>ML Prediction Performance</h1></div>
+<div class="content">
+  <div class="col">
+    <h2>Model Performance</h2>
+    <div class="perf-card"><h3>0.998</h3><p>AUC (Breast Cancer)</p></div>
+    <div class="perf-card"><h3>0.988</h3><p>AUC (Pan-Cancer 17)</p></div>
+  </div>
+  <div class="col">
+    <h2>Model Details</h2>
+    <div class="model-card"><h3>Algorithm</h3><p>CatBoost gradient boosting</p></div>
+    <div class="model-card"><h3>Training Data</h3><p>TCGA 11,000+ samples</p></div>
+    <div class="model-card"><h3>Hyperparameter</h3><p>Optuna 100 trials optimization</p></div>
+    <div class="model-card"><h3>Explainability</h3><p>SHAP waterfall plots</p></div>
+  </div>
+</div>
+</body>
+</html>
