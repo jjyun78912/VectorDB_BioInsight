@@ -40,7 +40,6 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             'react-vendor': ['react', 'react-dom'],
             'chart-vendor': ['recharts'],
-            '3d-vendor': ['three', 'react-force-graph-3d'],
           }
         }
       }
