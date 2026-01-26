@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 20pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 28pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 20pt 30pt;
+  gap: 15pt;
+}
+.tech-card {
+  background: #FFFFFF;
+  border-radius: 6pt;
+  padding: 15pt;
+  width: 200pt;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+}
+.tech-card h3 {
+  color: #1C2833;
+  font-size: 13pt;
+  margin: 0 0 10pt 0;
+  border-bottom: 2pt solid #5DADE2;
+  padding-bottom: 8pt;
+}
+.tech-card p {
+  color: #566573;
+  font-size: 10pt;
+  margin: 0;
+  line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Technology Stack</h1>
+</div>
+<div class="content">
+  <div class="tech-card">
+    <h3>Frontend</h3>
+    <p>React 18+, Vite, TypeScript, Tailwind CSS, 3d-force-graph</p>
+  </div>
+  <div class="tech-card">
+    <h3>Backend</h3>
+    <p>Python 3.11+, FastAPI, Uvicorn, Pydantic</p>
+  </div>
+  <div class="tech-card">
+    <h3>AI / LLM</h3>
+    <p>OpenAI (gpt-4o-mini), Claude API, Vertex AI (fallback chain)</p>
+  </div>
+  <div class="tech-card">
+    <h3>Vector DB</h3>
+    <p>ChromaDB, PubMedBERT embeddings (768-dim)</p>
+  </div>
+  <div class="tech-card">
+    <h3>Database</h3>
+    <p>PostgreSQL, File Storage (PDF, CSV)</p>
+  </div>
+  <div class="tech-card">
+    <h3>RNA-seq</h3>
+    <p>DESeq2 (R), Scanpy, CatBoost, SHAP, NetworkX</p>
+  </div>
+  <div class="tech-card">
+    <h3>Visualization</h3>
+    <p>Plotly, D3.js, react-force-graph-3d</p>
+  </div>
+  <div class="tech-card">
+    <h3>External APIs</h3>
+    <p>PubMed, COSMIC, OncoKB, TCGA GDC, Enrichr</p>
+  </div>
+</div>
+</body>
+</html>

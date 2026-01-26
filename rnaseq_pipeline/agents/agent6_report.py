@@ -1072,6 +1072,19 @@ class ReportAgent(BaseAgent):
         </section>
         '''
 
+    def _get_driver_disclaimer_html(self) -> str:
+        """Return driver disclaimer HTML (extracted for Python 3.11 compatibility)."""
+        return '''
+            <div class="driver-disclaimer">
+                <span class="disclaimer-icon">[!]</span>
+                <div class="disclaimer-text">
+                    <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
+                    후보 조절자는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
+                    실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
+                </div>
+            </div>
+            '''
+
     def _generate_driver_analysis_html(self, data: Dict) -> str:
         """Generate Driver Gene Analysis section (Known + Candidate Regulator tracks).
 
@@ -1293,16 +1306,7 @@ class ReportAgent(BaseAgent):
                 </div>
             </div>
 
-            {self._generate_multiomic_section_html(data) if has_multiomic else '''
-            <div class="driver-disclaimer">
-                <span class="disclaimer-icon">[!]</span>
-                <div class="disclaimer-text">
-                    <strong>주의사항:</strong> RNA-seq 데이터만으로는 Driver 유전자를 확정할 수 없습니다.
-                    후보 조절자는 "확정된 driver"가 아닌 "추가 검증이 필요한 후보"입니다.
-                    실제 돌연변이 확인을 위해서는 WES/WGS 또는 Targeted NGS가 필요합니다.
-                </div>
-            </div>
-            '''}
+            {self._generate_multiomic_section_html(data) if has_multiomic else self._get_driver_disclaimer_html()}
         </section>
         '''
 

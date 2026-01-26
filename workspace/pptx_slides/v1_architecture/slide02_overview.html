@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #F4F6F6; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #F4F6F6; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #1C2833;
+  padding: 20pt 30pt;
+}
+.header h1 {
+  color: #FFFFFF;
+  font-size: 28pt;
+  margin: 0;
+}
+.content {
+  display: flex;
+  flex: 1;
+  padding: 25pt 30pt;
+  gap: 20pt;
+}
+.left-col {
+  flex: 1;
+}
+.right-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 15pt;
+}
+.layer-box {
+  background: #FFFFFF;
+  border-left: 5pt solid #2E4053;
+  padding: 12pt 15pt;
+  border-radius: 4pt;
+}
+.layer-box h3 {
+  color: #1C2833;
+  font-size: 14pt;
+  margin: 0 0 8pt 0;
+}
+.layer-box p {
+  color: #566573;
+  font-size: 11pt;
+  margin: 0;
+  line-height: 1.4;
+}
+h2 {
+  color: #1C2833;
+  font-size: 18pt;
+  margin: 0 0 15pt 0;
+}
+.arch-desc {
+  color: #2E4053;
+  font-size: 12pt;
+  line-height: 1.6;
+  margin: 0 0 15pt 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>System Architecture Overview</h1>
+</div>
+<div class="content">
+  <div class="left-col">
+    <h2>4-Layer Architecture</h2>
+    <p class="arch-desc">BioInsight AI is built on a modern, scalable architecture designed for biomedical research workflows. The system separates concerns across presentation, API, business logic, and data layers.</p>
+    <p class="arch-desc">Key design principles: Modularity, Scalability, Real-time Processing, and AI-First approach.</p>
+  </div>
+  <div class="right-col">
+    <div class="layer-box">
+      <h3>Frontend Layer</h3>
+      <p>React + Vite + TypeScript + Tailwind CSS</p>
+    </div>
+    <div class="layer-box">
+      <h3>API Layer</h3>
+      <p>FastAPI + REST + SSE Streaming</p>
+    </div>
+    <div class="layer-box">
+      <h3>Core Features</h3>
+      <p>Paper RAG, RNA-seq Pipeline, Knowledge Graph</p>
+    </div>
+    <div class="layer-box">
+      <h3>Data Layer</h3>
+      <p>ChromaDB + PostgreSQL + File Storage</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
