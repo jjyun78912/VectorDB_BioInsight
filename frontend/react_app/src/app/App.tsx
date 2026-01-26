@@ -5,15 +5,14 @@ import { FeatureSuite } from './components/FeatureSuite';
 import { TrendingPapers } from './components/TrendingPapers';
 import { CtaSection } from './components/CtaSection';
 import { Footer } from './components/Footer';
+import { KnowledgeGraph } from './components/KnowledgeGraph';
 import { LiteratureReview } from './components/LiteratureReview';
 import { ChatWithPDF } from './components/ChatWithPDF';
 import { ResearchLibrary } from './components/ResearchLibrary';
 import { DailyBriefing } from './components/DailyBriefing';
+import { GeneNetworkGraph } from './components/GeneNetworkGraph';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
-
-// 3D components temporarily disabled due to WebGPU compatibility issues
-// TODO: Fix three.js/react-force-graph-3d WebGPU issue
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
   Library, FileSearch, Zap, Newspaper, Dna
@@ -268,7 +267,7 @@ const AppContent: React.FC = () => {
       <Footer />
 
       {/* Modals */}
-      {/* KnowledgeGraph temporarily disabled - WebGPU issue */}
+      <KnowledgeGraph isOpen={showGraph} onClose={() => setShowGraph(false)} />
       <LiteratureReview
         isOpen={showLiteratureReview}
         onClose={() => setShowLiteratureReview(false)}
@@ -279,7 +278,7 @@ const AppContent: React.FC = () => {
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
       <DailyBriefing isOpen={showBriefing} onClose={() => setShowBriefing(false)} />
-      {/* GeneNetworkGraph temporarily disabled - WebGPU issue */}
+      <GeneNetworkGraph isOpen={showGeneNetwork} onClose={() => setShowGeneNetwork(false)} />
 
     </div>
   );
