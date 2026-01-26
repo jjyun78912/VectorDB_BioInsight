@@ -1,4 +1,4 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { FeatureSuite } from './components/FeatureSuite';
@@ -11,11 +11,9 @@ import { ResearchLibrary } from './components/ResearchLibrary';
 import { DailyBriefing } from './components/DailyBriefing';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { useLanguage } from './contexts/LanguageContext';
-import ErrorBoundary from '../components/ui/ErrorBoundary';
 
-// Lazy load 3D components to prevent WebGPU errors from crashing the app
-const KnowledgeGraph = lazy(() => import('./components/KnowledgeGraph').then(m => ({ default: m.KnowledgeGraph })));
-const GeneNetworkGraph = lazy(() => import('./components/GeneNetworkGraph').then(m => ({ default: m.GeneNetworkGraph })));
+// 3D components temporarily disabled due to WebGPU compatibility issues
+// TODO: Fix three.js/react-force-graph-3d WebGPU issue
 import {
   Network, Sparkles, ArrowRight, BookOpen, MessageSquare,
   Library, FileSearch, Zap, Newspaper, Dna
@@ -270,11 +268,7 @@ const AppContent: React.FC = () => {
       <Footer />
 
       {/* Modals */}
-      <ErrorBoundary fallback={<div className="hidden" />}>
-        <Suspense fallback={<div className="hidden" />}>
-          {showGraph && <KnowledgeGraph isOpen={showGraph} onClose={() => setShowGraph(false)} />}
-        </Suspense>
-      </ErrorBoundary>
+      {/* KnowledgeGraph temporarily disabled - WebGPU issue */}
       <LiteratureReview
         isOpen={showLiteratureReview}
         onClose={() => setShowLiteratureReview(false)}
@@ -285,11 +279,7 @@ const AppContent: React.FC = () => {
       <ChatWithPDF isOpen={showChatWithPDF} onClose={() => setShowChatWithPDF(false)} />
       <ResearchLibrary isOpen={showLibrary} onClose={() => setShowLibrary(false)} />
       <DailyBriefing isOpen={showBriefing} onClose={() => setShowBriefing(false)} />
-      <ErrorBoundary fallback={<div className="hidden" />}>
-        <Suspense fallback={<div className="hidden" />}>
-          {showGeneNetwork && <GeneNetworkGraph isOpen={showGeneNetwork} onClose={() => setShowGeneNetwork(false)} />}
-        </Suspense>
-      </ErrorBoundary>
+      {/* GeneNetworkGraph temporarily disabled - WebGPU issue */}
 
     </div>
   );
