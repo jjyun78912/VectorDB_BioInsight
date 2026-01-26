@@ -7726,12 +7726,12 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
   "title_en": "English Title",
   "abstract_extended": "배경: ...\\n\\n방법: ...\\n\\n결과: ...\\n\\nDriver Gene Analysis: ...\\n\\n문헌 기반 해석: ...\\n\\n추천 논문: ...\\n\\n검증 제안: ...\\n\\n결론: ...",
   "key_findings": [
-    "주요 발견 1 (DEG 관련)",
-    "주요 발견 2 (Hub 유전자 관련)",
-    "주요 발견 3 (Driver 관련)",
-    "주요 발견 4 (Pathway 관련)",
-    "주요 발견 5 (문헌 해석 관련)",
-    "주요 발견 6 (검증 제안)"
+    "주요 발견 1 - 한국어로 작성 (유전자명, 경로명 등 학술 용어만 영어)",
+    "주요 발견 2 - 예: FMO2는 N-Acetylornithine 조절을 통해 혈관신생을 촉진함",
+    "주요 발견 3 - 예: 7,583개의 차등발현 유전자 중 10개의 Hub 유전자 식별",
+    "주요 발견 4 - 예: PI3K-Akt 신호전달 경로가 유의하게 활성화됨",
+    "주요 발견 5 - 예: 문헌 분석 결과 BRCA1이 DNA 손상 복구에 핵심 역할 수행",
+    "주요 발견 6 - 예: qPCR 및 Western blot을 통한 발현 검증 권장"
   ],
   "validation_priorities": {{
     "qPCR": ["gene1", "gene2", ...],
@@ -7760,6 +7760,15 @@ Candidate Regulator Track에서는 {novel_count}개의 조절인자 후보가 Hu
 7. key_findings는 10개 이상, 각 섹션에서 핵심 발견 포함
 8. 각 섹션(배경, 방법, 결과, Driver Gene Analysis, 문헌 기반 해석, 추천 논문, 검증 제안, 결론)은 각각 4-6문장 이상으로 상세히 기술
 9. 추천 논문 섹션에서는 위에 제공된 논문 목록을 반드시 활용하여 구체적인 제목과 PMID를 명시할 것 (예: "PMID 34976204의 연구는...")
+
+key_findings 작성 지침 (매우 중요):
+- 반드시 한국어로 작성하세요!
+- 유전자명(예: FMO2, BRCA1), 경로명(예: PI3K-Akt), 분석 도구명(예: DESeq2)만 영어로 표기
+- 영어 문장은 절대 금지: "Promotes Angiogenesis" (X) → "혈관신생을 촉진함" (O)
+- 예시 형식:
+  - "FMO2가 N-Acetylornithine 조절을 통해 혈관신생을 촉진함"
+  - "{n_deg:,}개의 차등발현 유전자와 네트워크 기반 {len(hub_gene_names)}개 Hub 유전자 식별"
+  - "ESR1, PGR 등 호르몬 수용체 유전자가 유의하게 발현 증가"
 
 문체 지침 (매우 중요):
 - 학술 논문이면서도 읽는 이를 사로잡는 매력적인 글쓰기를 해주세요
