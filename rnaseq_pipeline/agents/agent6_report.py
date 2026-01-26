@@ -1839,28 +1839,28 @@ class ReportAgent(BaseAgent):
 
             classic_items = []
             for p in classic_papers[:3]:
-                title = p.get('title', '')[:80]
+                paper_title = p.get('title', '')[:80]
                 pmid = p.get('pmid', '')
                 citations = p.get('citation_count', 0)
                 year = p.get('year', '')
                 pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-                classic_items.append(f'<li><a href="{pubmed_url}" target="_blank">{title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
+                classic_items.append(f'<li><a href="{pubmed_url}" target="_blank">{paper_title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
 
             breakthrough_items = []
             for p in breakthrough_papers[:3]:
-                title = p.get('title', '')[:80]
+                paper_title = p.get('title', '')[:80]
                 pmid = p.get('pmid', '')
                 citations = p.get('citation_count', 0)
                 year = p.get('year', '')
                 pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
-                breakthrough_items.append(f'<li><a href="{pubmed_url}" target="_blank">{title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
+                breakthrough_items.append(f'<li><a href="{pubmed_url}" target="_blank">{paper_title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
 
             papers_html = f'''
             <div class="papers-box">
                 <h4>📄 추천 논문</h4>
                 <div class="papers-grid">
                     <div class="paper-category classic">
-                        <h5>📚 교과서적 연구 (Classic)</h5>
+                        <h5>📚 교과서급 핵심 연구 (Classic)</h5>
                         <ul>{''.join(classic_items) if classic_items else '<li>없음</li>'}</ul>
                     </div>
                     <div class="paper-category emerging">
@@ -3211,6 +3211,9 @@ class ReportAgent(BaseAgent):
             elif 'breakthrough' in p_type:
                 type_badge = '<span class="paper-type-badge breakthrough">🚀 Emerging Research</span>'
                 type_class = "breakthrough"
+            elif paper_type == "related" or p_type == "unknown":
+                type_badge = '<span class="paper-type-badge related">📄 Related Paper</span>'
+                type_class = "related"
             else:
                 type_badge = ''
                 type_class = ""
@@ -3260,22 +3263,36 @@ class ReportAgent(BaseAgent):
             for i, paper in enumerate(breakthrough_papers[:3], 1):
                 breakthrough_cards += build_paper_card(paper, i, "breakthrough")
 
+            # Other papers (unknown type - 인용 데이터 미확인)
+            other_papers = papers_data.get('other_papers', [])
+            other_cards = ''
+            for i, paper in enumerate(other_papers[:3], 1):
+                other_cards += build_paper_card(paper, i, "related")
+
             paper_sections = f'''
             <div class="paper-category">
                 <h3 class="category-title">📚 필수 참고 논문 (Classic Studies)</h3>
-                <p class="category-desc">해당 분야의 기초가 되는 고인용 논문들입니다.</p>
+                <p class="category-desc">해당 분야의 기초가 되는 고인용 논문들입니다. (50회 이상 인용, 3년 이상 경과)</p>
                 <div class="paper-list">
-                    {classic_cards if classic_cards else '<p class="no-papers">해당 조건을 만족하는 논문이 없습니다.</p>'}
+                    {classic_cards if classic_cards else '<p class="no-papers">인용 데이터 기준을 만족하는 Classic 논문이 없습니다.</p>'}
                 </div>
             </div>
 
             <div class="paper-category">
                 <h3 class="category-title">🚀 최신 주목 논문 (Emerging Research)</h3>
-                <p class="category-desc">빠르게 인용되고 있는 최근 연구들입니다.</p>
+                <p class="category-desc">빠르게 인용되고 있는 최근 연구들입니다. (10회 이상 인용, 높은 인용 속도)</p>
                 <div class="paper-list">
-                    {breakthrough_cards if breakthrough_cards else '<p class="no-papers">해당 조건을 만족하는 논문이 없습니다.</p>'}
+                    {breakthrough_cards if breakthrough_cards else '<p class="no-papers">인용 데이터 기준을 만족하는 Breakthrough 논문이 없습니다.</p>'}
                 </div>
             </div>
+
+            {f"""<div class="paper-category">
+                <h3 class="category-title">📄 관련 논문 (Related Papers)</h3>
+                <p class="category-desc">분석 유전자와 관련된 최신 논문들입니다. (인용 데이터 미확인 또는 기준 미달)</p>
+                <div class="paper-list">
+                    {other_cards}
+                </div>
+            </div>""" if other_cards else ''}
             '''
         else:
             # Legacy format - single list
@@ -3400,6 +3417,13 @@ class ReportAgent(BaseAgent):
         .paper-type-badge.breakthrough {{
             background: #fff3e0;
             color: #e65100;
+        }}
+        .paper-type-badge.related {{
+            background: #e3f2fd;
+            color: #1565c0;
+        }}
+        .paper-card.related {{
+            border-left: 4px solid #2196F3;
         }}
         .paper-number {{
             flex-shrink: 0;
