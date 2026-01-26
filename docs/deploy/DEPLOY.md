@@ -56,11 +56,14 @@ NCBI_API_KEY=xxx...
 
 ---
 
-## 로컬 실행
+## 로컬 실행 (macOS/Linux)
 
 ### 1. 저장소 클론
 
 ```bash
+# 홈 디렉토리에서 시작
+cd ~
+
 git clone https://github.com/jjyun78912/VectorDB_BioInsight.git
 cd VectorDB_BioInsight
 ```
@@ -68,42 +71,144 @@ cd VectorDB_BioInsight
 ### 2. Python 환경
 
 ```bash
-# 가상환경 생성 및 활성화
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# ⚠️ 반드시 프로젝트 루트 디렉토리에서 실행
+# 현재 위치 확인: pwd 결과가 ~/VectorDB_BioInsight 여야 함
+pwd
+# /Users/yourname/VectorDB_BioInsight
 
-# 패키지 설치
+# python3 명령어 사용 (시스템에 따라 python일 수도 있음)
+python3 --version  # Python 3.11 이상인지 확인
+
+# 가상환경 생성 (프로젝트 루트에 .venv 폴더 생성됨)
+python3 -m venv .venv
+
+# 가상환경 활성화
+source .venv/bin/activate
+
+# 활성화 확인 - 프롬프트 앞에 (.venv) 표시됨
+# (.venv) user@hostname:~/VectorDB_BioInsight$
+
+# pip 업그레이드 후 패키지 설치
+pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-rnaseq.txt  # RNA-seq 분석용
 ```
 
 ### 3. Frontend 환경
 
 ```bash
-cd frontend/react_app
+# ⚠️ 프로젝트 루트에서 frontend/react_app으로 이동
+cd ~/VectorDB_BioInsight/frontend/react_app
+
 npm install
 ```
 
 ### 4. 환경 변수
 
 ```bash
+# ⚠️ 프로젝트 루트로 이동
+cd ~/VectorDB_BioInsight
+
 cp .env.example .env
-# .env 파일에 API 키 입력
+
+# .env 파일 편집하여 API 키 입력
+vim .env  # 또는 nano .env
 ```
 
 ### 5. 서버 실행
 
 ```bash
 # 터미널 1: Backend (포트 8000)
+cd ~/VectorDB_BioInsight
+source .venv/bin/activate
 uvicorn backend.app.main:app --reload --port 8000
 
 # 터미널 2: Frontend (포트 5173)
-cd frontend/react_app && npm run dev
+cd ~/VectorDB_BioInsight/frontend/react_app
+npm run dev
 ```
 
 ### 접속
 
 - Frontend: http://localhost:5173
 - API 문서: http://localhost:8000/docs
+
+---
+
+## GCP Compute Engine 배포 (VM)
+
+Docker 없이 직접 VM에 배포하는 방법입니다.
+
+### 1. VM 인스턴스 생성
+
+- OS: Debian 12 (Bookworm)
+- 머신 유형: e2-medium (2 vCPU, 4GB) 이상 권장
+- 디스크: 20GB 이상
+- 방화벽: HTTP(80), HTTPS(443) 허용
+
+### 2. 서버 환경 설정
+
+```bash
+# SSH 접속 후 스크립트 다운로드
+cd ~
+curl -O https://raw.githubusercontent.com/jjyun78912/VectorDB_BioInsight/main/docs/deploy/setup-server.sh
+chmod +x setup-server.sh
+
+# 실행 (Python, Node.js, R, Nginx 설치)
+./setup-server.sh
+
+# ⚠️ 설치 완료 후 반드시 실행 (pyenv 로드)
+source ~/.bashrc
+
+# 설치 확인
+python --version   # Python 3.11.9
+node --version     # v20.x.x
+R --version        # R version 4.x.x
+```
+
+### 3. 앱 배포
+
+```bash
+# 배포 스크립트 다운로드 및 실행
+curl -O https://raw.githubusercontent.com/jjyun78912/VectorDB_BioInsight/main/docs/deploy/deploy-app.sh
+chmod +x deploy-app.sh
+./deploy-app.sh
+```
+
+### 4. API 키 설정
+
+```bash
+vim /opt/bioinsight/VectorDB_BioInsight/.env
+# OPENAI_API_KEY, ANTHROPIC_API_KEY 등 입력
+```
+
+### 5. 데이터 업로드 (로컬에서)
+
+```bash
+# 로컬 PC에서 실행
+scp -r chroma_db/ username@서버IP:/opt/bioinsight/VectorDB_BioInsight/
+scp -r models/ username@서버IP:/opt/bioinsight/VectorDB_BioInsight/
+```
+
+### 6. 서비스 시작
+
+```bash
+sudo systemctl start bioinsight-backend
+sudo systemctl status bioinsight-backend
+
+# 로그 확인
+sudo journalctl -u bioinsight-backend -f
+```
+
+### 7. 접속 테스트
+
+```bash
+# 서버에서
+curl http://localhost/health
+
+# 브라우저에서
+http://서버외부IP
+```
 
 ---
 
