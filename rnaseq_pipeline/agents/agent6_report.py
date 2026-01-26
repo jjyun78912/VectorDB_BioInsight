@@ -1648,11 +1648,11 @@ class ReportAgent(BaseAgent):
                 </h4>
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
                     <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('accuracy', 0)*100:.1f}%</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('accuracy', 0):.3f}</div>
                         <div style="font-size: 0.8em; opacity: 0.9;">Accuracy</div>
                     </div>
                     <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('f1_macro', 0)*100:.1f}%</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('f1_macro', 0):.3f}</div>
                         <div style="font-size: 0.8em; opacity: 0.9;">F1 (Macro)</div>
                     </div>
                     <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
@@ -1660,7 +1660,7 @@ class ReportAgent(BaseAgent):
                         <div style="font-size: 0.8em; opacity: 0.9;">MCC</div>
                     </div>
                     <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('pr_auc_macro', 0)*100:.1f}%</div>
+                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('pr_auc_macro', 0):.3f}</div>
                         <div style="font-size: 0.8em; opacity: 0.9;">PR-AUC</div>
                     </div>
                 </div>'''
@@ -1673,23 +1673,23 @@ class ReportAgent(BaseAgent):
                     <div style="font-size: 0.9em; margin-bottom: 8px;">📌 <b>{cancer_type}</b> 분류 성능</div>
                     <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; font-size: 0.85em;">
                         <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('f1', 0)*100:.1f}%</div>
+                            <div style="font-weight: bold;">{per_class.get('f1', 0):.3f}</div>
                             <div style="opacity: 0.8;">F1</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('precision', 0)*100:.1f}%</div>
+                            <div style="font-weight: bold;">{per_class.get('precision', 0):.3f}</div>
                             <div style="opacity: 0.8;">Precision</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('recall', 0)*100:.1f}%</div>
+                            <div style="font-weight: bold;">{per_class.get('recall', 0):.3f}</div>
                             <div style="opacity: 0.8;">Recall</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('pr_auc', 0)*100:.1f}%</div>
+                            <div style="font-weight: bold;">{per_class.get('pr_auc', 0):.3f}</div>
                             <div style="opacity: 0.8;">PR-AUC</div>
                         </div>
                         <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('roc_auc', 0)*100:.1f}%</div>
+                            <div style="font-weight: bold;">{per_class.get('roc_auc', 0):.3f}</div>
                             <div style="opacity: 0.8;">ROC-AUC</div>
                         </div>
                     </div>
@@ -1701,8 +1701,8 @@ class ReportAgent(BaseAgent):
                 f1_ci = ci.get('f1_macro', {})
                 ml_performance_html += f'''
                 <div style="margin-top: 10px; font-size: 0.75em; opacity: 0.85;">
-                    95% CI: Accuracy [{acc_ci.get('lower', 0)*100:.1f}% - {acc_ci.get('upper', 0)*100:.1f}%],
-                    F1 [{f1_ci.get('lower', 0)*100:.1f}% - {f1_ci.get('upper', 0)*100:.1f}%]
+                    95% CI: Accuracy [{acc_ci.get('lower', 0):.3f} - {acc_ci.get('upper', 0):.3f}],
+                    F1 [{f1_ci.get('lower', 0):.3f} - {f1_ci.get('upper', 0):.3f}]
                 </div>'''
 
             ml_performance_html += '''

@@ -848,11 +848,11 @@ class SingleCellReportAgent(BaseAgent):
                     <div style="font-weight: bold; margin-bottom: 8px;">📊 {"모델 성능 지표" if is_korean else "Model Performance"}</div>
                     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
                         <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('accuracy', 0)*100:.1f}%</div>
+                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('accuracy', 0):.3f}</div>
                             <div style="font-size: 0.8em; opacity: 0.9;">Accuracy</div>
                         </div>
                         <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('f1_macro', 0)*100:.1f}%</div>
+                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('f1_macro', 0):.3f}</div>
                             <div style="font-size: 0.8em; opacity: 0.9;">F1 (Macro)</div>
                         </div>
                         <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px;">
@@ -860,7 +860,7 @@ class SingleCellReportAgent(BaseAgent):
                             <div style="font-size: 0.8em; opacity: 0.9;">MCC</div>
                         </div>
                         <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 4px;">
-                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('pr_auc_macro', 0)*100:.1f}%</div>
+                            <div style="font-size: 1.1em; font-weight: bold;">{overall.get('pr_auc_macro', 0):.3f}</div>
                             <div style="font-size: 0.8em; opacity: 0.9;">PR-AUC</div>
                         </div>
                     </div>'''
@@ -873,23 +873,23 @@ class SingleCellReportAgent(BaseAgent):
                         <div style="font-size: 0.9em; margin-bottom: 6px;">📌 <b>{cancer_type}</b> {"분류 성능" if is_korean else "Class Performance"}</div>
                         <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; font-size: 0.8em;">
                             <div style="text-align: center;">
-                                <div style="font-weight: bold;">{per_class.get('f1', 0)*100:.1f}%</div>
+                                <div style="font-weight: bold;">{per_class.get('f1', 0):.3f}</div>
                                 <div style="opacity: 0.8;">F1</div>
                             </div>
                             <div style="text-align: center;">
-                                <div style="font-weight: bold;">{per_class.get('precision', 0)*100:.1f}%</div>
+                                <div style="font-weight: bold;">{per_class.get('precision', 0):.3f}</div>
                                 <div style="opacity: 0.8;">Precision</div>
                             </div>
                             <div style="text-align: center;">
-                                <div style="font-weight: bold;">{per_class.get('recall', 0)*100:.1f}%</div>
+                                <div style="font-weight: bold;">{per_class.get('recall', 0):.3f}</div>
                                 <div style="opacity: 0.8;">Recall</div>
                             </div>
                             <div style="text-align: center;">
-                                <div style="font-weight: bold;">{per_class.get('pr_auc', 0)*100:.1f}%</div>
+                                <div style="font-weight: bold;">{per_class.get('pr_auc', 0):.3f}</div>
                                 <div style="opacity: 0.8;">PR-AUC</div>
                             </div>
                             <div style="text-align: center;">
-                                <div style="font-weight: bold;">{per_class.get('roc_auc', 0)*100:.1f}%</div>
+                                <div style="font-weight: bold;">{per_class.get('roc_auc', 0):.3f}</div>
                                 <div style="opacity: 0.8;">ROC-AUC</div>
                             </div>
                         </div>
