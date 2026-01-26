@@ -66,6 +66,39 @@ class RNAseqPipeline:
     """Orchestrator for the RNA-seq analysis pipeline."""
 
     # =========================================================================
+    # Cancer Type Mapping: user-friendly names ↔ TCGA codes
+    # =========================================================================
+    CANCER_TYPE_TO_TCGA = {
+        'breast_cancer': 'BRCA',
+        'lung_cancer': 'LUAD',  # Default to LUAD, but LUSC is also possible
+        'lung_adenocarcinoma': 'LUAD',
+        'lung_squamous': 'LUSC',
+        'colorectal_cancer': 'COAD',
+        'colon_cancer': 'COAD',
+        'rectal_cancer': 'READ',
+        'pancreatic_cancer': 'PAAD',
+        'liver_cancer': 'LIHC',
+        'stomach_cancer': 'STAD',
+        'gastric_cancer': 'STAD',
+        'kidney_cancer': 'KIRC',
+        'renal_cancer': 'KIRC',
+        'prostate_cancer': 'PRAD',
+        'ovarian_cancer': 'OV',
+        'uterine_cancer': 'UCEC',
+        'endometrial_cancer': 'UCEC',
+        'thyroid_cancer': 'THCA',
+        'melanoma': 'SKCM',
+        'skin_cancer': 'SKCM',
+        'head_neck_cancer': 'HNSC',
+        'bladder_cancer': 'BLCA',
+        'glioblastoma': 'GBM',
+        'low_grade_glioma': 'LGG',
+        'brain_cancer': 'GBM',
+    }
+
+    TCGA_TO_CANCER_TYPE = {v: k for k, v in CANCER_TYPE_TO_TCGA.items()}
+
+    # =========================================================================
     # Pipeline Type 1: Bulk RNA-seq (1-Step, Expression Only)
     # => Driver gene PREDICTION only (no mutation data)
     # =========================================================================
@@ -505,8 +538,14 @@ class RNAseqPipeline:
                         # Keep user-specified cancer type but record ML prediction for validation
                         prediction_result['user_specified_cancer'] = user_specified_cancer
                         prediction_result['ml_predicted_cancer'] = predicted_cancer
+
+                        # Convert user-specified to TCGA code for comparison
+                        user_tcga = self.CANCER_TYPE_TO_TCGA.get(
+                            user_specified_cancer.lower(),
+                            user_specified_cancer.upper()
+                        )
                         prediction_result['prediction_matches_user'] = (
-                            user_specified_cancer.upper() == predicted_cancer.upper()
+                            user_tcga.upper() == predicted_cancer.upper()
                         )
 
                         # Don't override user-specified cancer type
