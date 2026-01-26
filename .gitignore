@@ -1,11 +1,26 @@
-# Environment variables (contains API keys)
+# ═══════════════════════════════════════════════════════════════
+# BioInsight AI - Git Ignore File
+# ═══════════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────
+# Environment & Secrets (NEVER COMMIT!)
+# ─────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 */.env
 **/.env
 
+# Credentials files
+vertex-app-key.json
+vertex-credentials.json
+gen-lang-client-*.json
+*-credentials.json
+*-service-account.json
+
+# ─────────────────────────────────────────────────────────────
 # Python
+# ─────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -33,39 +48,93 @@ ENV/
 env/
 .venv/
 
-# Data directories (large files)
-data/chroma_db/
-data/papers/
-*.pdf
+# ─────────────────────────────────────────────────────────────
+# Data & Large Files
+# ─────────────────────────────────────────────────────────────
+# Data directories
+data/
+!data/.gitkeep
 
-# ChromaDB local storage
+# ChromaDB
 chroma_db/
+!chroma_db/.gitkeep
 
-# Output directory
+# Output directories
 output/
 
-# IDE
+# Large binary files
+*.h5ad
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+
+# ─────────────────────────────────────────────────────────────
+# Test Results & Evaluation
+# ─────────────────────────────────────────────────────────────
+rnaseq_test_results/
+evaluation_results/
+catboost_info/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# ─────────────────────────────────────────────────────────────
+# ML Models (tracked separately via Git LFS or releases)
+# ─────────────────────────────────────────────────────────────
+models/rnaseq/pancancer_transfer/
+models/rnaseq/pancancer_v2/
+models/rnaseq/pancancer_v3/
+# Keep main pancancer model
+!models/rnaseq/pancancer/
+
+# ─────────────────────────────────────────────────────────────
+# Node.js / Frontend
+# ─────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+frontend/react_app/dist/
+package-lock.json
+!frontend/react_app/package-lock.json
+
+# ─────────────────────────────────────────────────────────────
+# IDE & Editor
+# ─────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+*.sublime-*
 
-# OS
+# ─────────────────────────────────────────────────────────────
+# OS Generated
+# ─────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# Jupyter
+# ─────────────────────────────────────────────────────────────
+# Jupyter & Notebooks
+# ─────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
+*.ipynb
 
-# Credentials (API keys, service accounts - NEVER commit!)
-*.json
-!package.json
-!package-lock.json
-vertex-app-key.json
-vertex-credentials.json
-gen-lang-client-*.json
-*-credentials.json
-*-service-account.json
-node_modules
-evaluation/benchmark_data/*.h5ad
+# ─────────────────────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ─────────────────────────────────────────────────────────────
+# Temporary files
+# ─────────────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+figures/

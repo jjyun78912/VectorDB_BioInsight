@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════
+# BioInsight AI - Docker Ignore File
+# ═══════════════════════════════════════════════════════════════
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+env
+*.egg-info
+.eggs
+dist
+build
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Environment files (secrets)
+.env
+.env.local
+.env.*.local
+
+# Test results and cache
+rnaseq_test_results/
+evaluation_results/
+.coverage
+.pytest_cache
+htmlcov/
+catboost_info/
+
+# Large data files
+data/
+*.h5ad
+*.csv
+!requirements*.txt
+
+# Logs
+*.log
+logs/
+
+# Node
+node_modules/
+frontend/react_app/node_modules/
+frontend/react_app/dist/
+
+# Documentation build
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════════════════════════
+# BioInsight AI - Docker Compose Configuration
+# ═══════════════════════════════════════════════════════════════
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Backend API Server
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bioinsight-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    volumes:
+      # Persist data
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./models:/app/models:ro
+      - ./chroma_db:/app/chroma_db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - bioinsight-network
+
+  # ─────────────────────────────────────────────────────────────
+  # Frontend (React + Vite)
+  # ─────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend/react_app
+      dockerfile: Dockerfile
+    container_name: bioinsight-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - bioinsight-network
+
+  # ─────────────────────────────────────────────────────────────
+  # RNA-seq Worker (for long-running pipeline jobs)
+  # ─────────────────────────────────────────────────────────────
+  rnaseq-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bioinsight-rnaseq-worker
+    command: ["python", "-m", "celery", "-A", "backend.app.core.celery_app", "worker", "--loglevel=info"]
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./models:/app/models:ro
+    depends_on:
+      - redis
+      - backend
+    restart: unless-stopped
+    networks:
+      - bioinsight-network
+    profiles:
+      - worker
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis (Message Broker for Celery)
+  # ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: bioinsight-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - bioinsight-network
+    profiles:
+      - worker
+
+# ─────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────
+networks:
+  bioinsight-network:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────
+volumes:
+  redis-data:

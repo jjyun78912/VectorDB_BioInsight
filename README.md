@@ -1,164 +1,220 @@
-# VectorDB BioInsight
+# BioInsight AI
 
-Bio 논문 전용 Vector Database - **Pheochromocytoma (갈색세포종)** 도메인 특화
+AI-powered integrated research platform for Bio & Healthcare researchers.
 
-## 아키텍처
+> **"Accelerate discoveries while keeping researchers in control"**
 
-```
-PDF 논문
-    ↓
-[PDF Parser] PyMuPDF - 섹션 구조 파싱
-    ↓
-[Text Splitter] 섹션 단위 split → RecursiveCharacterTextSplitter
-    ↓
-[Embedding] PubMedBERT (Sentence-Transformers)
-    ↓
-[Vector DB] ChromaDB + Metadata
-    ↓
-[유사도 검색] 질문 → 벡터화 → 검색
-```
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 설치
+## Features
+
+### Core Features
+- **Paper RAG Search**: Semantic search across biomedical literature using PubMedBERT embeddings
+- **Real-time PubMed Search**: Live search with Korean↔English translation
+- **Knowledge Graph**: 3D interactive visualization of paper/gene/disease relationships
+- **Daily Briefing**: Automated news digest from FDA, ClinicalTrials, bioRxiv
+
+### RNA-seq Analysis Pipeline
+- **6-Agent Bulk RNA-seq Pipeline**: DEG → Network → Pathway → Validation → Visualization → Report
+- **Single-cell RNA-seq**: QC → Clustering → Cell Type Annotation → Report
+- **ML Cancer Classification**: Pan-cancer classifier (17 cancer types, AUC 0.988)
+- **RAG-based Interpretation**: Literature-backed gene interpretations with PMID citations
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
+- R 4.3+ (for DESeq2)
+- Node.js 18+ (for frontend)
+
+### Installation
 
 ```bash
-# 의존성 설치
+# Clone the repository
+git clone https://github.com/your-org/bioinsight-ai.git
+cd bioinsight-ai
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install Python dependencies
 pip install -r requirements.txt
+pip install -r requirements-rnaseq.txt
 
-# 환경변수 설정
+# Install R packages (required for Bulk RNA-seq)
+Rscript -e "install.packages('BiocManager'); BiocManager::install(c('DESeq2', 'apeglm'))"
+
+# Set up environment variables
 cp .env.example .env
+# Edit .env with your API keys
 ```
 
-## 사용법
-
-### 1. 논문 인덱싱
+### Running the Application
 
 ```bash
-# 단일 PDF 인덱싱
-python main.py index -d pheochromocytoma -f ./data/papers/paper.pdf
+# Start backend server
+uvicorn backend.app.main:app --reload --port 8000
 
-# 디렉토리 전체 인덱싱
-python main.py index -d pheochromocytoma -p ./data/papers/
+# Start frontend (in another terminal)
+cd frontend/react_app
+npm install
+npm run dev
 ```
 
-### 2. 유사도 검색
+### Docker Deployment
 
 ```bash
-# 기본 검색
-python main.py search -d pheochromocytoma -q "RET mutation genetic analysis"
+# Build and run with Docker Compose
+docker-compose up -d
 
-# 섹션 필터 검색
-python main.py search -d pheochromocytoma -q "RNA sequencing" -s Methods
-
-# 결과 개수 지정
-python main.py search -d pheochromocytoma -q "catecholamine" -k 10
+# View logs
+docker-compose logs -f backend
 ```
 
-### 3. 통계 확인
+## RNA-seq Pipeline Usage
 
-```bash
-python main.py stats -d pheochromocytoma
-```
-
-### 4. 인덱싱된 논문 목록
-
-```bash
-python main.py list -d pheochromocytoma
-```
-
-## Python API
+### Bulk RNA-seq Analysis
 
 ```python
-from src.indexer import create_indexer
-from src.search import create_searcher
+from rnaseq_pipeline.orchestrator import RNAseqPipeline
 
-# 인덱싱
-indexer = create_indexer(disease_domain="pheochromocytoma")
-indexer.index_pdf("./paper.pdf")
-indexer.index_directory("./papers/")
+# Initialize pipeline
+pipeline = RNAseqPipeline(
+    input_dir='data/my_experiment',
+    output_dir='results/my_experiment',
+    config={'cancer_type': 'breast_cancer'},
+    pipeline_type='bulk'
+)
 
-# 검색
-searcher = create_searcher(disease_domain="pheochromocytoma")
-results = searcher.search("RET mutation", top_k=5)
+# Run full analysis
+result = pipeline.run()
 
-# 섹션별 검색
-results = searcher.search("RNA extraction", section_filter="Methods")
-
-# 결과 출력
-print(searcher.format_results(results))
+# View report
+print(f"Report: {result['run_dir']}/agent6_report/report.html")
 ```
 
-## 메타데이터 구조
-
-각 chunk에 저장되는 메타데이터:
-
-| 필드 | 설명 |
-|------|------|
-| `paper_title` | 논문 제목 |
-| `doi` | DOI |
-| `year` | 출판 연도 |
-| `keywords` | 키워드 |
-| `section` | 섹션명 (Abstract, Introduction, Methods, Results, Discussion, Conclusion) |
-| `parent_section` | 상위 섹션 (Methods의 subsection인 경우) |
-| `disease_domain` | 질병 도메인 |
-| `chunk_index` | 전체 chunk 인덱스 |
-| `source_file` | 원본 PDF 경로 |
-
-## 프로젝트 구조
+### Input Files Required
 
 ```
-VectorDB_BioInsight/
-├── main.py                 # CLI 진입점
-├── requirements.txt
-├── .env.example
-├── src/
-│   ├── __init__.py
-│   ├── config.py          # 설정
-│   ├── pdf_parser.py      # PDF 파싱
-│   ├── text_splitter.py   # 텍스트 분할
-│   ├── embeddings.py      # PubMedBERT 임베딩
-│   ├── vector_store.py    # ChromaDB 연동
-│   ├── indexer.py         # 인덱싱 파이프라인
-│   └── search.py          # 유사도 검색
-├── data/
-│   ├── papers/            # PDF 논문 저장
-│   └── chroma_db/         # ChromaDB 영구 저장소
-└── examples/
-    └── example_usage.py   # 사용 예제
+data/my_experiment/
+├── count_matrix.csv    # Genes (rows) x Samples (columns)
+├── metadata.csv        # sample_id, condition, batch
+└── config.json         # contrast, cancer_type, cutoffs
 ```
 
-## 지원 섹션
-
-자동 인식되는 Bio 논문 섹션:
-- Abstract
-- Introduction
-- Materials and Methods / Methods
-- Results
-- Discussion
-- Conclusion
-
-Methods 하위 섹션:
-- RNA extraction
-- DNA extraction
-- Library preparation
-- RNA-seq processing
-- Differential expression analysis
-- Statistical analysis
-- 등
-
-## 임베딩 모델
-
-PubMedBERT 기반 모델 사용:
-- `pritamdeka/S-PubMedBert-MS-MARCO` (기본값, retrieval 최적화)
-- `NeuML/pubmedbert-base-embeddings`
-- `microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext`
-
-## 다른 질병 도메인 추가
-
-```python
-# 새 도메인 생성
-indexer = create_indexer(disease_domain="lung_cancer")
-indexer.index_directory("./data/papers/lung_cancer/")
-
-# 검색
-searcher = create_searcher(disease_domain="lung_cancer")
+### Example `metadata.csv`
+```csv
+sample_id,condition,batch
+SAMPLE_01,tumor,batch1
+SAMPLE_02,tumor,batch1
+SAMPLE_03,normal,batch1
+SAMPLE_04,normal,batch1
 ```
+
+### Example `config.json`
+```json
+{
+  "contrast": ["tumor", "normal"],
+  "cancer_type": "breast_cancer",
+  "padj_cutoff": 0.05,
+  "log2fc_cutoff": 1.0
+}
+```
+
+## Project Structure
+
+```
+bioinsight-ai/
+├── backend/app/           # FastAPI backend
+│   ├── api/routes/        # API endpoints
+│   └── core/              # Core services
+├── frontend/react_app/    # React frontend
+├── rnaseq_pipeline/       # RNA-seq analysis
+│   ├── agents/            # 6-Agent pipeline
+│   ├── ml/                # ML models
+│   └── rag/               # RAG interpretation
+├── models/rnaseq/         # Pre-trained models
+├── tests/                 # Test suite
+├── Dockerfile             # Container config
+└── docker-compose.yml     # Multi-service setup
+```
+
+## API Documentation
+
+Once running, access the API docs at:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+### Key Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/rnaseq/upload` | POST | Upload RNA-seq data |
+| `/api/rnaseq/start/{job_id}` | POST | Start pipeline |
+| `/api/rnaseq/progress/{job_id}` | GET | SSE progress stream |
+| `/api/paper/search` | GET | Search papers |
+| `/api/chat/ask` | POST | RAG Q&A |
+
+## Environment Variables
+
+```bash
+# LLM APIs (at least one required)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+
+# Optional
+NCBI_API_KEY=...  # For PubMed access
+```
+
+## Testing
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=rnaseq_pipeline --cov-report=html
+```
+
+## Performance Benchmarks
+
+| Pipeline | Dataset | Time | Output |
+|----------|---------|------|--------|
+| Bulk RNA-seq (6-Agent) | TCGA BRCA 50 samples | ~18 min | 9.4MB HTML report |
+| ML Prediction | Single sample | < 1 sec | Cancer type + confidence |
+| RAG Interpretation | 20 genes | ~2 min | Literature-backed analysis |
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use BioInsight AI in your research, please cite:
+
+```bibtex
+@software{bioinsight_ai,
+  title = {BioInsight AI: AI-powered Research Platform for Bioinformatics},
+  year = {2026},
+  url = {https://github.com/your-org/bioinsight-ai}
+}
+```
+
+## Support
+
+- Documentation: [docs/](docs/)
+- Issues: [GitHub Issues](https://github.com/your-org/bioinsight-ai/issues)
+- Discussions: [GitHub Discussions](https://github.com/your-org/bioinsight-ai/discussions)
