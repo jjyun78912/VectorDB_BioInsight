@@ -1,0 +1,36 @@
+{
+  "cancer_type": "pancreatic",
+  "version": "1.0",
+  "training_date": "2026-01-09",
+  "n_training_samples": 146,
+  "n_test_samples": 37,
+  "n_genes": 3000,
+  "cv_auc": 0.9643,
+  "test_auc": 0.5278,
+  "test_accuracy": 0.973,
+  "test_f1": 0.9863,
+  "best_params": {
+    "iterations": 158,
+    "depth": 10,
+    "learning_rate": 0.26690431824362526,
+    "l2_leaf_reg": 1.7123375973163983,
+    "bagging_temperature": 0.3046137691733707,
+    "random_strength": 9.478096804784267e-09,
+    "border_count": 185,
+    "min_data_in_leaf": 45
+  },
+  "top_genes": [
+    "ENSG00000253522.6",
+    "ENSG00000169884.14",
+    "ENSG00000250144.1",
+    "ENSG00000286747.1",
+    "ENSG00000265206.5",
+    "ENSG00000089356.18",
+    "ENSG00000216866.5",
+    "ENSG00000136014.12",
+    "ENSG00000250986.1",
+    "ENSG00000166428.14"
+  ],
+  "shap_completed": true,
+  "notes": "Class imbalance warning: Only 4 normal samples out of 183 total. Test ROC AUC is low due to very few normal samples in test set (1 sample)."
+}

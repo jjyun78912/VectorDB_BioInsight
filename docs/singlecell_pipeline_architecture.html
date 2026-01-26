@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single-Cell RNA-seq Pipeline Architecture | BioInsight AI</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #10b981;
+            --accent: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-card-hover: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --gradient-2: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+            --gradient-3: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+            --gradient-4: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 3rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 3rem;
+        }
+
+        .header-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: var(--gradient-1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+        }
+
+        .header .version {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            color: var(--secondary);
+            border: 1px solid var(--secondary);
+        }
+
+        /* Overview Section */
+        .overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .overview-card {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid var(--border);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .overview-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.2);
+        }
+
+        .overview-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .overview-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .overview-card .label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        /* Section Title */
+        .section-title {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-title .icon {
+            font-size: 1.5rem;
+        }
+
+        /* Pipeline Flow */
+        .pipeline-flow {
+            position: relative;
+            margin-bottom: 3rem;
+        }
+
+        .pipeline-connector {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+            transform: translateX(-50%);
+            z-index: 0;
+        }
+
+        /* Agent Card */
+        .agent-card {
+            position: relative;
+            background: var(--bg-card);
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            z-index: 1;
+        }
+
+        .agent-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+
+        .agent-card.agent-1::before { background: var(--gradient-1); }
+        .agent-card.agent-2::before { background: var(--gradient-2); }
+        .agent-card.agent-3::before { background: var(--gradient-3); }
+        .agent-card.agent-4::before { background: var(--gradient-4); }
+        .agent-card.agent-5::before { background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); }
+        .agent-card.agent-6::before { background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%); }
+
+        .agent-header {
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .agent-number {
+            width: 3rem;
+            height: 3rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: white;
+        }
+
+        .agent-1 .agent-number { background: var(--gradient-1); }
+        .agent-2 .agent-number { background: var(--gradient-2); }
+        .agent-3 .agent-number { background: var(--gradient-3); }
+        .agent-4 .agent-number { background: var(--gradient-4); }
+        .agent-5 .agent-number { background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); }
+        .agent-6 .agent-number { background: linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%); }
+
+        .agent-title {
+            flex: 1;
+        }
+
+        .agent-title h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .agent-title .filename {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+
+        .agent-body {
+            padding: 1.5rem;
+        }
+
+        .agent-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .step {
+            background: var(--bg-dark);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .step:hover {
+            border-color: var(--primary);
+            background: var(--bg-card-hover);
+        }
+
+        .step .step-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .step .step-name {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .step .step-detail {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* ML Badge */
+        .ml-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        /* ML Section */
+        .ml-section {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(249, 115, 22, 0.1) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .ml-section h4 {
+            color: var(--accent);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ml-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .ml-item {
+            background: var(--bg-dark);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            border: 1px solid var(--border);
+        }
+
+        .ml-item .ml-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+
+        .ml-item .ml-desc {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .ml-item .ml-tool {
+            font-size: 0.75rem;
+            color: var(--primary);
+            margin-top: 0.5rem;
+            font-family: monospace;
+        }
+
+        /* Output Section */
+        .output-section {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .output-section h4 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .output-files {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .output-file {
+            background: var(--bg-dark);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-family: 'Monaco', 'Consolas', monospace;
+            color: var(--secondary);
+            border: 1px solid var(--border);
+        }
+
+        /* Comparison Section */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .comparison-card {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .comparison-header {
+            padding: 1.5rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-header.bulk {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+        }
+
+        .comparison-header.singlecell {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 182, 212, 0.2) 100%);
+        }
+
+        .comparison-header h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .comparison-header .tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .comparison-header.bulk .tag {
+            background: var(--primary);
+            color: white;
+        }
+
+        .comparison-header.singlecell .tag {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .comparison-body {
+            padding: 1.5rem;
+        }
+
+        .comparison-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-item:last-child {
+            border-bottom: none;
+        }
+
+        .comparison-item .agent-num {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            background: var(--bg-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+
+        .comparison-item .agent-info h4 {
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .comparison-item .agent-info p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* ML Summary */
+        .ml-summary {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin: 3rem 0;
+            border: 1px solid var(--border);
+        }
+
+        .ml-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .ml-summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .ml-summary-card {
+            background: var(--bg-dark);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .ml-summary-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-5px);
+        }
+
+        .ml-summary-card .ml-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .ml-summary-card h4 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent);
+        }
+
+        .ml-summary-card .question {
+            font-size: 1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            font-style: italic;
+        }
+
+        .ml-summary-card .answer {
+            background: var(--bg-card);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-family: monospace;
+            color: var(--secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .ml-summary-card .tool {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .ml-summary-card .location {
+            font-size: 0.75rem;
+            color: var(--primary);
+            margin-top: 0.5rem;
+        }
+
+        /* Data Flow */
+        .data-flow {
+            background: var(--bg-card);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin: 3rem 0;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            min-width: 800px;
+            padding: 1rem 0;
+        }
+
+        .flow-item {
+            background: var(--bg-dark);
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            border: 1px solid var(--border);
+            min-width: 100px;
+        }
+
+        .flow-item.input {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .flow-item.output {
+            border-color: var(--secondary);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .flow-item .flow-icon {
+            font-size: 1.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .flow-item .flow-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .flow-arrow {
+            color: var(--text-secondary);
+            font-size: 1.25rem;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid var(--border);
+            margin-top: 3rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        /* Arrow connector between agents */
+        .agent-arrow {
+            display: flex;
+            justify-content: center;
+            padding: 1rem 0;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-icon">🔬</div>
+            <h1>Single-Cell RNA-seq Pipeline</h1>
+            <p class="subtitle">BioInsight AI - 6-Agent Architecture</p>
+            <span class="version">v2.0 - Multi-Agent Design</span>
+        </header>
+
+        <!-- Overview Cards -->
+        <div class="overview">
+            <div class="overview-card">
+                <div class="icon">🤖</div>
+                <div class="value">6</div>
+                <div class="label">Agents</div>
+            </div>
+            <div class="overview-card">
+                <div class="icon">🧠</div>
+                <div class="value">3</div>
+                <div class="label">ML Predictions</div>
+            </div>
+            <div class="overview-card">
+                <div class="icon">📊</div>
+                <div class="value">17</div>
+                <div class="label">Analysis Steps</div>
+            </div>
+            <div class="overview-card">
+                <div class="icon">📁</div>
+                <div class="value">15+</div>
+                <div class="label">Output Files</div>
+            </div>
+            <div class="overview-card">
+                <div class="icon">⏱️</div>
+                <div class="value">~20</div>
+                <div class="label">Minutes (3k cells)</div>
+            </div>
+        </div>
+
+        <!-- Data Flow -->
+        <section class="data-flow">
+            <h2 class="section-title"><span class="icon">📥</span> Data Flow Overview</h2>
+            <div class="flow-diagram">
+                <div class="flow-item input">
+                    <div class="flow-icon">📄</div>
+                    <div class="flow-label">count_matrix.csv</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item">
+                    <div class="flow-icon">🧹</div>
+                    <div class="flow-label">QC & Filter</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item">
+                    <div class="flow-icon">🔢</div>
+                    <div class="flow-label">Normalize</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item">
+                    <div class="flow-icon">📉</div>
+                    <div class="flow-label">PCA/UMAP</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item">
+                    <div class="flow-icon">🎯</div>
+                    <div class="flow-label">Clustering</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item">
+                    <div class="flow-icon">🧬</div>
+                    <div class="flow-label">Analysis</div>
+                </div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-item output">
+                    <div class="flow-icon">📊</div>
+                    <div class="flow-label">report.html</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pipeline Agents -->
+        <section class="pipeline">
+            <h2 class="section-title"><span class="icon">⚙️</span> Pipeline Architecture</h2>
+
+            <!-- Agent 1 -->
+            <div class="agent-card agent-1">
+                <div class="agent-header">
+                    <div class="agent-number">1</div>
+                    <div class="agent-title">
+                        <h3>QC & Preprocessing</h3>
+                        <span class="filename">agent_sc_qc.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">📥</div>
+                            <div class="step-name">Load Data</div>
+                            <div class="step-detail">CSV / h5ad / 10X</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📊</div>
+                            <div class="step-name">QC Metrics</div>
+                            <div class="step-detail">genes, UMI, mito%</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">💧</div>
+                            <div class="step-name">Empty Droplet</div>
+                            <div class="step-detail">min_counts=500</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">👥</div>
+                            <div class="step-name">Doublet</div>
+                            <div class="step-detail">Scrublet</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🧬</div>
+                            <div class="step-name">Mito Filter</div>
+                            <div class="step-detail">&lt;20%</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🔢</div>
+                            <div class="step-name">Normalize</div>
+                            <div class="step-detail">10K + log1p</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🔄</div>
+                            <div class="step-name">Cell Cycle</div>
+                            <div class="step-detail">S/G2M scoring</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📈</div>
+                            <div class="step-name">QC Plots</div>
+                            <div class="step-detail">Violin, Scatter</div>
+                        </div>
+                    </div>
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">adata_qc.h5ad</span>
+                            <span class="output-file">qc_statistics.json</span>
+                            <span class="output-file">cell_cycle_info.json</span>
+                            <span class="output-file">figures/qc_*.png</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-arrow">⬇️</div>
+
+            <!-- Agent 2 -->
+            <div class="agent-card agent-2">
+                <div class="agent-header">
+                    <div class="agent-number">2</div>
+                    <div class="agent-title">
+                        <h3>Clustering & Annotation <span class="ml-badge">🤖 ML #1</span></h3>
+                        <span class="filename">agent_sc_cluster.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">⭐</div>
+                            <div class="step-name">HVG Selection</div>
+                            <div class="step-detail">2000 genes</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📏</div>
+                            <div class="step-name">Scale</div>
+                            <div class="step-detail">± cell cycle</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📉</div>
+                            <div class="step-name">PCA</div>
+                            <div class="step-detail">50 components</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🎵</div>
+                            <div class="step-name">Harmony</div>
+                            <div class="step-detail">Batch correction</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🗺️</div>
+                            <div class="step-name">UMAP</div>
+                            <div class="step-detail">2D embedding</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🎯</div>
+                            <div class="step-name">Leiden</div>
+                            <div class="step-detail">Clustering</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🏷️</div>
+                            <div class="step-name">Cell Type</div>
+                            <div class="step-detail">Annotation</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📊</div>
+                            <div class="step-name">DEG</div>
+                            <div class="step-detail">Marker genes</div>
+                        </div>
+                    </div>
+
+                    <div class="ml-section">
+                        <h4>🤖 ML #1: Cell Type Prediction</h4>
+                        <div class="ml-grid">
+                            <div class="ml-item">
+                                <div class="ml-name">CellTypist</div>
+                                <div class="ml-desc">Pre-trained model 기반 자동 예측</div>
+                                <div class="ml-tool">Immune_All_High.pkl, Pan_Cancer.pkl</div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-name">Marker-based</div>
+                                <div class="ml-desc">알려진 마커 유전자 기반 annotation</div>
+                                <div class="ml-tool">CD3→T cell, CD19→B cell</div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-name">Ensemble</div>
+                                <div class="ml-desc">여러 방법 결합 → Consensus</div>
+                                <div class="ml-tool">Confidence score 제공</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">adata_clustered.h5ad</span>
+                            <span class="output-file">cluster_markers.csv</span>
+                            <span class="output-file">cell_composition.csv</span>
+                            <span class="output-file">celltype_predictions.csv</span>
+                            <span class="output-file">umap_coordinates.csv</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-arrow">⬇️</div>
+
+            <!-- Agent 3 -->
+            <div class="agent-card agent-3">
+                <div class="agent-header">
+                    <div class="agent-number">3</div>
+                    <div class="agent-title">
+                        <h3>Pathway & Validation</h3>
+                        <span class="filename">agent_sc_pathway.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">🛤️</div>
+                            <div class="step-name">GO Enrichment</div>
+                            <div class="step-detail">BP, MF, CC</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🗺️</div>
+                            <div class="step-name">KEGG</div>
+                            <div class="step-detail">Pathways</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🎯</div>
+                            <div class="step-name">Driver Genes</div>
+                            <div class="step-detail">COSMIC/OncoKB</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🏥</div>
+                            <div class="step-name">TME Analysis</div>
+                            <div class="step-detail">Immune/Stromal</div>
+                        </div>
+                    </div>
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">cluster_pathways.csv</span>
+                            <span class="output-file">driver_genes.csv</span>
+                            <span class="output-file">tme_composition.csv</span>
+                            <span class="output-file">tme_signature_scores.csv</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-arrow">⬇️</div>
+
+            <!-- Agent 4 -->
+            <div class="agent-card agent-4">
+                <div class="agent-header">
+                    <div class="agent-number">4</div>
+                    <div class="agent-title">
+                        <h3>Trajectory & Dynamics</h3>
+                        <span class="filename">agent_sc_trajectory.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">🌳</div>
+                            <div class="step-name">PAGA</div>
+                            <div class="step-detail">Graph abstraction</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">⏱️</div>
+                            <div class="step-name">Pseudotime</div>
+                            <div class="step-detail">DPT</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">💬</div>
+                            <div class="step-name">Cell-Cell</div>
+                            <div class="step-detail">LIANA/CellChat</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🕸️</div>
+                            <div class="step-name">GRN</div>
+                            <div class="step-detail">TF-target network</div>
+                        </div>
+                    </div>
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">trajectory_pseudotime.csv</span>
+                            <span class="output-file">cell_interactions.csv</span>
+                            <span class="output-file">grn_edges.csv</span>
+                            <span class="output-file">master_regulators.csv</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-arrow">⬇️</div>
+
+            <!-- Agent 5 -->
+            <div class="agent-card agent-5">
+                <div class="agent-header">
+                    <div class="agent-number">5</div>
+                    <div class="agent-title">
+                        <h3>CNV & ML Prediction <span class="ml-badge">🤖 ML #2, #3</span></h3>
+                        <span class="filename">agent_sc_cnv.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">📊</div>
+                            <div class="step-name">CNV Inference</div>
+                            <div class="step-detail">Expression-based</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🔬</div>
+                            <div class="step-name">Malignant</div>
+                            <div class="step-detail">Detection</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🎯</div>
+                            <div class="step-name">Cancer Type</div>
+                            <div class="step-detail">Pseudo-bulk ML</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📈</div>
+                            <div class="step-name">SHAP</div>
+                            <div class="step-detail">Interpretation</div>
+                        </div>
+                    </div>
+
+                    <div class="ml-section">
+                        <h4>🤖 ML #2: Cancer Type Prediction (Pseudo-bulk)</h4>
+                        <div class="ml-grid">
+                            <div class="ml-item">
+                                <div class="ml-name">Whole Sample</div>
+                                <div class="ml-desc">전체 세포 평균 → Bulk처럼 예측</div>
+                                <div class="ml-tool">CatBoost (Pan-cancer 17종)</div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-name">By Cluster</div>
+                                <div class="ml-desc">클러스터별 예측 → 암 특성 클러스터 식별</div>
+                                <div class="ml-tool">CatBoost + SHAP waterfall</div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-name">Malignant Only</div>
+                                <div class="ml-desc">악성 세포만 → 더 정확한 암 종류</div>
+                                <div class="ml-tool">CNV+ cells → CatBoost</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ml-section" style="margin-top: 1rem;">
+                        <h4>🤖 ML #3: Malignant Cell Detection</h4>
+                        <div class="ml-grid">
+                            <div class="ml-item">
+                                <div class="ml-name">CNV Score</div>
+                                <div class="ml-desc">Expression 기반 CNV 추론</div>
+                                <div class="ml-tool">InferCNV-style algorithm</div>
+                            </div>
+                            <div class="ml-item">
+                                <div class="ml-name">Classification</div>
+                                <div class="ml-desc">CNV + Marker → Malignant/Normal</div>
+                                <div class="ml-tool">XGBoost classifier</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">cnv_scores.csv</span>
+                            <span class="output-file">malignant_cells.csv</span>
+                            <span class="output-file">ml_prediction.json</span>
+                            <span class="output-file">figures/shap_waterfall.png</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-arrow">⬇️</div>
+
+            <!-- Agent 6 -->
+            <div class="agent-card agent-6">
+                <div class="agent-header">
+                    <div class="agent-number">6</div>
+                    <div class="agent-title">
+                        <h3>Visualization & Report</h3>
+                        <span class="filename">agent_sc_report.py</span>
+                    </div>
+                </div>
+                <div class="agent-body">
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-icon">🗺️</div>
+                            <div class="step-name">UMAP Plots</div>
+                            <div class="step-detail">Clusters, Types</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🎻</div>
+                            <div class="step-name">Violin</div>
+                            <div class="step-detail">QC, Markers</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🔵</div>
+                            <div class="step-name">Dotplot</div>
+                            <div class="step-detail">Markers</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🔥</div>
+                            <div class="step-name">Heatmap</div>
+                            <div class="step-detail">Top DEGs</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🕸️</div>
+                            <div class="step-name">Network</div>
+                            <div class="step-detail">GRN, CCI</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">🤖</div>
+                            <div class="step-name">LLM</div>
+                            <div class="step-detail">Interpretation</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-icon">📄</div>
+                            <div class="step-name">HTML</div>
+                            <div class="step-detail">Report</div>
+                        </div>
+                    </div>
+                    <div class="output-section">
+                        <h4>📤 Output Files</h4>
+                        <div class="output-files">
+                            <span class="output-file">figures/*.png</span>
+                            <span class="output-file">figures/*.html</span>
+                            <span class="output-file">report_data.json</span>
+                            <span class="output-file">report.html</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ML Summary -->
+        <section class="ml-summary">
+            <h2 class="section-title"><span class="icon">🤖</span> ML Prediction Summary</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">Single-cell 데이터에서 3가지 ML 예측을 수행합니다. 각각 서로 다른 질문에 답합니다.</p>
+
+            <div class="ml-summary-grid">
+                <div class="ml-summary-card">
+                    <div class="ml-icon">🏷️</div>
+                    <h4>ML #1: Cell Type</h4>
+                    <div class="question">"이 세포가 뭐야?"</div>
+                    <div class="answer">T cell, B cell, Tumor, ...</div>
+                    <div class="tool">CellTypist / Marker-based</div>
+                    <div class="location">📍 Agent 2</div>
+                </div>
+                <div class="ml-summary-card">
+                    <div class="ml-icon">🎯</div>
+                    <h4>ML #2: Cancer Type</h4>
+                    <div class="question">"이 샘플이 무슨 암이야?"</div>
+                    <div class="answer">BRCA (92%), LUAD (85%), ...</div>
+                    <div class="tool">CatBoost (Pan-cancer) + SHAP</div>
+                    <div class="location">📍 Agent 5</div>
+                </div>
+                <div class="ml-summary-card">
+                    <div class="ml-icon">🔬</div>
+                    <h4>ML #3: Malignancy</h4>
+                    <div class="question">"이 세포가 암세포야?"</div>
+                    <div class="answer">Malignant / Normal</div>
+                    <div class="tool">CNV + XGBoost</div>
+                    <div class="location">📍 Agent 5</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Comparison -->
+        <section>
+            <h2 class="section-title"><span class="icon">⚖️</span> Bulk vs Single-cell Pipeline</h2>
+            <div class="comparison">
+                <div class="comparison-card">
+                    <div class="comparison-header bulk">
+                        <h3>🧪 Bulk RNA-seq</h3>
+                        <span class="tag">6 Agents</span>
+                    </div>
+                    <div class="comparison-body">
+                        <div class="comparison-item">
+                            <div class="agent-num">1</div>
+                            <div class="agent-info">
+                                <h4>DEG Analysis</h4>
+                                <p>DESeq2 통계 분석</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">2</div>
+                            <div class="agent-info">
+                                <h4>Network</h4>
+                                <p>Hub genes, Correlation</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">3</div>
+                            <div class="agent-info">
+                                <h4>Pathway</h4>
+                                <p>GO/KEGG enrichment</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">4</div>
+                            <div class="agent-info">
+                                <h4>Validation</h4>
+                                <p>COSMIC/OncoKB, RAG</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">5</div>
+                            <div class="agent-info">
+                                <h4>Visualization</h4>
+                                <p>Volcano, Heatmap, Network</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">6</div>
+                            <div class="agent-info">
+                                <h4>Report</h4>
+                                <p>ML prediction, RAG, HTML</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="comparison-card">
+                    <div class="comparison-header singlecell">
+                        <h3>🔬 Single-cell RNA-seq</h3>
+                        <span class="tag">6 Agents</span>
+                    </div>
+                    <div class="comparison-body">
+                        <div class="comparison-item">
+                            <div class="agent-num">1</div>
+                            <div class="agent-info">
+                                <h4>QC & Preprocessing</h4>
+                                <p>QC, Normalization, Cell cycle</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">2</div>
+                            <div class="agent-info">
+                                <h4>Clustering & Annotation</h4>
+                                <p>HVG→PCA→UMAP→Clustering + 🤖ML#1</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">3</div>
+                            <div class="agent-info">
+                                <h4>Pathway & Validation</h4>
+                                <p>Pathway, Driver genes, TME</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">4</div>
+                            <div class="agent-info">
+                                <h4>Trajectory & Dynamics</h4>
+                                <p>Trajectory, CCI, GRN</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">5</div>
+                            <div class="agent-info">
+                                <h4>CNV & ML Prediction</h4>
+                                <p>CNV, 🤖ML#2 Cancer, 🤖ML#3 Malignant</p>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="agent-num">6</div>
+                            <div class="agent-info">
+                                <h4>Visualization & Report</h4>
+                                <p>All plots, LLM, HTML Report</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🧬 BioInsight AI - Single-Cell RNA-seq Pipeline Architecture</p>
+            <p>Generated: <span id="date"></span> | <a href="https://github.com/BioInsight">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        document.getElementById('date').textContent = new Date().toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    </script>
+</body>
+</html>

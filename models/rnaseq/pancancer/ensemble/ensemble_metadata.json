@@ -1,0 +1,29 @@
+{
+  "n_classes": 17,
+  "class_names": [
+    "BLCA",
+    "BRCA",
+    "COAD",
+    "GBM",
+    "HNSC",
+    "KIRC",
+    "LGG",
+    "LIHC",
+    "LUAD",
+    "LUSC",
+    "OV",
+    "PAAD",
+    "PRAD",
+    "SKCM",
+    "STAD",
+    "THCA",
+    "UCEC"
+  ],
+  "model_weights": {
+    "catboost": 1.0
+  },
+  "models_available": [
+    "catboost"
+  ],
+  "random_state": 42
+}

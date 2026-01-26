@@ -1,0 +1,21 @@
+{
+  "cancer_type": "breast",
+  "version": "1.0",
+  "training_date": "2026-01-09T14:34:36.369430",
+  "n_training_samples": 984,
+  "n_test_samples": 247,
+  "n_genes": 3000,
+  "cv_auc": 0.9991306258238654,
+  "test_auc": 0.9982531055900621,
+  "test_accuracy": 0.9878542510121457,
+  "best_params": {
+    "iterations": 755,
+    "depth": 5,
+    "learning_rate": 0.03355332969068326,
+    "l2_leaf_reg": 6.070701514183092,
+    "bagging_temperature": 0.9699601344811835,
+    "random_strength": 3.650226924371609e-05,
+    "border_count": 47,
+    "min_data_in_leaf": 72
+  }
+}

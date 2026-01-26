@@ -1,0 +1,70 @@
+{
+  "BRCA": {
+    "name": "Breast Invasive Carcinoma",
+    "korean": "유방암"
+  },
+  "LUAD": {
+    "name": "Lung Adenocarcinoma",
+    "korean": "폐 선암"
+  },
+  "LUSC": {
+    "name": "Lung Squamous Cell Carcinoma",
+    "korean": "폐 편평세포암"
+  },
+  "KIRC": {
+    "name": "Kidney Clear Cell Carcinoma",
+    "korean": "신장 투명세포암"
+  },
+  "THCA": {
+    "name": "Thyroid Carcinoma",
+    "korean": "갑상선암"
+  },
+  "PRAD": {
+    "name": "Prostate Adenocarcinoma",
+    "korean": "전립선암"
+  },
+  "LIHC": {
+    "name": "Liver Hepatocellular Carcinoma",
+    "korean": "간암"
+  },
+  "COAD": {
+    "name": "Colon Adenocarcinoma",
+    "korean": "대장암"
+  },
+  "STAD": {
+    "name": "Stomach Adenocarcinoma",
+    "korean": "위암"
+  },
+  "BLCA": {
+    "name": "Bladder Urothelial Carcinoma",
+    "korean": "방광암"
+  },
+  "HNSC": {
+    "name": "Head & Neck Squamous Cell Carcinoma",
+    "korean": "두경부암"
+  },
+  "OV": {
+    "name": "Ovarian Serous Cystadenocarcinoma",
+    "korean": "난소암"
+  },
+  "UCEC": {
+    "name": "Uterine Corpus Endometrial Carcinoma",
+    "korean": "자궁내막암"
+  },
+  "GBM": {
+    "name": "Glioblastoma Multiforme",
+    "korean": "교모세포종"
+  },
+  "LGG": {
+    "name": "Lower Grade Glioma",
+    "korean": "저등급 신경교종"
+  },
+  "PAAD": {
+    "name": "Pancreatic Adenocarcinoma",
+    "korean": "췌장암"
+  },
+  "SKCM": {
+    "name": "Skin Cutaneous Melanoma",
+    "korean": "피부 흑색종"
+  }
+}
