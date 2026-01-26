@@ -11,9 +11,15 @@ Provides prioritization and headline selection.
 """
 
 import asyncio
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, field
+
+# Add backend to path for translator
+# Path: bio-daily-briefing/src/aggregator.py -> VectorDB_BioInsight/backend
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "backend"))
 
 from .sources.fda_fetcher import FDAFetcher, FDANews
 from .sources.clinicaltrials_fetcher import ClinicalTrialsFetcher, ClinicalTrial
@@ -109,6 +115,15 @@ class NewsAggregator:
         self.biorxiv_fetcher = BioRxivFetcher()
         self.pubmed_fetcher = PubMedFetcher()
         self.trend_analyzer = TrendAnalyzer()
+
+        # Initialize translator for Korean translation
+        self.translator = None
+        try:
+            from app.core.translator import TranslationService
+            self.translator = TranslationService()
+            print("NewsAggregator: 번역 서비스 활성화")
+        except Exception as e:
+            print(f"NewsAggregator: 번역 서비스 비활성화 ({e})")
 
     async def aggregate_daily(
         self,
@@ -223,14 +238,27 @@ class NewsAggregator:
         return briefing
 
     def _convert_fda_news(self, fda_news: List[FDANews]) -> List[AggregatedNews]:
-        """Convert FDA news to unified format."""
+        """Convert FDA news to unified format with Korean translation."""
         result = []
         for news in fda_news:
+            title = news.title
+            summary = news.summary
+
+            # Translate to Korean if translator is available
+            if self.translator:
+                try:
+                    title = self.translator.translate_to_korean(news.title)
+                    if news.summary:
+                        summary = self.translator.translate_to_korean(news.summary)
+                    print(f"  ✅ 번역: {news.title[:30]}...")
+                except Exception as e:
+                    print(f"  ⚠️ 번역 실패: {e}")
+
             result.append(AggregatedNews(
                 source="FDA",
                 news_type=news.source_type,
-                title=news.title,
-                summary=news.summary,
+                title=title,
+                summary=summary,
                 link=news.link,
                 date=news.date.strftime("%Y-%m-%d"),
                 priority=news.priority,
@@ -238,6 +266,8 @@ class NewsAggregator:
                     "drug_name": news.drug_name,
                     "company": news.company,
                     "indication": news.indication,
+                    "title_en": news.title,  # Keep original English
+                    "summary_en": news.summary,
                 }
             ))
         return result
