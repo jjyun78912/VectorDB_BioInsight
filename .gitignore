@@ -153,3 +153,5 @@ models/rnaseq/*/evaluation/
 models/rnaseq/*/robust_validation/
 *_cache.json
 training_results.json
+chroma_db_backup.tar.gz
+indexing.log
