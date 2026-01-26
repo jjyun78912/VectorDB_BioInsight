@@ -650,7 +650,7 @@ export const Hero: React.FC<HeroProps> = ({
         jobId={rnaseqJobId}
         onClose={() => setRnaseqJobId(null)}
         onViewReport={(jobId) => {
-          window.open(`http://localhost:8000/api/rnaseq/report/${jobId}`, '_blank');
+          window.open(`/api/rnaseq/report/${jobId}`, '_blank');
         }}
       />
     )}

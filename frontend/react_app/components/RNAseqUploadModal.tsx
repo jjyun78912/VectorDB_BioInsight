@@ -99,7 +99,7 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
 
-      const response = await fetch('http://localhost:8000/api/rnaseq/preview-samples', {
+      const response = await fetch('/api/rnaseq/preview-samples', {
         method: 'POST',
         body: formData,
         signal: controller.signal
@@ -127,8 +127,8 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
           );
         } else if (err.message === 'Failed to fetch') {
           setError(language === 'ko'
-            ? '서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요. (http://localhost:8000)'
-            : 'Cannot connect to server. Please check if backend is running. (http://localhost:8000)'
+            ? '서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요.'
+            : 'Cannot connect to server. Please check if backend is running.'
           );
         } else {
           setError(err.message);
@@ -219,7 +219,7 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
         formData.append('treatment_label', treatmentLabel);
         formData.append('control_label', controlLabel);
 
-        response = await fetch('http://localhost:8000/api/rnaseq/upload-with-auto-metadata', {
+        response = await fetch('/api/rnaseq/upload-with-auto-metadata', {
           method: 'POST',
           body: formData
         });
@@ -234,7 +234,7 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
         formData.append('treatment_label', treatmentLabel);
         formData.append('control_label', controlLabel);
 
-        response = await fetch('http://localhost:8000/api/rnaseq/upload', {
+        response = await fetch('/api/rnaseq/upload', {
           method: 'POST',
           body: formData
         });
@@ -248,7 +248,7 @@ export const RNAseqUploadModal: React.FC<RNAseqUploadModalProps> = ({
       const result = await response.json();
 
       // Start analysis
-      const startResponse = await fetch(`http://localhost:8000/api/rnaseq/start/${result.job_id}`, {
+      const startResponse = await fetch(`/api/rnaseq/start/${result.job_id}`, {
         method: 'POST'
       });
 

@@ -81,7 +81,7 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
 
   // Connect to SSE stream
   useEffect(() => {
-    const eventSource = new EventSource(`http://localhost:8000/api/rnaseq/stream/${jobId}`);
+    const eventSource = new EventSource(`/api/rnaseq/stream/${jobId}`);
 
     eventSource.onmessage = (event) => {
       try {
@@ -175,7 +175,7 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
       // Fallback: poll status API to check if pipeline completed
       const checkStatus = async () => {
         try {
-          const response = await fetch(`http://localhost:8000/api/rnaseq/status/${jobId}`);
+          const response = await fetch(`/api/rnaseq/status/${jobId}`);
           if (response.ok) {
             const status = await response.json();
             if (status.status === 'completed' || status.status === 'completed_with_errors') {
@@ -205,7 +205,7 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
 
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/rnaseq/status/${jobId}`);
+        const response = await fetch(`/api/rnaseq/status/${jobId}`);
         if (response.ok) {
           const status = await response.json();
           if (status.status === 'completed' || status.status === 'completed_with_errors') {
@@ -230,7 +230,7 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
       onViewReport(jobId);
     } else {
       // Open in new tab
-      window.open(`http://localhost:8000/api/rnaseq/report/${jobId}`, '_blank');
+      window.open(`/api/rnaseq/report/${jobId}`, '_blank');
     }
   };
 
@@ -380,7 +380,7 @@ export const PipelineProgress: React.FC<PipelineProgressProps> = ({
               {t.viewReport}
             </button>
             <a
-              href={`http://localhost:8000/api/rnaseq/report/${jobId}`}
+              href={`/api/rnaseq/report/${jobId}`}
               download={`rnaseq_report_${jobId}.html`}
               className="py-3 px-4 rounded-xl border border-gray-200 text-gray-700 font-medium flex items-center justify-center gap-2 hover:bg-gray-50 transition-all"
             >
