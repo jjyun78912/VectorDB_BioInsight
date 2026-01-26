@@ -138,3 +138,18 @@ logs/
 *.temp
 *.bak
 figures/
+
+# ─────────────────────────────────────────────────────────────
+# Daily Briefing
+# ─────────────────────────────────────────────────────────────
+bio-daily-briefing/config/subscribers.json
+bio-daily-briefing/output/
+
+# ─────────────────────────────────────────────────────────────
+# Model Artifacts (keep structure, ignore large files)
+# ─────────────────────────────────────────────────────────────
+models/rnaseq/*/shap_analysis/
+models/rnaseq/*/evaluation/
+models/rnaseq/*/robust_validation/
+*_cache.json
+training_results.json
