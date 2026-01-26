@@ -2163,7 +2163,6 @@ class ReportAgent(BaseAgent):
                     color: #dc2626;
                     font-size: 12px;
                     margin-bottom: 6px;
-                    text-transform: uppercase;
                     letter-spacing: 0.5px;
                 }}
                 /* 추천 논문 박스 */

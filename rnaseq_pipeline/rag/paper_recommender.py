@@ -617,10 +617,10 @@ class PaperRecommender:
         """
         Classify paper as classic, breakthrough, likely variants, or unknown.
 
-        Classic paper: High absolute citations (100+), 3+ years old
-        Likely Classic: Good citations (50+), 3+ years old
-        Breakthrough paper: Recent (1-2 years), high citation velocity (20+)
-        Likely Breakthrough: Recent (1-3 years), moderate velocity (10+)
+        Classic paper: 고인용 + 검증된 논문 (50회 이상, 3년 이상)
+        Breakthrough paper: 최신이면서 빠르게 인용되는 논문 (실제 인용 필요!)
+
+        ★ 핵심: 인용수 0회인 논문은 Breakthrough가 될 수 없음
         """
         current_year = datetime.now().year
 
@@ -630,29 +630,36 @@ class PaperRecommender:
         except (ValueError, TypeError):
             return "unknown"
 
-        # Classic paper criteria (strict)
-        if (age >= 3 and
-            paper.citation_count >= 100 and
-            paper.citation_velocity >= 10):
+        # ★ 인용 데이터가 없거나 0이면 unknown
+        if paper.citation_count <= 0:
+            return "unknown"
+
+        # Classic paper criteria (검증된 고인용 논문)
+        # - 3년 이상 경과
+        # - 인용수 50회 이상 (더 현실적인 기준)
+        if age >= 3 and paper.citation_count >= 50:
             return "classic"
 
-        # Likely classic (relaxed)
-        if (age >= 3 and
-            paper.citation_count >= 50 and
-            paper.citation_velocity >= 5):
+        # Likely classic (준 고인용)
+        if age >= 3 and paper.citation_count >= 30:
             return "likely_classic"
 
-        # Breakthrough paper criteria (strict)
+        # Breakthrough paper criteria (빠르게 주목받는 최신 논문)
+        # ★ 핵심: 실제로 인용되고 있어야 함!
         if age <= 2:
-            # High velocity or high influential citations
-            if (paper.citation_velocity >= 20 or
-                paper.influential_citation_count >= 5):
+            # 최소 10회 이상 인용 + 빠른 속도
+            if paper.citation_count >= 10 and paper.citation_velocity >= 5:
+                return "breakthrough"
+            # 영향력 있는 인용이 있는 경우
+            if paper.influential_citation_count >= 3:
                 return "breakthrough"
 
-        # Likely breakthrough (relaxed) - 1-3 years, moderate velocity
+        # Likely breakthrough (주목받기 시작하는 논문)
+        # - 1-3년 내
+        # - 최소한의 인용 + 적절한 속도
         if (1 <= age <= 3 and
-            (paper.citation_velocity >= 10 or
-             paper.influential_citation_count >= 3)):
+            paper.citation_count >= 5 and
+            paper.citation_velocity >= 3):
             return "likely_breakthrough"
 
         return "unknown"
@@ -690,34 +697,37 @@ class PaperRecommender:
 
         Uses journal prestige and publication year as proxies.
 
+        ★ 중요: 인용 데이터가 없으면 'classic'이나 'breakthrough' 분류 불가!
+        → 저널 명성과 연도만으로는 판단할 수 없음
+        → 'unknown'으로 반환하고 리포트에서 별도 처리
+
         Returns:
             Tuple of (estimated_score, paper_type)
         """
         score = 50.0  # Base score
-        paper_type = "unknown"
+        paper_type = "unknown"  # ★ 인용 데이터 없으면 항상 unknown
 
         current_year = datetime.now().year
 
-        # Journal prestige bonus
+        # Journal prestige bonus (품질 점수에만 반영, 분류에는 영향 없음)
         if paper.journal and any(j.lower() in paper.journal.lower() for j in HIGH_IMPACT_JOURNALS):
             score += 30
 
-        # Age factor
+        # Age factor (품질 점수에만 반영)
         try:
             pub_year = int(paper.year) if paper.year else 0
             age = current_year - pub_year
         except (ValueError, TypeError):
             age = 3  # Default
 
-        if age >= 5 and score >= 70:
-            paper_type = "likely_classic"
-            score += 10
-        elif age <= 2 and score >= 70:
-            paper_type = "likely_breakthrough"
-            score += 10
-        elif age <= 2:
-            # Recent paper from decent journal
+        # ★ 더 이상 likely_classic/likely_breakthrough 분류하지 않음
+        # 인용 데이터가 없으면 breakthrough인지 판단 불가
+        if age <= 2:
+            # Recent paper bonus (분류는 유지하지 않음)
             score += 5
+        elif age >= 5 and score >= 70:
+            # Older, high-journal paper bonus
+            score += 10
 
         paper.citation_data_source = "estimated"
         return min(100, score), paper_type

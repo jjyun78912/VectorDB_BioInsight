@@ -182,7 +182,7 @@ class ClassificationResult:
 
 
 class PanCancerPreprocessor:
-    """Pan-Cancer 데이터 전처리"""
+    """Pan-Cancer 데이터 전처리 (v2: 배치 보정 포함)"""
 
     def __init__(self,
                  n_top_genes: int = 5000,
@@ -201,6 +201,11 @@ class PanCancerPreprocessor:
         # Gene ID 변환 매핑
         self.symbol_to_ensembl: Optional[Dict[str, str]] = None
         self.ensembl_to_symbol: Optional[Dict[str, str]] = None
+
+        # ★ 배치 보정용 참조 분포 (v2)
+        self.reference_quantiles: Optional[np.ndarray] = None  # TCGA 분위수 분포
+        self.reference_means: Optional[np.ndarray] = None  # 유전자별 평균
+        self.reference_stds: Optional[np.ndarray] = None  # 유전자별 표준편차
 
     def _load_gene_mapping(self, model_dir: Path):
         """Gene Symbol <-> ENSEMBL ID 매핑 로드"""
@@ -396,6 +401,71 @@ class PanCancerPreprocessor:
         """log2(x + 1) 변환"""
         return np.log2(data + 1)
 
+    def _quantile_normalize(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Quantile Normalization (v2)
+
+        외부 데이터를 TCGA 학습 데이터의 분위수 분포에 맞춤
+        """
+        if self.reference_quantiles is None:
+            return data
+
+        result = data.copy()
+
+        for col in result.columns:
+            # 각 샘플의 값을 순위 기반으로 참조 분위수에 매핑
+            sample_values = result[col].values
+            ranks = np.argsort(np.argsort(sample_values))
+
+            # 참조 분위수에서 해당 순위의 값 가져오기
+            n_genes = len(sample_values)
+            n_ref = len(self.reference_quantiles)
+
+            # 순위를 참조 분위수 인덱스로 변환
+            ref_indices = (ranks * (n_ref - 1) / (n_genes - 1)).astype(int)
+            ref_indices = np.clip(ref_indices, 0, n_ref - 1)
+
+            result[col] = self.reference_quantiles[ref_indices]
+
+        return result
+
+    def _batch_correct(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Reference-based Batch Correction (v2)
+
+        외부 데이터를 TCGA 학습 데이터의 평균/표준편차에 맞춤
+        (ComBat-like simple correction)
+        """
+        if self.reference_means is None or self.reference_stds is None:
+            return data
+
+        result = data.copy()
+
+        # 공통 유전자만 보정
+        common_genes = [g for g in data.index if g in self.reference_means.index]
+
+        if len(common_genes) == 0:
+            logger.warning("No common genes for batch correction")
+            return data
+
+        # 외부 데이터의 통계량
+        external_means = data.loc[common_genes].mean(axis=1)
+        external_stds = data.loc[common_genes].std(axis=1)
+        external_stds = external_stds.replace(0, 1)  # 0 방지
+
+        # 참조 통계량
+        ref_means = self.reference_means.loc[common_genes]
+        ref_stds = self.reference_stds.loc[common_genes]
+        ref_stds = ref_stds.replace(0, 1)  # 0 방지
+
+        # Z-score 변환 후 참조 분포에 맞춤
+        for col in result.columns:
+            z_scores = (result.loc[common_genes, col] - external_means) / external_stds
+            result.loc[common_genes, col] = z_scores * ref_stds + ref_means
+
+        logger.info(f"Batch correction applied to {len(common_genes)} genes")
+        return result
+
     def fit_transform(self, counts: pd.DataFrame,
                      cancer_labels: np.ndarray,
                      cancer_info: Dict,
@@ -443,6 +513,20 @@ class PanCancerPreprocessor:
         # 선택된 유전자만 추출 (samples x genes)
         X = transformed.loc[self.selected_genes].T.values
 
+        # ★ 참조 분포 저장 (v2: 배치 보정용)
+        selected_data = transformed.loc[self.selected_genes]
+        self.reference_means = selected_data.mean(axis=1)
+        self.reference_stds = selected_data.std(axis=1)
+        # Quantile normalization용 분위수 저장 (전체 샘플의 평균 분포)
+        all_values = selected_data.values.flatten()
+        all_values = all_values[~np.isnan(all_values)]
+        self.reference_quantiles = np.sort(all_values)
+        # 메모리 효율을 위해 1000개 분위수만 저장
+        if len(self.reference_quantiles) > 1000:
+            indices = np.linspace(0, len(self.reference_quantiles) - 1, 1000).astype(int)
+            self.reference_quantiles = self.reference_quantiles[indices]
+        logger.info(f"Saved reference distribution for batch correction (quantiles: {len(self.reference_quantiles)})")
+
         # Train/test split (stratified)
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state,
@@ -463,14 +547,18 @@ class PanCancerPreprocessor:
 
     def transform(self, counts: pd.DataFrame,
                   skip_normalization: bool = False,
-                  skip_log: bool = False) -> np.ndarray:
+                  skip_log: bool = False,
+                  apply_batch_correction: bool = True,
+                  use_quantile_norm: bool = False) -> np.ndarray:
         """
-        새 데이터 변환
+        새 데이터 변환 (v2: 배치 보정 지원)
 
         Args:
             counts: Gene x Sample matrix
             skip_normalization: True면 CPM 정규화 건너뜀 (이미 TPM/FPKM인 경우)
             skip_log: True면 log 변환 건너뜀 (이미 log 변환된 경우)
+            apply_batch_correction: True면 TCGA 참조 분포 기반 배치 보정 적용
+            use_quantile_norm: True면 quantile normalization 적용 (더 강력한 보정)
 
         Returns:
             변환된 feature matrix
@@ -492,6 +580,15 @@ class PanCancerPreprocessor:
             transformed = self._log_transform(normalized)
         else:
             transformed = normalized
+
+        # ★ 배치 보정 (v2)
+        if apply_batch_correction and self.reference_means is not None:
+            if use_quantile_norm:
+                transformed = self._quantile_normalize(transformed)
+                logger.info("Applied quantile normalization for batch correction")
+            else:
+                transformed = self._batch_correct(transformed)
+                logger.info("Applied reference-based batch correction")
 
         # 중복 gene index 처리 (평균 사용)
         if transformed.index.duplicated().any():
@@ -549,7 +646,7 @@ class PanCancerPreprocessor:
         return self.label_encoder.inverse_transform(y)
 
     def save(self, path: str):
-        """전처리기 저장"""
+        """전처리기 저장 (v2: 배치 보정 참조 분포 포함)"""
         save_dict = {
             'n_top_genes': self.n_top_genes,
             'log_transform': self.log_transform,
@@ -559,12 +656,16 @@ class PanCancerPreprocessor:
             'label_encoder': self.label_encoder,
             'cancer_info': self.cancer_info,
             'is_fitted': self.is_fitted,
+            # ★ 배치 보정용 참조 분포 (v2)
+            'reference_quantiles': self.reference_quantiles,
+            'reference_means': self.reference_means,
+            'reference_stds': self.reference_stds,
         }
         joblib.dump(save_dict, path)
 
     @classmethod
     def load(cls, path: str) -> "PanCancerPreprocessor":
-        """저장된 전처리기 로드"""
+        """저장된 전처리기 로드 (v2: 배치 보정 참조 분포 포함)"""
         save_dict = joblib.load(path)
         preprocessor = cls(
             n_top_genes=save_dict['n_top_genes'],
@@ -576,6 +677,14 @@ class PanCancerPreprocessor:
         preprocessor.label_encoder = save_dict['label_encoder']
         preprocessor.cancer_info = save_dict['cancer_info']
         preprocessor.is_fitted = save_dict['is_fitted']
+
+        # ★ 배치 보정용 참조 분포 로드 (v2)
+        preprocessor.reference_quantiles = save_dict.get('reference_quantiles')
+        preprocessor.reference_means = save_dict.get('reference_means')
+        preprocessor.reference_stds = save_dict.get('reference_stds')
+
+        if preprocessor.reference_means is not None:
+            logger.info("Loaded reference distribution for batch correction")
 
         # Gene mapping 로드 (모델 디렉토리에서)
         model_dir = Path(path).parent
@@ -978,9 +1087,11 @@ class PanCancerClassifier:
                 top_k: int = 5,
                 use_secondary_validation: bool = True,
                 skip_normalization: bool = False,
-                skip_log: bool = False) -> List[ClassificationResult]:
+                skip_log: bool = False,
+                apply_batch_correction: bool = True,
+                use_quantile_norm: bool = False) -> List[ClassificationResult]:
         """
-        암종 예측 (v2: 2차 검증 포함)
+        암종 예측 (v3: 배치 보정 + 2차 검증)
 
         Args:
             counts: Gene x Sample count matrix
@@ -989,6 +1100,8 @@ class PanCancerClassifier:
             use_secondary_validation: 혼동 가능 암종에 대한 2차 검증 수행
             skip_normalization: True면 CPM 정규화 건너뜀 (이미 TPM/FPKM인 경우)
             skip_log: True면 log 변환 건너뜀 (이미 log 변환된 경우)
+            apply_batch_correction: True면 TCGA 참조 분포 기반 배치 보정 적용 (외부 데이터에 권장)
+            use_quantile_norm: True면 quantile normalization 적용 (더 강력한 배치 보정)
 
         Returns:
             분류 결과 리스트
@@ -999,10 +1112,12 @@ class PanCancerClassifier:
         if sample_ids is None:
             sample_ids = counts.columns.tolist()
 
-        # 전처리
+        # 전처리 (v3: 배치 보정 옵션 추가)
         X = self.preprocessor.transform(counts,
                                         skip_normalization=skip_normalization,
-                                        skip_log=skip_log)
+                                        skip_log=skip_log,
+                                        apply_batch_correction=apply_batch_correction,
+                                        use_quantile_norm=use_quantile_norm)
 
         # 앙상블 예측
         ensemble_proba, individual_preds = self.ensemble.predict_with_individual(X)

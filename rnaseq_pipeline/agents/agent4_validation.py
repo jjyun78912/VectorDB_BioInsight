@@ -544,37 +544,37 @@ class ValidationAgent(BaseAgent):
         db_matched_count = int(integrated_df['db_matched'].sum())
         pathway_genes = int((integrated_df['pathway_count'] > 0).sum())
 
-        # Observation - Pattern-focused, no gene-specific storytelling
+        # Observation - 패턴 중심, 유전자 특이적 서술 없음
         observations = []
         observations.append(
-            f"A total of {total_deg} differentially expressed genes were identified "
-            f"({up_count} upregulated, {down_count} downregulated)."
+            f"총 {total_deg:,}개의 차등 발현 유전자가 확인되었습니다 "
+            f"(상향 발현 {up_count:,}개, 하향 발현 {down_count:,}개)."
         )
 
         if hub_count > 0:
             observations.append(
-                f"Network analysis identified {hub_count} genes with high connectivity (hub candidates). "
-                f"Note: Network centrality is a topological property and does not directly imply biological importance."
+                f"네트워크 분석에서 연결성이 높은 {hub_count}개의 허브 유전자 후보가 식별되었습니다. "
+                f"참고: 네트워크 중심성은 위상학적 특성이며, 생물학적 중요성을 직접적으로 의미하지 않습니다."
             )
 
         if db_matched_count > 0:
             match_ratio = db_matched_count / total_deg * 100
             observations.append(
-                f"{db_matched_count} DEGs ({match_ratio:.1f}%) appear in cancer gene databases. "
-                f"The majority of DEGs are not catalogued, which is typical for transcriptome-wide analyses."
+                f"{db_matched_count}개의 DEG ({match_ratio:.1f}%)가 암 유전자 데이터베이스에 등록되어 있습니다. "
+                f"대부분의 DEG는 데이터베이스에 등록되지 않았으며, 이는 전체 전사체 분석에서 일반적인 현상입니다."
             )
         else:
             observations.append(
-                "No DEGs were found in major cancer gene databases (COSMIC, OncoKB). "
-                "This does not indicate irrelevance; databases have limited coverage and are biased toward well-studied genes."
+                "주요 암 유전자 데이터베이스(COSMIC, OncoKB)에 등록된 DEG가 없습니다. "
+                "이것이 무관성을 의미하지는 않으며, 데이터베이스의 제한된 범위와 잘 연구된 유전자에 대한 편향이 원인일 수 있습니다."
             )
 
         if pathway_genes > 0:
             observations.append(
-                f"{pathway_genes} DEGs were mapped to enriched pathways, providing functional annotation context."
+                f"{pathway_genes}개의 DEG가 농축된 경로에 매핑되어 기능적 맥락을 제공합니다."
             )
 
-        # Supporting Evidence - Traceable to actual results
+        # Supporting Evidence - 실제 결과에 기반한 증거
         evidence = {
             "deg_statistics": {
                 "total": total_deg,
@@ -583,69 +583,67 @@ class ValidationAgent(BaseAgent):
             },
             "network_analysis": {
                 "hub_candidates": hub_count,
-                "note": "Hub status based on network topology only"
+                "note": "허브 상태는 네트워크 위상 기반"
             },
             "database_validation": {
                 "matched": db_matched_count,
                 "databases_used": ["COSMIC Tier1", "OncoKB"],
-                "note": "Database coverage is incomplete; absence does not imply irrelevance"
+                "note": "데이터베이스 범위가 제한적; 미등록이 무관성을 의미하지 않음"
             },
             "pathway_enrichment": {
                 "genes_with_pathway": pathway_genes,
-                "note": "Enrichment is statistical association, not causal mechanism"
+                "note": "농축은 통계적 연관성이며 인과 메커니즘 아님"
             }
         }
 
-        # Interpretation - Conservative, non-causal language
+        # Interpretation - 보수적, 비인과적 표현
         interpretation_text = []
 
         if total_deg > 1000:
             interpretation_text.append(
-                "The large number of DEGs may reflect broad transcriptional changes "
-                "associated with the comparison groups. This is consistent with heterogeneous biological states "
-                "but makes identification of specific functional drivers challenging without additional evidence."
+                f"다수의 DEG ({total_deg:,}개)는 비교 그룹 간의 광범위한 전사체 변화를 반영할 수 있습니다. "
+                "이는 이질적인 생물학적 상태와 일관되지만, 추가적인 증거 없이 특정 기능적 드라이버를 식별하기 어렵습니다."
             )
         elif total_deg > 100:
             interpretation_text.append(
-                "The moderate number of DEGs suggests detectable transcriptional differences between groups. "
-                "The functional significance of these changes remains to be established through validation studies."
+                "적절한 수의 DEG는 그룹 간 검출 가능한 전사체 차이를 시사합니다. "
+                "이러한 변화의 기능적 중요성은 검증 연구를 통해 확립되어야 합니다."
             )
         else:
             interpretation_text.append(
-                "A relatively small number of DEGs were identified, which may indicate subtle differences "
-                "between comparison groups or limited statistical power."
+                "상대적으로 적은 수의 DEG가 확인되었으며, 이는 비교 그룹 간의 미묘한 차이 또는 "
+                "제한된 통계적 검정력을 나타낼 수 있습니다."
             )
 
         if db_matched_count > 0 and db_matched_count / total_deg > 0.1:
             interpretation_text.append(
-                "The presence of known cancer genes among DEGs is consistent with cancer-relevant biology, "
-                "though this does not establish causality or therapeutic relevance."
+                "DEG 중 알려진 암 유전자의 존재는 암 관련 생물학과 일관되지만, "
+                "인과성이나 치료적 관련성을 확립하지는 않습니다."
             )
 
         if hub_count > 0 and db_matched_count == 0:
             interpretation_text.append(
-                "Hub genes were identified that are not in cancer databases. "
-                "These may represent novel candidates, but database absence could also reflect "
-                "limited prior study rather than biological novelty. "
-                "Functional validation would be required to assess their significance."
+                "암 데이터베이스에 없는 허브 유전자가 식별되었습니다. "
+                "이들은 새로운 후보를 나타낼 수 있지만, 데이터베이스 미등록은 생물학적 새로움보다는 "
+                "제한된 사전 연구를 반영할 수도 있습니다. 그 중요성을 평가하려면 기능적 검증이 필요합니다."
             )
 
-        # Limitations - Explicit statement of constraints
+        # Limitations - 제한사항 명시
         limitations = [
-            "RNA-seq measures transcript abundance, not protein levels or activity.",
-            "Differential expression is a statistical finding; biological importance is not guaranteed.",
-            "Cancer gene databases have limited coverage and are biased toward well-studied genes.",
-            "Network hub status is a topological property that does not directly indicate regulatory importance.",
-            "Pathway enrichment shows statistical association, not mechanistic causation.",
-            "This analysis does not distinguish tumor-intrinsic signals from microenvironment effects.",
-            "All findings are correlative and require experimental validation for causal inference."
+            "RNA-seq는 전사체 풍부도를 측정하며, 단백질 수준이나 활성은 측정하지 않습니다.",
+            "차등 발현은 통계적 발견이며, 생물학적 중요성이 보장되지 않습니다.",
+            "암 유전자 데이터베이스는 범위가 제한적이며 잘 연구된 유전자에 편향되어 있습니다.",
+            "네트워크 허브 상태는 위상학적 특성이며 조절 중요성을 직접적으로 나타내지 않습니다.",
+            "경로 농축은 통계적 연관성을 보여주며, 기계론적 인과관계가 아닙니다.",
+            "이 분석은 종양 고유 신호와 미세환경 효과를 구분하지 않습니다.",
+            "모든 발견은 상관관계이며 인과 추론을 위해 실험적 검증이 필요합니다."
         ]
 
-        # Check if sufficient evidence exists
+        # 충분한 증거가 있는지 확인
         if total_deg < 10 and db_matched_count == 0 and hub_count == 0:
             insufficient_data_note = (
-                "The current data are insufficient to support a specific biological conclusion. "
-                "Additional samples or complementary data types may be needed."
+                "현재 데이터는 특정 생물학적 결론을 지지하기에 불충분합니다. "
+                "추가 샘플이나 보완적인 데이터 유형이 필요할 수 있습니다."
             )
         else:
             insufficient_data_note = None
@@ -657,9 +655,9 @@ class ValidationAgent(BaseAgent):
             "limitations": limitations,
             "insufficient_data_note": insufficient_data_note,
             "methodology_note": (
-                "This interpretation follows conservative principles: "
-                "no causal claims, no labeling of novel regulators or therapeutic targets, "
-                "and explicit acknowledgment of analysis limitations."
+                "이 해석은 보수적 원칙을 따릅니다: "
+                "인과적 주장 없음, 새로운 조절자나 치료 표적 지정 없음, "
+                "분석 제한사항의 명시적 인정."
             )
         }
 

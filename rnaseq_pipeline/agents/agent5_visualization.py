@@ -696,7 +696,7 @@ class VisualizationAgent(BaseAgent):
         if show_sample_names and n_samples > 30:
             figsize = (max(figsize[0], n_samples * 0.25), figsize[1])
 
-        # Create clustermap - NO labels (all shown via hover in interactive version)
+        # Create clustermap with condition color bar
         g = sns.clustermap(
             expr_zscore,
             cmap=cmap,
@@ -706,10 +706,10 @@ class VisualizationAgent(BaseAgent):
             row_cluster=True,   # Cluster genes
             col_colors=col_colors,
             yticklabels=False,  # No gene labels - use interactive for hover
-            xticklabels=False,  # No sample labels - use interactive for hover
+            xticklabels=False,  # No sample labels - shown via condition bar
             figsize=figsize,
             dendrogram_ratio=(0.1, 0.05),
-            colors_ratio=0.02,
+            colors_ratio=0.04,  # Larger color bar for condition visibility
             cbar_pos=(0.02, 0.8, 0.03, 0.15),
             tree_kws={'linewidths': 0.5, 'colors': '#757575'}
         )
@@ -803,50 +803,118 @@ class VisualizationAgent(BaseAgent):
         # Get gene symbols for y-axis labels (shown on hover)
         gene_symbols = [self._get_gene_symbol(gid) for gid in expr_zscore.index]
 
-        # Create sample labels
+        # Create sample labels and condition colors
         sample_labels = []
+        condition_colors = []
+        condition_text = []
         for sample in expr_df.columns:
-            cond = self.sample_to_condition.get(sample, 'Unknown') if self.sample_to_condition else ''
-            sample_labels.append(f"{sample} ({cond[:1].upper()})")
+            cond = self.sample_to_condition.get(sample, 'Unknown') if self.sample_to_condition else 'Unknown'
+            sample_labels.append(f"{sample}")
+            condition_text.append(cond.capitalize())
+            # Color mapping for conditions
+            if cond.lower() in ['tumor', 'tumour', 'cancer']:
+                condition_colors.append('#e53935')  # Red for tumor
+            elif cond.lower() == 'normal':
+                condition_colors.append('#1e88e5')  # Blue for normal
+            else:
+                condition_colors.append('#9e9e9e')  # Gray for unknown
 
-        # Create heatmap with Plotly
-        fig = go.Figure(data=go.Heatmap(
-            z=expr_zscore.values,
-            x=sample_labels,
-            y=gene_symbols,
-            colorscale='RdBu_r',
-            zmid=0,
-            zmin=-2,
-            zmax=2,
-            colorbar=dict(
-                title='Z-score',
-                thickness=15,
-                len=0.5
+        # Create subplots: condition bar + heatmap
+        from plotly.subplots import make_subplots
+        fig = make_subplots(
+            rows=2, cols=1,
+            row_heights=[0.05, 0.95],
+            vertical_spacing=0.02,
+            shared_xaxes=True
+        )
+
+        # Add condition bar (top)
+        # Create a horizontal bar for each sample's condition
+        fig.add_trace(
+            go.Heatmap(
+                z=[[1] * len(sample_labels)],  # Single row
+                x=sample_labels,
+                y=['Condition'],
+                colorscale=[[0, '#ffffff'], [1, '#ffffff']],  # Invisible base
+                showscale=False,
+                hoverinfo='skip'
             ),
-            hovertemplate='<b>%{y}</b><br>Sample: %{x}<br>Z-score: %{z:.2f}<extra></extra>'
-        ))
+            row=1, col=1
+        )
+
+        # Add colored rectangles for conditions
+        for i, (sample, color, cond) in enumerate(zip(sample_labels, condition_colors, condition_text)):
+            fig.add_shape(
+                type="rect",
+                x0=i-0.5, x1=i+0.5, y0=-0.5, y1=0.5,
+                fillcolor=color,
+                line=dict(width=0),
+                row=1, col=1
+            )
+            # Add annotation for condition text on hover
+            fig.add_annotation(
+                x=i, y=0,
+                text="",  # No visible text
+                showarrow=False,
+                hovertext=f"<b>{sample}</b><br>Condition: {cond}",
+                row=1, col=1
+            )
+
+        # Add main heatmap
+        fig.add_trace(
+            go.Heatmap(
+                z=expr_zscore.values,
+                x=sample_labels,
+                y=gene_symbols,
+                colorscale='RdBu_r',
+                zmid=0,
+                zmin=-2,
+                zmax=2,
+                colorbar=dict(
+                    title='Z-score',
+                    thickness=15,
+                    len=0.4,
+                    y=0.45
+                ),
+                hovertemplate='<b>%{y}</b><br>Sample: %{x}<br>Condition: ' +
+                             '%{customdata}<br>Z-score: %{z:.2f}<extra></extra>',
+                customdata=[[condition_text[j] for j in range(len(sample_labels))] for _ in range(len(gene_symbols))]
+            ),
+            row=2, col=1
+        )
+
+        # Count samples by condition
+        tumor_count = sum(1 for c in condition_text if c.lower() in ['tumor', 'tumour', 'cancer'])
+        normal_count = sum(1 for c in condition_text if c.lower() == 'normal')
 
         # Update layout
         fig.update_layout(
             title=dict(
-                text=f'<b>Expression Heatmap (Top {n_genes} DEGs)</b><br><sup>마우스를 올려 유전자/샘플 정보 확인</sup>',
+                text=f'<b>Expression Heatmap (Top {n_genes} DEGs)</b><br>' +
+                     f'<sup>🔴 Tumor (n={tumor_count}) | 🔵 Normal (n={normal_count}) | 마우스를 올려 상세 정보 확인</sup>',
                 x=0.5,
                 font=dict(size=14)
             ),
-            xaxis=dict(
-                title='Samples',
-                showticklabels=False,  # Hide x-axis labels (shown on hover)
-                side='bottom'
-            ),
-            yaxis=dict(
-                title='Genes',
-                showticklabels=False,  # Hide y-axis labels (shown on hover)
-                autorange='reversed'  # Top genes at top
-            ),
             template='plotly_white',
-            width=800,
-            height=600,
-            margin=dict(l=60, r=30, t=80, b=60)
+            width=900,
+            height=700,
+            margin=dict(l=60, r=30, t=100, b=60)
+        )
+
+        # Update axes
+        fig.update_xaxes(showticklabels=False, row=1, col=1)
+        fig.update_yaxes(showticklabels=False, row=1, col=1)
+        fig.update_xaxes(
+            title='Samples',
+            showticklabels=False,  # Hide sample labels (shown on hover)
+            side='bottom',
+            row=2, col=1
+        )
+        fig.update_yaxes(
+            title='Genes',
+            showticklabels=False,  # Hide gene labels (shown on hover)
+            autorange='reversed',
+            row=2, col=1
         )
 
         # Save HTML

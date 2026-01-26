@@ -1,12 +1,11 @@
 # ═══════════════════════════════════════════════════════════════
-# BioInsight AI - Multi-stage Dockerfile
-# R + Python environment for RNA-seq analysis
+# BioInsight AI - Cloud Run Backend Dockerfile
+# Optimized for GCP Cloud Run with R + Python
 # ═══════════════════════════════════════════════════════════════
 
 # Stage 1: R base with Bioconductor packages
 FROM rocker/r-ver:4.3.2 AS r-base
 
-# Install R dependencies for DESeq2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libssl-dev \
@@ -20,71 +19,67 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bioconductor packages
+# Install Bioconductor packages (cached layer)
 RUN R -e "install.packages('BiocManager', repos='https://cloud.r-project.org')" && \
-    R -e "BiocManager::install(c('DESeq2', 'apeglm', 'EnhancedVolcano'), ask=FALSE, update=FALSE)"
+    R -e "BiocManager::install(c('DESeq2', 'apeglm'), ask=FALSE, update=FALSE)"
 
 # ═══════════════════════════════════════════════════════════════
-# Stage 2: Python + R combined
+# Stage 2: Python production image
 # ═══════════════════════════════════════════════════════════════
 FROM python:3.11-slim AS production
 
-# Copy R installation from r-base stage
+# Copy R installation
+COPY --from=r-base /usr/local/lib/R /usr/local/lib/R
 COPY --from=r-base /usr/lib/R /usr/lib/R
 COPY --from=r-base /usr/bin/R /usr/bin/R
 COPY --from=r-base /usr/bin/Rscript /usr/bin/Rscript
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # R runtime dependencies
     libcurl4-openssl-dev \
     libssl-dev \
     libxml2-dev \
     libfontconfig1-dev \
-    # Build tools
     build-essential \
     gcc \
     g++ \
     gfortran \
-    # HDF5 for h5ad files
     libhdf5-dev \
-    # Git for version info
-    git \
-    # Cleanup
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
+# Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PORT=8080
 
-# Create app user (non-root)
-RUN useradd --create-home --shell /bin/bash appuser
-
-# Set working directory
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies (cached layer)
 COPY requirements.txt requirements-rnaseq.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-rnaseq.txt
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-rnaseq.txt && \
+    pip install --no-cache-dir google-cloud-storage google-cloud-secret-manager
 
 # Copy application code
-COPY --chown=appuser:appuser . .
+COPY backend/ ./backend/
+COPY rnaseq_pipeline/ ./rnaseq_pipeline/
 
-# Create necessary directories
-RUN mkdir -p /app/data /app/output /app/models /app/chroma_db \
-    && chown -R appuser:appuser /app
+# Create directories for runtime data
+RUN mkdir -p /app/data /app/output /app/models /app/chroma_db
 
-# Switch to non-root user
-USER appuser
+# Cloud Run uses PORT environment variable
+EXPOSE 8080
 
-# Expose ports
-EXPOSE 8000
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Default command
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start with gunicorn for production
+CMD exec gunicorn backend.app.main:app \
+    --bind :$PORT \
+    --workers 2 \
+    --threads 4 \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --timeout 3600 \
+    --keep-alive 65
