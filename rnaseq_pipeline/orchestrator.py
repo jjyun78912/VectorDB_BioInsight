@@ -411,21 +411,21 @@ class RNAseqPipeline:
         """
         Predict cancer type using Pan-Cancer ML model.
 
-        This is called at the START of the pipeline to:
-        1. Classify the tumor samples into one of 17 cancer types
-        2. Store prediction results for Driver analysis and Report
-        3. Update config with predicted cancer_type (or validate user-specified type)
+        This is called ONLY when user does NOT specify cancer_type.
+        If user specifies cancer_type, ML prediction is skipped entirely.
 
         Returns:
-            Prediction results dict or None if prediction fails
+            Prediction results dict or None if prediction fails/skipped
         """
         # Check if cancer_type is already specified by user
         user_specified_cancer = self.config.get('cancer_type', 'unknown')
         is_user_specified = user_specified_cancer and user_specified_cancer.lower() != 'unknown'
 
         if is_user_specified:
+            # User specified cancer type - skip ML prediction entirely
             self.logger.info(f"User-specified cancer type: {user_specified_cancer}")
-            self.logger.info("Running ML prediction for validation...")
+            self.logger.info("Skipping ML prediction (cancer type already specified)")
+            return None  # Skip ML prediction
 
         try:
             from .ml.pancancer_classifier import PanCancerClassifier
@@ -533,42 +533,15 @@ class RNAseqPipeline:
                         'model_performance': model_perf,  # ★ v3 추가: 모델 성능 지표
                     }
 
-                    # Handle user-specified vs ML-predicted cancer type
-                    if is_user_specified:
-                        # Keep user-specified cancer type but record ML prediction for validation
-                        prediction_result['user_specified_cancer'] = user_specified_cancer
-                        prediction_result['ml_predicted_cancer'] = predicted_cancer
+                    # ML prediction only runs when user did NOT specify cancer type
+                    # Update config with predicted cancer type
+                    self.config['cancer_type'] = predicted_cancer
+                    self.config['cancer_type_korean'] = korean_name
+                    self.config['cancer_prediction'] = prediction_result
 
-                        # Convert user-specified to TCGA code for comparison
-                        user_tcga = self.CANCER_TYPE_TO_TCGA.get(
-                            user_specified_cancer.lower(),
-                            user_specified_cancer.upper()
-                        )
-                        prediction_result['prediction_matches_user'] = (
-                            user_tcga.upper() == predicted_cancer.upper()
-                        )
-
-                        # Don't override user-specified cancer type
-                        self.config['cancer_prediction'] = prediction_result
-
-                        if prediction_result['prediction_matches_user']:
-                            self.logger.info(f"✅ ML Prediction MATCHES user-specified: {predicted_cancer} ({korean_name})")
-                        else:
-                            self.logger.warning(f"⚠️ ML Prediction DIFFERS from user-specified!")
-                            self.logger.warning(f"   User specified: {user_specified_cancer}")
-                            self.logger.warning(f"   ML predicted: {predicted_cancer} ({korean_name})")
-
-                        self.logger.info(f"   Confidence: {avg_confidence:.2%}")
-                        self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
-                    else:
-                        # Update config with predicted cancer type (no user specification)
-                        self.config['cancer_type'] = predicted_cancer
-                        self.config['cancer_type_korean'] = korean_name
-                        self.config['cancer_prediction'] = prediction_result
-
-                        self.logger.info(f"🎯 Predicted Cancer Type: {predicted_cancer} ({korean_name})")
-                        self.logger.info(f"   Confidence: {avg_confidence:.2%}")
-                        self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
+                    self.logger.info(f"🎯 Predicted Cancer Type: {predicted_cancer} ({korean_name})")
+                    self.logger.info(f"   Confidence: {avg_confidence:.2%}")
+                    self.logger.info(f"   Agreement: {count}/{len(predictions)} samples ({count/len(predictions)*100:.1f}%)")
 
                     # Save prediction results
                     prediction_file = self.run_dir / "cancer_prediction.json"
