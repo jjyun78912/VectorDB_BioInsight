@@ -18,10 +18,10 @@ from .sections.common import (
     AbstractSection,
     QCSection,
     DriverSection,
+    MLPredictionSection,
     ClinicalSection,
     FollowUpSection,
     MethodsSection,
-    ResearchSection,
     ReferencesSection,
     AppendixSection,
 )
@@ -45,42 +45,46 @@ class UnifiedReportGenerator(BaseReportGenerator):
     """Unified report generator for both Bulk and Single-cell RNA-seq."""
 
     # Section order for Bulk RNA-seq
+    # Matches original agent6_report.py structure:
+    # 1. 연구 개요, (Abstract), 2. QC, 3. DEG, 4. Pathway, 5. Driver, 6. Network,
+    # 7. Clinical, 8. 후속 연구 제안, 9. Methods, 10. 문헌 기반 해석, 11. 부록
     BULK_SECTIONS: List[Type[BaseSection]] = [
         CoverSection,
-        SummarySection,
-        AbstractSection,
-        QCSection,
-        DEGSection,
-        PathwaySection,
-        DriverSection,
-        NetworkSection,
-        ClinicalSection,
-        FollowUpSection,
-        ResearchSection,
-        MethodsSection,
-        ReferencesSection,
-        AppendixSection,
+        SummarySection,       # 1. 연구 개요
+        AbstractSection,      # 연구 요약 (Extended Abstract) - LLM 기반
+        QCSection,            # 2. 데이터 품질 관리
+        DEGSection,           # 3. 차등발현 분석
+        PathwaySection,       # 4. 경로 및 기능 분석
+        DriverSection,        # 5. Driver 유전자 분석
+        NetworkSection,       # 6. 네트워크 분석
+        MLPredictionSection,  # (선택) ML 암종 예측
+        ClinicalSection,      # 7. 임상적 시사점
+        FollowUpSection,      # 8. 후속 연구 제안 (치료 타겟, 약물 재목적화, 실험 검증, 추천 논문)
+        MethodsSection,       # 9. 분석 방법
+        ReferencesSection,    # 10. 문헌 기반 해석
+        AppendixSection,      # 11. 부록
     ]
 
     # Section order for Single-cell RNA-seq
     SINGLECELL_SECTIONS: List[Type[BaseSection]] = [
         CoverSection,
-        SummarySection,
-        AbstractSection,
-        QCSection,
-        CellTypeSection,
-        MarkerSection,
-        DriverSection,
-        TrajectorySection,
-        TMESection,
-        GRNSection,
-        PloidySection,
-        InteractionSection,
-        ClinicalSection,
-        FollowUpSection,
-        ResearchSection,
-        MethodsSection,
-        AppendixSection,
+        SummarySection,       # 1. 연구 개요
+        AbstractSection,      # 연구 요약 (Extended Abstract)
+        QCSection,            # 2. 데이터 품질 관리
+        CellTypeSection,      # 3. 세포 유형 분석
+        MarkerSection,        # 4. 마커 유전자
+        DriverSection,        # 5. Driver 유전자 분석
+        TrajectorySection,    # (선택) Trajectory
+        TMESection,           # (선택) TME
+        GRNSection,           # (선택) GRN
+        PloidySection,        # (선택) Ploidy
+        InteractionSection,   # (선택) Cell-cell interaction
+        MLPredictionSection,  # (선택) Pseudo-bulk ML 예측
+        ClinicalSection,      # 7. 임상적 시사점
+        FollowUpSection,      # 8. 후속 연구 제안
+        MethodsSection,       # 9. 분석 방법
+        ReferencesSection,    # 10. 문헌 기반 해석
+        AppendixSection,      # 11. 부록
     ]
 
     def __init__(

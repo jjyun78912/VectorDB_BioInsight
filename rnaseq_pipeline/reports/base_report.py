@@ -183,6 +183,7 @@ class BaseReportGenerator(ABC):
             "research_recommendations.json": "research_recommendations",
             "recommended_papers.json": "recommended_papers",
             "cancer_prediction.json": "cancer_prediction",
+            "pseudobulk_prediction.json": "cancer_prediction",  # Single-cell pseudo-bulk ML prediction
         }
 
         for filename, attr_name in json_mappings.items():

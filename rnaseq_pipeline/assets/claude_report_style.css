@@ -1749,6 +1749,342 @@ body {
 }
 
 /* ============================================================
+   TOOLTIP STYLES - 용어 설명
+   ============================================================ */
+.tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted #666;
+    cursor: help;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 280px;
+    background-color: #333;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 10px 12px;
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -140px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.tooltip .tooltiptext::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* 툴팁 위치 변형 (화면 가장자리용) */
+.tooltip.tooltip-right .tooltiptext {
+    left: 0;
+    margin-left: 0;
+}
+
+.tooltip.tooltip-left .tooltiptext {
+    left: auto;
+    right: 0;
+    margin-left: 0;
+}
+
+/* 툴팁 내 강조 */
+.tooltip .tooltiptext strong {
+    color: #4fc3f7;
+}
+
+/* ============================================================
+   ML PERFORMANCE CARD - 보라색 그라데이션 카드
+   ============================================================ */
+.ml-performance-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 24px;
+    margin: 24px 0;
+    color: white;
+}
+
+.ml-perf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.ml-perf-header h4 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.ml-perf-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.ml-metric-card {
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    position: relative;
+    cursor: help;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.ml-metric-card:hover {
+    background: rgba(255,255,255,0.25);
+    transform: translateY(-2px);
+}
+
+.ml-metric-card .metric-value {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.ml-metric-card .metric-label {
+    font-size: 13px;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.ml-metric-card .metric-quality {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.ml-metric-card .metric-bio-meaning {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 8px;
+}
+
+/* ML 카드 내 툴팁 팝업 */
+.ml-metric-card .metric-tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    background: rgba(0,0,0,0.95);
+    color: #fff;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.ml-metric-card .metric-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: rgba(0,0,0,0.95) transparent transparent transparent;
+}
+
+.ml-metric-card:hover .metric-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.ml-metric-card .metric-tooltip strong {
+    color: #4fc3f7;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+/* Per-class 성능 */
+.ml-perf-perclass {
+    background: rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.perclass-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-size: 15px;
+}
+
+.perclass-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+}
+
+.perclass-metric {
+    text-align: center;
+    padding: 12px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    cursor: help;
+    position: relative;
+}
+
+.perclass-metric:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.perclass-value {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.perclass-label {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
+/* perclass-metric 호버 툴팁 */
+.perclass-metric .metric-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    background: rgba(0,0,0,0.95);
+    color: #fff;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.perclass-metric .metric-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(0,0,0,0.95) transparent transparent transparent;
+}
+
+.perclass-metric:hover .metric-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.perclass-metric .metric-tooltip strong {
+    color: #4fc3f7;
+    display: block;
+    margin-bottom: 4px;
+}
+
+/* 신뢰구간 */
+.ml-perf-ci {
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.ci-label {
+    margin-right: 12px;
+}
+
+/* 해석 가이드 */
+.ml-perf-guide {
+    margin-top: 16px;
+}
+
+.ml-perf-guide summary {
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.ml-perf-guide .guide-content {
+    margin-top: 12px;
+    padding: 16px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+}
+
+.ml-perf-guide .guide-item {
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.ml-perf-guide .guide-note {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.2);
+    font-size: 13px;
+    opacity: 0.9;
+}
+
+/* 기존 .tooltip 스타일 (ML 카드 외부용) */
+.ml-performance-card .tooltip {
+    border-bottom: none;
+    color: inherit;
+}
+
+.ml-performance-card .tooltip .tooltiptext {
+    background-color: rgba(0,0,0,0.95);
+    width: 280px;
+    font-size: 13px;
+    padding: 16px;
+    bottom: 130%;
+}
+
+@media (max-width: 768px) {
+    .ml-perf-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .perclass-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 768px) {

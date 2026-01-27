@@ -133,13 +133,13 @@ class CoverSection(BaseSection):
 
 
 class SummarySection(BaseSection):
-    """Summary statistics section."""
+    """Study overview section with summary statistics."""
 
-    section_id = "summary"
+    section_id = "study-overview"
     section_number = 1
     section_icon = "📊"
-    section_title = "분석 요약"
-    section_title_en = "Analysis Summary"
+    section_title = "연구 개요"
+    section_title_en = "Study Overview"
 
     def render(self) -> str:
         cards = []
@@ -207,9 +207,9 @@ class SummarySection(BaseSection):
 class AbstractSection(BaseSection):
     """Extended abstract section (LLM-generated)."""
 
-    section_id = "abstract"
-    section_icon = "📝"
-    section_title = "연구 요약 (Abstract)"
+    section_id = "brief-abstract"
+    section_icon = "📄"
+    section_title = "연구 요약 (Extended Abstract)"
     section_title_en = "Extended Abstract"
 
     def is_available(self) -> bool:
@@ -233,8 +233,9 @@ class AbstractSection(BaseSection):
                 content = ''.join(sections)
 
         return f'''
-        <section class="section" id="{self.section_id}">
+        <section class="brief-abstract-section" id="{self.section_id}">
             {self.section_header()}
+            <p class="section-subtitle">LLM 기반 종합 분석 요약</p>
             <div class="abstract-content">
                 {content}
             </div>
@@ -331,9 +332,14 @@ class QCSection(BaseSection):
 
 
 class DriverSection(BaseSection):
-    """Driver gene analysis section with RAG + External API integration."""
+    """Cancer-related gene validation section with RAG + External API integration.
 
-    section_id = "driver"
+    Note: This section validates Hub genes against cancer databases (COSMIC/OncoKB).
+    Hub genes are expression-based network centrality genes, NOT true driver genes.
+    True driver genes require mutation data (WGS/WES) for identification.
+    """
+
+    section_id = "driver-analysis"
     section_number = 5
     section_icon = "🎯"
     section_title = "Driver 유전자 분석"
@@ -369,7 +375,11 @@ class DriverSection(BaseSection):
 
             known_html = f'''
             <div class="driver-panel">
-                <h3>검증된 Driver Genes (COSMIC/OncoKB)</h3>
+                <h3>COSMIC/OncoKB 매칭 유전자</h3>
+                <p class="panel-description" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                    DEG/Hub genes 중 암 데이터베이스에서 검증된 유전자입니다.
+                    <strong>발현 변화가 있으나, 실제 driver 여부는 변이(mutation) 분석이 필요합니다.</strong>
+                </p>
                 <div class="table-wrapper">
                     <table>
                         <thead>
@@ -607,11 +617,241 @@ class DriverSection(BaseSection):
         '''
 
 
+class MLPredictionSection(BaseSection):
+    """ML Cancer Type Prediction section.
+
+    Shows results from:
+    - Bulk RNA-seq: Direct ML prediction
+    - Single-cell RNA-seq: Pseudo-bulk aggregation → ML prediction
+
+    Activation condition:
+    - data.cancer_prediction is not None (from cancer_prediction.json or pseudobulk_prediction.json)
+    """
+
+    section_id = "ml_prediction"
+    section_icon = "🤖"
+    section_title = "ML 암종 예측"
+    section_title_en = "ML Cancer Type Prediction"
+
+    def is_available(self) -> bool:
+        return self.data.cancer_prediction is not None
+
+    def render(self) -> str:
+        if not self.is_available():
+            return ""
+
+        pred = self.data.cancer_prediction
+
+        # Main prediction
+        predicted = pred.get('predicted_cancer', pred.get('prediction', 'Unknown'))
+        predicted_kr = pred.get('predicted_cancer_korean', predicted)
+        confidence = pred.get('confidence', pred.get('probability', 0))
+        confidence_level = pred.get('confidence_level', 'medium')
+
+        # Confidence styling
+        conf_color = {
+            'high': '#059669',
+            'medium': '#d97706',
+            'low': '#dc2626'
+        }.get(confidence_level, '#64748b')
+
+        # Main prediction card
+        main_pred_html = f'''
+        <div class="ml-prediction-main">
+            <div class="prediction-result">
+                <div class="prediction-label">예측된 암종</div>
+                <div class="prediction-value">{predicted}</div>
+                <div class="prediction-korean">{predicted_kr}</div>
+            </div>
+            <div class="confidence-meter">
+                <div class="confidence-label">신뢰도</div>
+                <div class="confidence-value" style="color: {conf_color};">{confidence:.1%}</div>
+                <div class="confidence-bar-container">
+                    <div class="confidence-bar-fill" style="width: {confidence*100}%; background: {conf_color};"></div>
+                </div>
+                <div class="confidence-level">{confidence_level.upper()}</div>
+            </div>
+        </div>
+        '''
+
+        # Per-cluster predictions (Single-cell pseudo-bulk)
+        cluster_html = ""
+        all_preds = pred.get('all_predictions', [])
+        if all_preds and len(all_preds) > 1:
+            cluster_rows = []
+            for p in all_preds:
+                sample_id = p.get('sample_id', 'N/A')
+                cancer = p.get('predicted_cancer', 'N/A')
+                conf = p.get('confidence', 0)
+                conf_lvl = p.get('confidence_level', 'low')
+
+                badge_class = {'high': 'badge-high', 'medium': 'badge-medium', 'low': 'badge-low'}.get(conf_lvl, '')
+
+                cluster_rows.append(f'''
+                <tr>
+                    <td>{sample_id}</td>
+                    <td><strong>{cancer}</strong></td>
+                    <td>{conf:.1%}</td>
+                    <td><span class="badge {badge_class}">{conf_lvl}</span></td>
+                </tr>
+                ''')
+
+            agreement = pred.get('cluster_agreement', None)
+            agreement_html = ""
+            if agreement is not None:
+                agreement_html = f'''
+                <div class="cluster-agreement">
+                    클러스터 간 일치도: <strong>{agreement:.1%}</strong>
+                </div>
+                '''
+
+            cluster_html = f'''
+            <div class="cluster-predictions">
+                <h4>클러스터별 예측 (Pseudo-bulk)</h4>
+                {agreement_html}
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr><th>Sample/Cluster</th><th>예측 암종</th><th>신뢰도</th><th>Level</th></tr>
+                        </thead>
+                        <tbody>{''.join(cluster_rows)}</tbody>
+                    </table>
+                </div>
+            </div>
+            '''
+
+        # Top features (SHAP)
+        features_html = ""
+        top_features = pred.get('top_features', pred.get('shap_features', []))
+        if top_features:
+            feature_items = []
+            for f in top_features[:10]:
+                gene = f.get('gene', f.get('feature', 'N/A'))
+                importance = f.get('importance', f.get('shap_value', 0))
+                direction = '↑' if importance > 0 else '↓'
+                feature_items.append(f'''
+                <div class="feature-item">
+                    <span class="gene-symbol">{gene}</span>
+                    <span class="feature-importance">{direction} {abs(importance):.3f}</span>
+                </div>
+                ''')
+
+            features_html = f'''
+            <div class="top-features">
+                <h4>주요 예측 근거 (SHAP)</h4>
+                <div class="features-grid">
+                    {''.join(feature_items)}
+                </div>
+            </div>
+            '''
+
+        return f'''
+        <section class="section" id="{self.section_id}">
+            {self.section_header()}
+            {main_pred_html}
+            {cluster_html}
+            {features_html}
+            <div class="note-box warning">
+                <span class="note-box-icon">⚠️</span>
+                <div class="note-box-content">
+                    <strong>면책조항:</strong> ML 예측은 참고용이며 진단 목적으로 사용할 수 없습니다.
+                    예측 결과는 반드시 조직병리학적 검사로 확인해야 합니다.
+                </div>
+            </div>
+            <style>
+                .ml-prediction-main {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 2rem;
+                    margin-bottom: 2rem;
+                }}
+                .prediction-result, .confidence-meter {{
+                    background: var(--bg-tertiary);
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    text-align: center;
+                }}
+                .prediction-label, .confidence-label {{
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                    margin-bottom: 0.5rem;
+                }}
+                .prediction-value {{
+                    font-size: 2rem;
+                    font-weight: 700;
+                    color: var(--primary);
+                    font-family: var(--font-mono);
+                }}
+                .prediction-korean {{
+                    font-size: 1rem;
+                    color: var(--text-secondary);
+                    margin-top: 0.25rem;
+                }}
+                .confidence-value {{
+                    font-size: 2rem;
+                    font-weight: 700;
+                    font-family: var(--font-mono);
+                }}
+                .confidence-bar-container {{
+                    height: 8px;
+                    background: var(--bg-secondary);
+                    border-radius: 4px;
+                    margin: 0.75rem 0;
+                    overflow: hidden;
+                }}
+                .confidence-bar-fill {{
+                    height: 100%;
+                    border-radius: 4px;
+                    transition: width 0.3s;
+                }}
+                .confidence-level {{
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                }}
+                .cluster-predictions {{
+                    margin-top: 1.5rem;
+                }}
+                .cluster-agreement {{
+                    margin-bottom: 1rem;
+                    padding: 0.75rem;
+                    background: var(--bg-tertiary);
+                    border-radius: 8px;
+                }}
+                .top-features {{
+                    margin-top: 1.5rem;
+                }}
+                .features-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                    gap: 0.5rem;
+                }}
+                .feature-item {{
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 0.5rem 0.75rem;
+                    background: var(--bg-tertiary);
+                    border-radius: 6px;
+                    font-size: 0.85rem;
+                }}
+                .feature-importance {{
+                    font-family: var(--font-mono);
+                    color: var(--text-muted);
+                }}
+                @media (max-width: 768px) {{
+                    .ml-prediction-main {{
+                        grid-template-columns: 1fr;
+                    }}
+                }}
+            </style>
+        </section>
+        '''
+
+
 class ClinicalSection(BaseSection):
     """Clinical implications section."""
 
     section_id = "clinical"
-    section_number = 8
+    section_number = 7
     section_icon = "💊"
     section_title = "임상적 시사점"
     section_title_en = "Clinical Implications"
@@ -692,13 +932,13 @@ class ClinicalSection(BaseSection):
 
 
 class FollowUpSection(BaseSection):
-    """Follow-up experiments section."""
+    """Research recommendations section including therapeutic targets, drug repurposing, and validation experiments."""
 
-    section_id = "followup"
-    section_number = 9
+    section_id = "research-recommendations"
+    section_number = 8
     section_icon = "🔬"
-    section_title = "검증 실험 제안"
-    section_title_en = "Suggested Follow-up Experiments"
+    section_title = "후속 연구 제안"
+    section_title_en = "Research Recommendations"
 
     def render(self) -> str:
         rec = self.data.research_recommendations or {}
@@ -770,10 +1010,10 @@ class MethodsSection(BaseSection):
     """Methods and parameters section."""
 
     section_id = "methods"
-    section_number = 10
+    section_number = 9
     section_icon = "⚙️"
-    section_title = "분석 방법 및 파라미터"
-    section_title_en = "Methods & Parameters"
+    section_title = "분석 방법"
+    section_title_en = "Methods"
 
     def render(self) -> str:
         if self.config.data_type == "singlecell":
@@ -877,13 +1117,13 @@ class ResearchSection(BaseSection):
 
 
 class ReferencesSection(BaseSection):
-    """Literature references section (RAG-based)."""
+    """Literature-based interpretation section (RAG-based)."""
 
-    section_id = "references"
-    section_number = 11
+    section_id = "rag-summary"
+    section_number = 10
     section_icon = "📚"
-    section_title = "문헌 참조 (RAG)"
-    section_title_en = "Literature References"
+    section_title = "문헌 기반 해석"
+    section_title_en = "Literature-based Interpretation"
 
     def is_available(self) -> bool:
         return self.data.interpretation_report is not None
@@ -927,13 +1167,13 @@ class ReferencesSection(BaseSection):
 
 
 class AppendixSection(BaseSection):
-    """Appendix with supplementary data."""
+    """Appendix with supplementary data and download links."""
 
-    section_id = "appendix"
-    section_number = 12
+    section_id = "detailed-table"
+    section_number = 11
     section_icon = "📎"
-    section_title = "부록: 보충 데이터"
-    section_title_en = "Appendix: Supplementary Data"
+    section_title = "부록"
+    section_title_en = "Appendix"
 
     def render(self) -> str:
         tables_html = ""
@@ -1006,9 +1246,158 @@ class AppendixSection(BaseSection):
         if not tables_html:
             tables_html = '<p>보충 데이터가 없습니다.</p>'
 
+        # Download section for full data
+        download_html = self._render_download_section()
+
         return f'''
         <section class="section" id="{self.section_id}">
             {self.section_header()}
             {tables_html}
+            {download_html}
         </section>
+        '''
+
+    def _render_download_section(self) -> str:
+        """Render download links for full data files."""
+        download_items = []
+
+        # Check available files for download
+        if self.data.deg_significant is not None and len(self.data.deg_significant) > 0:
+            n_deg = len(self.data.deg_significant)
+            download_items.append({
+                "name": "deg_significant.csv",
+                "label": f"전체 DEG 목록 ({n_deg:,}개)",
+                "icon": "📊",
+                "description": "모든 유의한 차등발현 유전자 (log2FC, p-value 포함)"
+            })
+
+        if self.data.deg_all is not None and len(self.data.deg_all) > 0:
+            n_all = len(self.data.deg_all)
+            download_items.append({
+                "name": "deg_all_results.csv",
+                "label": f"전체 분석 결과 ({n_all:,}개)",
+                "icon": "📋",
+                "description": "필터링 전 모든 유전자의 DEG 분석 결과"
+            })
+
+        if self.data.hub_genes is not None and len(self.data.hub_genes) > 0:
+            n_hub = len(self.data.hub_genes)
+            download_items.append({
+                "name": "hub_genes.csv",
+                "label": f"Hub 유전자 ({n_hub}개)",
+                "icon": "🕸️",
+                "description": "네트워크 중심성 기반 Hub 유전자 목록"
+            })
+
+        if self.data.pathway_summary is not None and len(self.data.pathway_summary) > 0:
+            n_pathway = len(self.data.pathway_summary)
+            download_items.append({
+                "name": "pathway_summary.csv",
+                "label": f"Pathway 분석 ({n_pathway}개)",
+                "icon": "🛤️",
+                "description": "GO/KEGG enrichment 분석 결과"
+            })
+
+        if self.data.integrated_gene_table is not None and len(self.data.integrated_gene_table) > 0:
+            n_int = len(self.data.integrated_gene_table)
+            download_items.append({
+                "name": "integrated_gene_table.csv",
+                "label": f"통합 유전자 테이블 ({n_int:,}개)",
+                "icon": "🔗",
+                "description": "DEG + Hub + DB 검증 통합 테이블"
+            })
+
+        if self.data.cluster_markers is not None and len(self.data.cluster_markers) > 0:
+            n_markers = len(self.data.cluster_markers)
+            download_items.append({
+                "name": "cluster_markers.csv",
+                "label": f"클러스터 마커 ({n_markers:,}개)",
+                "icon": "🧬",
+                "description": "클러스터별 마커 유전자 전체 목록"
+            })
+
+        if not download_items:
+            return ""
+
+        items_html = ""
+        for item in download_items:
+            items_html += f'''
+            <div class="download-item">
+                <span class="download-icon">{item['icon']}</span>
+                <div class="download-info">
+                    <span class="download-label">{item['label']}</span>
+                    <span class="download-desc">{item['description']}</span>
+                </div>
+                <a href="./{item['name']}" download class="download-btn">다운로드</a>
+            </div>
+            '''
+
+        return f'''
+        <div class="download-section">
+            <h3>📥 전체 데이터 다운로드</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                위 테이블은 상위 50개만 표시됩니다. 전체 데이터는 아래에서 다운로드하세요.
+            </p>
+            <div class="download-grid">
+                {items_html}
+            </div>
+            <style>
+                .download-section {{
+                    margin-top: 2rem;
+                    padding: 1.5rem;
+                    background: var(--bg-tertiary);
+                    border-radius: 12px;
+                    border: 1px solid var(--border-light);
+                }}
+                .download-grid {{
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.75rem;
+                }}
+                .download-item {{
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    padding: 1rem;
+                    background: var(--bg-card);
+                    border-radius: 8px;
+                    border: 1px solid var(--border-light);
+                    transition: box-shadow 0.2s;
+                }}
+                .download-item:hover {{
+                    box-shadow: var(--shadow-md);
+                }}
+                .download-icon {{
+                    font-size: 1.5rem;
+                }}
+                .download-info {{
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.25rem;
+                }}
+                .download-label {{
+                    font-weight: 600;
+                    color: var(--text-primary);
+                }}
+                .download-desc {{
+                    font-size: 0.8rem;
+                    color: var(--text-muted);
+                }}
+                .download-btn {{
+                    padding: 0.5rem 1rem;
+                    background: var(--primary);
+                    color: white;
+                    border-radius: 6px;
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                    text-decoration: none;
+                    transition: background 0.2s;
+                }}
+                .download-btn:hover {{
+                    background: var(--primary-dark);
+                    text-decoration: none;
+                }}
+            </style>
+        </div>
         '''

@@ -201,6 +201,74 @@ def call_llm_with_rag(prompt: str, cancer_type: str = None, key_genes: list = No
 class ReportAgent(BaseAgent):
     """Agent for generating interactive HTML reports with modern design."""
 
+    # ========== 툴팁 용어 사전 (생물학자 친화적 설명) ==========
+    TOOLTIP_DEFINITIONS = {
+        # 성능 지표
+        "AUC": "ROC 곡선 아래 면적. 1에 가까울수록 암/정상 구분 우수. 0.5는 랜덤 수준, 0.9 이상이면 우수",
+        "ROC-AUC": "ROC 곡선 아래 면적. 1에 가까울수록 암/정상 구분 우수. 0.5는 랜덤 수준, 0.9 이상이면 우수",
+        "PR-AUC": "정밀도-재현율 곡선 아래 면적. 불균형 데이터에서 모델 성능을 평가. 1에 가까울수록 우수",
+        "Accuracy": "전체 예측 중 맞춘 비율. 예: 97%면 100개 중 97개 정확히 분류",
+        "정확도": "전체 예측 중 맞춘 비율. 예: 97%면 100개 중 97개 정확히 분류",
+        "F1": "정밀도(Precision)와 재현율(Recall)의 조화평균. 불균형 데이터에서 유용한 지표",
+        "F1 Score": "정밀도(Precision)와 재현율(Recall)의 조화평균. 불균형 데이터에서 유용한 지표",
+        "F1 Macro": "각 클래스별 F1의 평균. 클래스 불균형에 영향 안 받음",
+        "MCC": "Matthews 상관계수. -1~1 범위. 1이면 완벽한 예측, 0이면 랜덤",
+        "Sensitivity": "실제 양성 중 양성으로 예측한 비율. 암 환자를 놓치지 않는 능력",
+        "Recall": "실제 양성 중 양성으로 예측한 비율 (=민감도). 암 환자를 놓치지 않는 능력",
+        "재현율": "실제 양성 중 양성으로 예측한 비율 (=민감도). 암 환자를 놓치지 않는 능력",
+        "Specificity": "실제 음성 중 음성으로 예측한 비율. 정상을 암으로 오진하지 않는 능력",
+        "Precision": "양성 예측 중 실제 양성 비율. 예측의 정확성",
+        "정밀도": "양성 예측 중 실제 양성 비율. 예측의 정확성",
+
+        # 통계 지표
+        "padj": "다중검정 보정된 p-value (FDR). 0.05 미만이면 통계적으로 유의미",
+        "p-value": "귀무가설이 참일 때 현재 결과가 나올 확률. 낮을수록 유의미",
+        "FDR": "False Discovery Rate. 유의하다고 판정한 것 중 거짓 양성 비율",
+        "log2FC": "발현 변화량 (log2 Fold Change). 1이면 2배, 2면 4배 증가. 음수면 감소",
+        "log2FoldChange": "발현 변화량 (log2 Fold Change). 1이면 2배, 2면 4배 증가. 음수면 감소",
+        "|log2FC|": "발현 변화량의 절대값. 방향 상관없이 변화 크기",
+        "baseMean": "모든 샘플에서의 평균 발현량. 유전자 발현 수준의 기준값",
+        "95% CI": "95% 신뢰구간. 동일 실험 100번 중 95번은 이 범위에 결과가 포함됨",
+
+        # 생물학 용어
+        "DEG": "Differentially Expressed Gene. 두 조건 간 발현이 유의미하게 다른 유전자",
+        "Hub Gene": "공발현 네트워크에서 많은 유전자와 연결된 핵심 유전자. 발현 변화 기반 예측값",
+        "Driver Gene": "암 발생/진행을 직접 유발하는 유전자. WGS/WES 변이 분석으로 확인",
+        "COSMIC": "Catalogue Of Somatic Mutations In Cancer. 암 관련 유전자 변이 데이터베이스",
+        "COSMIC Tier 1": "강력한 문헌 근거와 기능 연구로 검증된 암 유전자",
+        "COSMIC Tier 2": "암과 연관성은 있으나 추가 기능 검증이 필요한 유전자",
+        "OncoKB": "Memorial Sloan Kettering의 암 유전자 지식 데이터베이스",
+        "OncoKB Level 1": "FDA 승인 치료제가 있는 바이오마커",
+        "OncoKB Level 2": "표준 치료로 인정되는 바이오마커",
+        "OncoKB Level 3": "임상시험 근거가 있는 바이오마커",
+        "OncoKB Level 4": "생물학적 근거만 있는 바이오마커",
+        "TSG": "Tumor Suppressor Gene. 종양억제유전자. 기능 상실 시 암 유발",
+        "Oncogene": "암유전자. 활성화되면 암 유발",
+        "CGC": "Cancer Gene Census. COSMIC에서 관리하는 암 유전자 목록",
+
+        # 경로 분석
+        "Pathway": "생물학적 경로. 특정 기능을 수행하는 유전자들의 집합",
+        "Pathway Enrichment": "DEG가 특정 생물학적 경로에 우연보다 많이 모여있는지 검정",
+        "GO": "Gene Ontology. 유전자 기능을 체계적으로 분류한 데이터베이스",
+        "GO BP": "Gene Ontology Biological Process. 생물학적 과정 분류",
+        "GO MF": "Gene Ontology Molecular Function. 분자 기능 분류",
+        "GO CC": "Gene Ontology Cellular Component. 세포 내 위치 분류",
+        "KEGG": "Kyoto Encyclopedia of Genes and Genomes. 대사 및 신호전달 경로 데이터베이스",
+        "ORA": "Over-Representation Analysis. 경로 내 DEG 비율이 기대보다 높은지 검정",
+        "Enrichment Score": "경로 내 DEG 집중도. 높을수록 해당 경로가 유의미하게 영향받음",
+
+        # 네트워크 분석
+        "Co-expression": "유전자 간 발현 패턴 유사성. 함께 조절되는 유전자 발견에 활용",
+        "Degree": "네트워크에서 특정 노드와 연결된 엣지 수. 높을수록 중요한 유전자",
+        "Betweenness": "네트워크에서 최단 경로에 포함되는 빈도. 정보 흐름의 중심성",
+        "Centrality": "네트워크에서 노드의 중요도. 여러 방식으로 측정",
+
+        # 분석 방법
+        "DESeq2": "RNA-seq 차등발현 분석 표준 도구. 음이항 분포 기반 통계 검정",
+        "apeglm": "log2FC 추정치 축소 방법. 노이즈 감소, 신뢰성 향상",
+        "Shrinkage": "통계적 추정치 축소. 극단값 보정으로 안정적인 결과 도출",
+    }
+
     def __init__(
         self,
         input_dir: Path,
@@ -219,6 +287,70 @@ class ReportAgent(BaseAgent):
 
         merged_config = {**default_config, **(config or {})}
         super().__init__("agent6_report", input_dir, output_dir, merged_config)
+
+        # 섹션별 툴팁 적용 추적 (첫 등장에만 적용)
+        self._tooltip_applied = set()
+
+    def _reset_tooltip_tracking(self, section_name: str = None):
+        """섹션 변경 시 툴팁 추적 리셋 (섹션당 첫 등장에 적용)"""
+        if section_name:
+            # 특정 섹션 시작 시 해당 섹션 용어만 리셋
+            pass
+        else:
+            # 전체 리셋
+            self._tooltip_applied = set()
+
+    def _apply_tooltip(self, term: str, display_text: str = None, force: bool = False) -> str:
+        """용어에 툴팁 적용. 첫 등장 시에만 적용 (force=True면 항상 적용)
+
+        Args:
+            term: 툴팁 사전의 키
+            display_text: 실제 표시할 텍스트 (None이면 term 사용)
+            force: True면 중복 체크 없이 항상 적용
+
+        Returns:
+            툴팁이 적용된 HTML 또는 원본 텍스트
+        """
+        if display_text is None:
+            display_text = term
+
+        # 이미 적용된 용어면 일반 텍스트 반환
+        if not force and term in self._tooltip_applied:
+            return display_text
+
+        # 사전에 없는 용어면 일반 텍스트 반환
+        if term not in self.TOOLTIP_DEFINITIONS:
+            return display_text
+
+        # 툴팁 적용 및 추적
+        self._tooltip_applied.add(term)
+        tooltip_text = self.TOOLTIP_DEFINITIONS[term]
+
+        return f'<span class="tooltip">{display_text}<span class="tooltiptext">{tooltip_text}</span></span>'
+
+    def _apply_tooltips_to_text(self, text: str, terms: List[str] = None) -> str:
+        """텍스트 내 용어들에 툴팁 자동 적용
+
+        Args:
+            text: 원본 텍스트
+            terms: 적용할 용어 목록 (None이면 전체 사전 사용)
+
+        Returns:
+            툴팁이 적용된 텍스트
+        """
+        if terms is None:
+            terms = list(self.TOOLTIP_DEFINITIONS.keys())
+
+        result = text
+        for term in terms:
+            if term in result and term not in self._tooltip_applied:
+                tooltip_html = self._apply_tooltip(term)
+                # 단어 경계를 고려한 치환 (HTML 태그 내부는 제외)
+                import re
+                pattern = r'(?<![<>\w])' + re.escape(term) + r'(?![<>\w])'
+                result = re.sub(pattern, tooltip_html, result, count=1)
+
+        return result
 
     def validate_inputs(self) -> bool:
         """Validate that required data files exist."""
@@ -1161,7 +1293,7 @@ class ReportAgent(BaseAgent):
                             <span class="evidence-value {dir_class}">{direction} {abs(log2fc):.2f}</span>
                         </div>
                         <div class="evidence-row">
-                            <span class="evidence-label">COSMIC</span>
+                            <span class="evidence-label"><span class="tooltip">COSMIC<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("COSMIC", "암 체세포 변이 데이터베이스")}</span></span></span>
                             <span class="evidence-value">{cosmic_tier} · {cosmic_role}</span>
                         </div>
                         <div class="evidence-row">
@@ -1635,7 +1767,7 @@ class ReportAgent(BaseAgent):
 
         contrast = self.config.get('contrast', ['tumor', 'normal'])
 
-        # ★ ML 성능 지표 카드 생성 (v3)
+        # ★ ML 성능 지표 카드 생성 (v4 - 생물학자 친화적 UI)
         ml_performance_html = ""
         model_perf = cancer_prediction.get('model_performance', {}) if cancer_prediction else {}
 
@@ -1644,57 +1776,139 @@ class ReportAgent(BaseAgent):
             per_class = model_perf.get('per_class', {})
             ci = model_perf.get('confidence_interval', {})
 
-            # Build ML Performance Scorecard
+            # 점수별 색상 및 해석 함수
+            def get_score_quality(score: float, metric_type: str = 'default') -> tuple:
+                """점수에 따른 품질 등급, 색상, 해석 반환"""
+                if metric_type == 'mcc':  # MCC는 -1~1 범위
+                    if score >= 0.8: return ('우수', '#22c55e', '매우 신뢰할 수 있는 예측')
+                    elif score >= 0.6: return ('양호', '#84cc16', '신뢰할 수 있는 예측')
+                    elif score >= 0.4: return ('보통', '#eab308', '참고용으로 적합')
+                    else: return ('낮음', '#f97316', '추가 검증 필요')
+                else:  # 0~1 범위 지표
+                    if score >= 0.95: return ('우수', '#22c55e', '매우 신뢰할 수 있음')
+                    elif score >= 0.90: return ('양호', '#84cc16', '신뢰할 수 있음')
+                    elif score >= 0.80: return ('보통', '#eab308', '참고용으로 적합')
+                    else: return ('낮음', '#f97316', '해석에 주의 필요')
+
+            acc_val = overall.get('accuracy', 0)
+            f1_val = overall.get('f1_macro', 0)
+            mcc_val = overall.get('mcc', 0)
+            prauc_val = overall.get('pr_auc_macro', 0)
+
+            acc_q = get_score_quality(acc_val)
+            f1_q = get_score_quality(f1_val)
+            mcc_q = get_score_quality(mcc_val, 'mcc')
+            prauc_q = get_score_quality(prauc_val)
+
+            # Build ML Performance Scorecard with hover popups
+            # 이 섹션에서 툴팁 추적 리셋
+            self._reset_tooltip_tracking()
+
             ml_performance_html = f'''
-            <div class="ml-performance-card" style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; color: white;">
-                <h4 style="margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;">
-                    <span>[Chart]</span> Pan-Cancer Classifier 성능 지표
-                </h4>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('accuracy', 0):.3f}</div>
-                        <div style="font-size: 0.8em; opacity: 0.9;">Accuracy</div>
+            <div class="ml-performance-card">
+                <div class="ml-perf-header">
+                    <h4>📊 Pan-Cancer Classifier 성능 지표</h4>
+                    <span style="opacity:0.8; font-size:13px;">카드 위에 마우스를 올리면 설명이 나타납니다</span>
+                </div>
+
+                <div class="ml-perf-grid">
+                    <div class="ml-metric-card">
+                        <div class="metric-tooltip">
+                            <strong>정확도 (Accuracy)</strong>
+                            전체 샘플 중 올바르게 분류한 비율입니다.<br><br>
+                            • {acc_val:.1%} = 100개 샘플 중 {int(acc_val*100)}개를 정확히 분류<br>
+                            • 95% 이상: 우수한 성능<br>
+                            • 90% 이상: 양호한 성능
+                        </div>
+                        <div class="metric-value">{acc_val:.3f}</div>
+                        <div class="metric-label">정확도 (Accuracy)</div>
+                        <div class="metric-quality" style="background: {acc_q[1]}20; color: {acc_q[1]}">{acc_q[0]}</div>
+                        <div class="metric-bio-meaning">100개 중 {int(acc_val*100)}개 정확 분류</div>
                     </div>
-                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('f1_macro', 0):.3f}</div>
-                        <div style="font-size: 0.8em; opacity: 0.9;">F1 (Macro)</div>
+
+                    <div class="ml-metric-card">
+                        <div class="metric-tooltip">
+                            <strong>F1 점수 (Macro)</strong>
+                            정밀도와 재현율의 조화 평균입니다.<br><br>
+                            • 희귀 암종도 놓치지 않고 찾아내는 능력<br>
+                            • 불균형 데이터에서 특히 중요한 지표<br>
+                            • 95% 이상: 우수 / 90% 이상: 양호
+                        </div>
+                        <div class="metric-value">{f1_val:.3f}</div>
+                        <div class="metric-label">F1 점수 (Macro)</div>
+                        <div class="metric-quality" style="background: {f1_q[1]}20; color: {f1_q[1]}">{f1_q[0]}</div>
+                        <div class="metric-bio-meaning">희귀암 포함 균형 잡힌 성능</div>
                     </div>
-                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('mcc', 0):.3f}</div>
-                        <div style="font-size: 0.8em; opacity: 0.9;">MCC</div>
+
+                    <div class="ml-metric-card">
+                        <div class="metric-tooltip">
+                            <strong>MCC (Matthews 상관계수)</strong>
+                            예측과 실제 결과의 상관관계를 측정합니다.<br><br>
+                            • 범위: -1 ~ +1 (1에 가까울수록 좋음)<br>
+                            • 0은 무작위 추측 수준<br>
+                            • 0.8 이상: 우수 / 0.6 이상: 양호
+                        </div>
+                        <div class="metric-value">{mcc_val:.3f}</div>
+                        <div class="metric-label">MCC (상관계수)</div>
+                        <div class="metric-quality" style="background: {mcc_q[1]}20; color: {mcc_q[1]}">{mcc_q[0]}</div>
+                        <div class="metric-bio-meaning">예측-실제 강한 상관관계</div>
                     </div>
-                    <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
-                        <div style="font-size: 1.3em; font-weight: bold;">{overall.get('pr_auc_macro', 0):.3f}</div>
-                        <div style="font-size: 0.8em; opacity: 0.9;">PR-AUC</div>
+
+                    <div class="ml-metric-card">
+                        <div class="metric-tooltip">
+                            <strong>PR-AUC (곡선면적)</strong>
+                            정밀도-재현율 곡선 아래 면적입니다.<br><br>
+                            • 희귀 암종 탐지 능력을 측정<br>
+                            • 실제 암 환자를 얼마나 잘 찾아내는지 평가<br>
+                            • 95% 이상: 우수 / 90% 이상: 양호
+                        </div>
+                        <div class="metric-value">{prauc_val:.3f}</div>
+                        <div class="metric-label">PR-AUC (곡선면적)</div>
+                        <div class="metric-quality" style="background: {prauc_q[1]}20; color: {prauc_q[1]}">{prauc_q[0]}</div>
+                        <div class="metric-bio-meaning">희귀 암종 탐지 능력</div>
                     </div>
                 </div>'''
 
             # Per-class metrics if available
             if per_class:
-                cancer_type = per_class.get('cancer_type', '')
+                cancer_type_label = per_class.get('cancer_type', '')
+                f1_cls = per_class.get('f1', 0)
+                prec_cls = per_class.get('precision', 0)
+                rec_cls = per_class.get('recall', 0)
+                prauc_cls = per_class.get('pr_auc', 0)
+                rocauc_cls = per_class.get('roc_auc', 0)
+
                 ml_performance_html += f'''
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3);">
-                    <div style="font-size: 0.9em; margin-bottom: 8px;">[Pin] <b>{cancer_type}</b> 분류 성능</div>
-                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; font-size: 0.85em;">
-                        <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('f1', 0):.3f}</div>
-                            <div style="opacity: 0.8;">F1</div>
+                <div class="ml-perf-perclass">
+                    <div class="perclass-header">
+                        <span class="perclass-icon">🎯</span>
+                        <span><b>{cancer_type_label}</b> 분류 성능 (마우스를 올려 설명 보기)</span>
+                    </div>
+                    <div class="perclass-grid">
+                        <div class="perclass-metric">
+                            <div class="metric-tooltip"><strong>F1 점수</strong>해당 암종을 정확히 식별하고 놓치지 않는 능력</div>
+                            <div class="perclass-value">{f1_cls:.3f}</div>
+                            <div class="perclass-label">F1</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('precision', 0):.3f}</div>
-                            <div style="opacity: 0.8;">Precision</div>
+                        <div class="perclass-metric">
+                            <div class="metric-tooltip"><strong>정밀도</strong>이 암종으로 예측한 것 중 실제로 맞은 비율. 높을수록 오진이 적음</div>
+                            <div class="perclass-value">{prec_cls:.3f}</div>
+                            <div class="perclass-label">정밀도</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('recall', 0):.3f}</div>
-                            <div style="opacity: 0.8;">Recall</div>
+                        <div class="perclass-metric">
+                            <div class="metric-tooltip"><strong>재현율</strong>실제 이 암종 중 찾아낸 비율. 높을수록 놓치는 환자가 적음</div>
+                            <div class="perclass-value">{rec_cls:.3f}</div>
+                            <div class="perclass-label">재현율</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('pr_auc', 0):.3f}</div>
-                            <div style="opacity: 0.8;">PR-AUC</div>
+                        <div class="perclass-metric">
+                            <div class="metric-tooltip"><strong>PR-AUC</strong>정밀도-재현율 곡선 면적. 불균형 데이터에서 유용</div>
+                            <div class="perclass-value">{prauc_cls:.3f}</div>
+                            <div class="perclass-label">PR-AUC</div>
                         </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: bold;">{per_class.get('roc_auc', 0):.3f}</div>
-                            <div style="opacity: 0.8;">ROC-AUC</div>
+                        <div class="perclass-metric">
+                            <div class="metric-tooltip"><strong>ROC-AUC</strong>암 vs 정상 구분 능력. 0.9 이상이면 우수</div>
+                            <div class="perclass-value">{rocauc_cls:.3f}</div>
+                            <div class="perclass-label">ROC-AUC</div>
                         </div>
                     </div>
                 </div>'''
@@ -1704,12 +1918,37 @@ class ReportAgent(BaseAgent):
                 acc_ci = ci.get('accuracy', {})
                 f1_ci = ci.get('f1_macro', {})
                 ml_performance_html += f'''
-                <div style="margin-top: 10px; font-size: 0.75em; opacity: 0.85;">
-                    95% CI: Accuracy [{acc_ci.get('lower', 0):.3f} - {acc_ci.get('upper', 0):.3f}],
-                    F1 [{f1_ci.get('lower', 0):.3f} - {f1_ci.get('upper', 0):.3f}]
+                <div class="ml-perf-ci">
+                    <span class="ci-label">📏 95% 신뢰구간 (동일 실험 100번 반복 시 95번은 이 범위):</span>
+                    <span>정확도 [{acc_ci.get('lower', 0):.3f} - {acc_ci.get('upper', 0):.3f}]</span>
+                    <span>F1 [{f1_ci.get('lower', 0):.3f} - {f1_ci.get('upper', 0):.3f}]</span>
                 </div>'''
 
+            # 해석 가이드 추가
             ml_performance_html += '''
+                <div class="ml-perf-guide">
+                    <details>
+                        <summary>📖 지표 해석 가이드 (클릭하여 펼치기)</summary>
+                        <div class="guide-content">
+                            <div class="guide-item">
+                                <strong>정확도 (Accuracy)</strong>: 전체 예측 중 맞은 비율. <em>예: 0.97 = 97% 정확</em>
+                            </div>
+                            <div class="guide-item">
+                                <strong>F1 점수</strong>: 정밀도와 재현율의 균형. 희귀 암종 분류에 특히 중요합니다.
+                            </div>
+                            <div class="guide-item">
+                                <strong>MCC</strong>: -1~1 범위. 0은 무작위 추측, 1은 완벽한 예측을 의미합니다.
+                            </div>
+                            <div class="guide-item">
+                                <strong>정밀도 vs 재현율</strong>: 정밀도가 높으면 오진이 적고, 재현율이 높으면 놓치는 환자가 적습니다.
+                            </div>
+                            <div class="guide-note">
+                                💡 <strong>임상 적용 참고:</strong> 이 지표들은 모델의 통계적 성능을 나타내며,
+                                실제 진단은 반드시 전문의의 판단과 추가 검사가 필요합니다.
+                            </div>
+                        </div>
+                    </details>
+                </div>
             </div>'''
 
         return f'''
@@ -1735,13 +1974,13 @@ class ReportAgent(BaseAgent):
                 </div>
 
                 <div class="deg-summary-box">
-                    <h4>DEG 요약</h4>
+                    <h4><span class="tooltip">DEG<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("DEG", "차등발현유전자")}</span></span> 요약</h4>
                     <table class="info-table">
                         <tr><td>총 DEG 수</td><td><strong>{total_deg:,}</strong></td></tr>
                         <tr><td>상향 발현</td><td class="up-text">{up_count:,}</td></tr>
                         <tr><td>하향 발현</td><td class="down-text">{down_count:,}</td></tr>
-                        <tr><td>기준값 (|log2FC|)</td><td>> 1.0</td></tr>
-                        <tr><td>기준값 (padj)</td><td>< 0.05</td></tr>
+                        <tr><td>기준값 (<span class="tooltip">|log2FC|<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("|log2FC|", "발현 변화량 절대값")}</span></span>)</td><td>> 1.0</td></tr>
+                        <tr><td>기준값 (<span class="tooltip">padj<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("padj", "다중검정 보정된 p-value")}</span></span>)</td><td>< 0.05</td></tr>
                     </table>
                 </div>
             </div>
@@ -2538,7 +2777,7 @@ class ReportAgent(BaseAgent):
                         <span class="table-title">상향 발현 Top 5 (암에서 증가)</span>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>유전자</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
+                        <thead><tr><th>유전자</th><th><span class="tooltip">log2FC<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("log2FC", "발현 변화량")}</span></span></th><th>FC</th><th><span class="tooltip">p-adj<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("padj", "보정된 p-value")}</span></span></th></tr></thead>
                         <tbody>{up_rows}</tbody>
                     </table>
                 </div>
@@ -2561,7 +2800,7 @@ class ReportAgent(BaseAgent):
                         <span class="table-title">하향 발현 Top 5 (암에서 감소)</span>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>유전자</th><th>log2FC</th><th>FC</th><th>p-adj</th></tr></thead>
+                        <thead><tr><th>유전자</th><th><span class="tooltip">log2FC<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("log2FC", "발현 변화량")}</span></span></th><th>FC</th><th><span class="tooltip">p-adj<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("padj", "보정된 p-value")}</span></span></th></tr></thead>
                         <tbody>{down_rows}</tbody>
                     </table>
                 </div>
@@ -2580,7 +2819,7 @@ class ReportAgent(BaseAgent):
             <div class="figure-panel volcano-container" style="margin-bottom: 24px;">
                 <div class="figure-header">Volcano Plot</div>
                 <div class="figure-container">{volcano_html}</div>
-                <div class="figure-caption">X축: log2FC | Y축: -log10(padj) | <span style="color:#dc2626;">●</span> 상향 | <span style="color:#2563eb;">●</span> 하향</div>
+                <div class="figure-caption">X축: <span class="tooltip">log2FC<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("log2FC", "발현 변화량")}</span></span> | Y축: -log10(<span class="tooltip">padj<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("padj", "보정된 p-value")}</span></span>) | <span style="color:#dc2626;">●</span> 상향 | <span style="color:#2563eb;">●</span> 하향</div>
                 {volcano_ai_section}
             </div>
 
@@ -3885,7 +4124,18 @@ class ReportAgent(BaseAgent):
 
     def _generate_methods_html(self) -> str:
         """Generate Level 4: Methods & Appendix."""
-        return '''
+        # 툴팁 적용을 위한 f-string 사용
+        deseq2_tooltip = f'<span class="tooltip">DESeq2<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("DESeq2", "RNA-seq 차등발현 분석 도구")}</span></span>'
+        log2fc_tooltip = f'<span class="tooltip">|log2FC|<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("|log2FC|", "발현 변화량 절대값")}</span></span>'
+        padj_tooltip = f'<span class="tooltip">padj<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("padj", "다중검정 보정된 p-value")}</span></span>'
+        spearman_tooltip = f'<span class="tooltip">Spearman<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("Spearman 상관계수", "순위 기반 상관관계")}</span></span>'
+        hub_tooltip = f'<span class="tooltip">Hub<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("Hub Gene", "네트워크 중심 유전자")}</span></span>'
+        go_tooltip = f'<span class="tooltip">GO<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("GO", "Gene Ontology")}</span></span>'
+        kegg_tooltip = f'<span class="tooltip">KEGG<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("KEGG", "경로 데이터베이스")}</span></span>'
+        cosmic_tooltip = f'<span class="tooltip">COSMIC<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("COSMIC", "암 체세포 변이 DB")}</span></span>'
+        oncokb_tooltip = f'<span class="tooltip">OncoKB<span class="tooltiptext">{self.TOOLTIP_DEFINITIONS.get("OncoKB", "암 유전자 지식 DB")}</span></span>'
+
+        return f'''
         <section class="methods-section" id="methods">
             <h2>9. 분석 방법</h2>
 
@@ -3893,8 +4143,8 @@ class ReportAgent(BaseAgent):
                 <div class="method-card">
                     <h4>[DNA] 차등발현 분석</h4>
                     <ul>
-                        <li>도구: DESeq2</li>
-                        <li>기준값: |log2FC| > 1, padj < 0.05</li>
+                        <li>도구: {deseq2_tooltip}</li>
+                        <li>기준값: {log2fc_tooltip} > 1, {padj_tooltip} < 0.05</li>
                         <li>정규화: Median of ratios</li>
                     </ul>
                 </div>
@@ -3903,8 +4153,8 @@ class ReportAgent(BaseAgent):
                     <h4>[Web] 네트워크 분석</h4>
                     <ul>
                         <li>도구: NetworkX</li>
-                        <li>상관계수: Spearman > 0.7</li>
-                        <li>Hub: 중심성 기준 상위 20개</li>
+                        <li>상관계수: {spearman_tooltip} > 0.7</li>
+                        <li>{hub_tooltip}: 중심성 기준 상위 20개</li>
                     </ul>
                 </div>
 
@@ -3912,16 +4162,16 @@ class ReportAgent(BaseAgent):
                     <h4>[Chart] 경로 농축 분석</h4>
                     <ul>
                         <li>도구: gseapy (Enrichr)</li>
-                        <li>DB: GO (BP/MF/CC), KEGG</li>
-                        <li>기준값: padj < 0.05</li>
+                        <li>DB: {go_tooltip} (BP/MF/CC), {kegg_tooltip}</li>
+                        <li>기준값: {padj_tooltip} < 0.05</li>
                     </ul>
                 </div>
 
                 <div class="method-card">
                     <h4>✅ DB 검증</h4>
                     <ul>
-                        <li>COSMIC Tier 1 유전자</li>
-                        <li>OncoKB 주석</li>
+                        <li>{cosmic_tooltip} Tier 1 유전자</li>
+                        <li>{oncokb_tooltip} 주석</li>
                         <li>암종 특이적</li>
                     </ul>
                 </div>
@@ -5949,6 +6199,304 @@ class ReportAgent(BaseAgent):
 
             .overview-card td:last-child {
                 color: var(--gray-900);
+            }
+
+            /* ========== ML Performance Card (v4 - Biologist-Friendly) ========== */
+            .ml-performance-card {
+                margin-top: 24px;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 16px;
+                color: white;
+                box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+            }
+
+            .ml-perf-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 16px;
+            }
+
+            .ml-perf-header h4 {
+                margin: 0;
+                font-size: 16px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .ml-perf-help {
+                font-size: 12px;
+                padding: 4px 10px;
+                background: rgba(255,255,255,0.2);
+                border-radius: 12px;
+                cursor: help;
+                transition: background 0.2s;
+            }
+
+            .ml-perf-help:hover {
+                background: rgba(255,255,255,0.35);
+            }
+
+            .ml-perf-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 12px;
+            }
+
+            .ml-metric-card {
+                text-align: center;
+                padding: 16px 12px;
+                background: rgba(255,255,255,0.12);
+                border-radius: 12px;
+                cursor: help;
+                transition: all 0.25s ease;
+                position: relative;
+            }
+
+            .ml-metric-card:hover {
+                background: rgba(255,255,255,0.25);
+                transform: translateY(-2px);
+            }
+
+            .metric-value {
+                font-size: 1.8em;
+                font-weight: 700;
+                line-height: 1.2;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            }
+
+            .metric-label {
+                font-size: 0.9em;
+                margin-top: 6px;
+                opacity: 0.95;
+                font-weight: 500;
+            }
+
+            .metric-eng {
+                font-size: 0.75em;
+                opacity: 0.7;
+                font-weight: 400;
+            }
+
+            .metric-quality {
+                display: inline-block;
+                font-size: 0.7em;
+                font-weight: 600;
+                padding: 2px 8px;
+                border-radius: 10px;
+                margin-top: 8px;
+            }
+
+            .metric-bio-meaning {
+                font-size: 0.7em;
+                opacity: 0.8;
+                margin-top: 6px;
+                line-height: 1.3;
+            }
+
+            /* Per-class metrics */
+            .ml-perf-perclass {
+                margin-top: 16px;
+                padding-top: 16px;
+                border-top: 1px solid rgba(255,255,255,0.25);
+            }
+
+            .perclass-header {
+                font-size: 0.95em;
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .perclass-icon {
+                font-size: 1.1em;
+            }
+
+            .perclass-grid {
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 10px;
+            }
+
+            .perclass-metric {
+                text-align: center;
+                padding: 10px 8px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 8px;
+                cursor: help;
+                transition: background 0.2s;
+            }
+
+            .perclass-metric:hover {
+                background: rgba(255,255,255,0.2);
+            }
+
+            .perclass-value {
+                font-size: 1.1em;
+                font-weight: 700;
+            }
+
+            .perclass-label {
+                font-size: 0.75em;
+                opacity: 0.85;
+                margin-top: 4px;
+            }
+
+            /* Confidence Interval */
+            .ml-perf-ci {
+                margin-top: 14px;
+                padding: 10px 12px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 8px;
+                font-size: 0.8em;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px 16px;
+                cursor: help;
+            }
+
+            .ci-label {
+                font-weight: 500;
+            }
+
+            /* Guide Section */
+            .ml-perf-guide {
+                margin-top: 16px;
+            }
+
+            .ml-perf-guide details {
+                background: rgba(255,255,255,0.1);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .ml-perf-guide summary {
+                padding: 12px 16px;
+                cursor: pointer;
+                font-size: 0.9em;
+                font-weight: 500;
+                list-style: none;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .ml-perf-guide summary::-webkit-details-marker {
+                display: none;
+            }
+
+            .ml-perf-guide summary:hover {
+                background: rgba(255,255,255,0.08);
+            }
+
+            .guide-content {
+                padding: 0 16px 16px;
+                font-size: 0.85em;
+                line-height: 1.6;
+            }
+
+            .guide-item {
+                padding: 8px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+
+            .guide-item:last-of-type {
+                border-bottom: none;
+            }
+
+            .guide-item strong {
+                color: #fff;
+            }
+
+            .guide-item em {
+                opacity: 0.8;
+                font-style: normal;
+            }
+
+            .guide-note {
+                margin-top: 12px;
+                padding: 12px;
+                background: rgba(255,255,255,0.15);
+                border-radius: 8px;
+                font-size: 0.95em;
+            }
+
+            /* Tooltip Styles */
+            [data-tooltip] {
+                position: relative;
+            }
+
+            [data-tooltip]::after {
+                content: attr(data-tooltip);
+                position: absolute;
+                bottom: calc(100% + 12px);
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(15, 23, 42, 0.97);
+                color: #f1f5f9;
+                padding: 12px 16px;
+                border-radius: 10px;
+                font-size: 13px;
+                font-weight: 400;
+                line-height: 1.55;
+                white-space: pre-line;
+                max-width: 320px;
+                min-width: 200px;
+                text-align: left;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.25s, visibility 0.25s, transform 0.25s;
+                z-index: 1000;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+                pointer-events: none;
+            }
+
+            [data-tooltip]::before {
+                content: '';
+                position: absolute;
+                bottom: calc(100% + 4px);
+                left: 50%;
+                transform: translateX(-50%);
+                border: 8px solid transparent;
+                border-top-color: rgba(15, 23, 42, 0.97);
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.25s, visibility 0.25s;
+                z-index: 1001;
+            }
+
+            [data-tooltip]:hover::after,
+            [data-tooltip]:hover::before {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            [data-tooltip]:hover::after {
+                transform: translateX(-50%) translateY(-4px);
+            }
+
+            /* Responsive for mobile */
+            @media (max-width: 768px) {
+                .ml-perf-grid {
+                    grid-template-columns: repeat(2, 1fr);
+                }
+
+                .perclass-grid {
+                    grid-template-columns: repeat(3, 1fr);
+                }
+
+                .metric-value {
+                    font-size: 1.5em;
+                }
+
+                [data-tooltip]::after {
+                    max-width: 260px;
+                    font-size: 12px;
+                }
             }
 
             /* QC Section */
