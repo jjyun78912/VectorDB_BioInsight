@@ -39,22 +39,8 @@ export const Navbar: React.FC = () => {
           </div>
         </div>
 
-        {/* Desktop Navigation */}
+        {/* Desktop Navigation - removed menu items */}
         <div className="hidden md:flex items-center gap-1">
-          {[
-            { key: 'navProduct', label: t.navProduct },
-            { key: 'navEnterprise', label: t.navEnterprise },
-            { key: 'navPricing', label: t.navPricing },
-            { key: 'navDocs', label: t.navDocs },
-          ].map((item) => (
-            <a
-              key={item.key}
-              href="#"
-              className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-purple-50/50 rounded-lg transition-all"
-            >
-              {item.label}
-            </a>
-          ))}
         </div>
 
         {/* Desktop Actions */}
@@ -89,21 +75,6 @@ export const Navbar: React.FC = () => {
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div className="md:hidden glass-5 absolute top-20 left-0 w-full p-6 flex flex-col gap-2 border-b border-purple-100/50 shadow-xl animate-appear">
-          {[
-            { key: 'navProduct', label: t.navProduct },
-            { key: 'navEnterprise', label: t.navEnterprise },
-            { key: 'navPricing', label: t.navPricing },
-            { key: 'navDocs', label: t.navDocs },
-          ].map((item) => (
-            <a
-              key={item.key}
-              href="#"
-              className="px-4 py-3 text-lg font-medium text-gray-700 hover:text-purple-600 hover:bg-purple-50/50 rounded-xl transition-all"
-            >
-              {item.label}
-            </a>
-          ))}
-          <div className="h-px bg-purple-100/50 w-full my-3"></div>
           {/* Language Toggle - Mobile */}
           <button
             onClick={toggleLanguage}
