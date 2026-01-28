@@ -48,8 +48,8 @@
 │  │                     │  │                             │  │                         │  │
 │  │   CORE FEATURES     │  │    ANALYSIS MODULES         │  │    DATA LAYER           │  │
 │  │                     │  │                             │  │                         │  │
-│  │  • Paper RAG        │  │  • Bulk RNA-seq (2-Step)    │  │  • ChromaDB (Vector)    │  │
-│  │  • Real-time Search │  │  • Single-cell (1-Step)     │  │  • PostgreSQL           │  │
+│  │  • Paper RAG        │  │  • RNA-seq Analysis         │  │  • ChromaDB (Vector)    │  │
+│  │  • Real-time Search │  │    (Bulk / Single-cell)     │  │  • PostgreSQL           │  │
 │  │  • Knowledge Graph  │  │  • ML Prediction            │  │  • File Storage         │  │
 │  │  • Daily Briefing   │  │  • RAG Interpretation       │  │                         │  │
 │  │  • Trends/Citations │  │                             │  │                         │  │
@@ -178,19 +178,19 @@
 │   ┌─────────────────────────────────────┐   ┌─────────────────────────────────────┐    │
 │   │                                     │   │                                     │    │
 │   │      🧪 BULK RNA-seq                │   │      🔬 SINGLE-CELL RNA-seq         │    │
-│   │         (2-Step Process)            │   │         (1-Step Process)            │    │
+│   │      (6-Agent Pipeline)             │   │      (6-Agent Pipeline)              │    │
 │   │                                     │   │                                     │    │
 │   └─────────────────────────────────────┘   └─────────────────────────────────────┘    │
 │                                                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Bulk RNA-seq Pipeline (2-Step Process)
+### Bulk RNA-seq Pipeline (6-Agent)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                          │
-│                       🧪 BULK RNA-seq Pipeline (2-Step)                                  │
+│                       🧪 BULK RNA-seq Pipeline (6-Agent)                                 │
 │                                                                                          │
 │   ══════════════════════════════════════════════════════════════════════════════════    │
 │                              STEP 1: STATISTICAL DEG ANALYSIS                            │
@@ -287,12 +287,12 @@ else:
 | Agent 6 (Report) | ~1분 | 11MB HTML |
 | **Total** | **~8분** | 전체 파이프라인 |
 
-### Single-cell RNA-seq Pipeline (1-Step Process)
+### Single-cell RNA-seq Pipeline (6-Agent)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
 │                                                                                          │
-│                      🔬 SINGLE-CELL RNA-seq Pipeline (1-Step)                            │
+│                      🔬 SINGLE-CELL RNA-seq Pipeline (6-Agent)                           │
 │                                                                                          │
 │   ┌─────────────────────────────────────────────────────────────────────────────────┐   │
 │   │                                                                                 │   │
@@ -322,21 +322,22 @@ else:
 │                                                                                          │
 │   Output: AnnData (.h5ad), Cluster Markers, Cell Composition, UMAP/Violin/Dot plots     │
 │                                                                                          │
-│   ✅ Complete in 1 Step (QC → Analysis → Report in single pipeline)                      │
+│   ✅ Unified Pipeline (QC → Clustering → Annotation → Markers → Report)                  │
 │                                                                                          │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Bulk vs Single-cell Comparison
 
-| 구분 | Bulk RNA-seq (2-Step) | Single-cell RNA-seq (1-Step) |
-|------|----------------------|------------------------------|
-| **입력** | genes × samples matrix | cells × genes matrix |
+| 구분 | Bulk RNA-seq | Single-cell RNA-seq |
+|------|--------------|---------------------|
+| **입력** | genes × samples matrix | genes × cells matrix |
 | **샘플 수** | 6~100 samples | 1,000~100,000+ cells |
-| **Step 1** | DESeq2 통계 분석 | - |
-| **Step 2** | Network/Pathway/Validation/Report | QC → Clustering → Annotation → Report |
-| **주요 도구** | DESeq2, NetworkX, Enrichr, CatBoost | Scanpy, Seurat, CellTypist, Harmony |
+| **활성화 Agent** | Agent 1~6 (DESeq2 기반) | Scanpy Agent (통합) |
+| **분석 흐름** | DEG → Network → Pathway → Validation → Viz → Report | QC → Clustering → Annotation → Markers → Report |
+| **주요 도구** | DESeq2, NetworkX, Enrichr, CatBoost | Scanpy, Harmony, CellTypist, Leiden |
 | **출력** | DEG list + HTML Report | Cell clusters + Markers + Report |
+| **공통 기능** | COSMIC/OncoKB 검증, Pathway Enrichment, ML 예측 연동, Interactive Report |
 
 ---
 
@@ -401,11 +402,11 @@ User Data → Gene ID Mapping → CatBoost Predict → SHAP Waterfall → Output
 
 | 파이프라인 | 입력 데이터 | Driver Gene 분석 | 신뢰도 |
 |-----------|------------|-----------------|--------|
-| **Bulk RNA-seq (1-Step)** | count_matrix.csv | PREDICTION (DB 매칭) | 낮음 |
-| **Bulk + WGS/WES (2-Step)** | count_matrix.csv + VCF/MAF | IDENTIFICATION (변이 검증) | 높음 |
-| **Single-cell (1-Step)** | 10X/h5ad | Cell type별 마커 | 중간 |
+| **Bulk RNA-seq** | count_matrix.csv | PREDICTION (DB 매칭) | 낮음 |
+| **Bulk + WGS/WES (Multi-omic)** | count_matrix.csv + VCF/MAF | IDENTIFICATION (변이 검증) | 높음 |
+| **Single-cell** | 10X/h5ad | Cell type별 마커 | 중간 |
 
-**Multi-omic 2-Step Pipeline (Bulk + WGS/WES)**:
+**Multi-omic Pipeline (Bulk RNA-seq + WGS/WES)**:
 
 ```
 Step 1: RNA-seq Analysis
@@ -766,7 +767,9 @@ interpretation = "KRAS는 췌장암의 주요 원인이다"  # 출처 없음
 | Web Crawler | PubMed, bioRxiv 검색 |
 | Knowledge Graph | 3D 시각화 |
 | Daily Briefing | AI 뉴스 다이제스트 |
-| RNA-seq 6-Agent | DEG, Network, Pathway, Validation, Viz, Report |
+| Bulk RNA-seq 6-Agent | DEG, Network, Pathway, Validation, Viz, Report |
+| Single-cell 6-Agent | QC, Cluster, Pathway, Trajectory, CNV/ML, Report |
+| Cell Type Annotation | CellTypist |
 | ML Prediction | CatBoost + SHAP (AUC 0.998) |
 | RAG Interpretation | Claude + PubMedBERT |
 | Web UI | SSE Progress Streaming |
@@ -775,8 +778,6 @@ interpretation = "KRAS는 췌장암의 주요 원인이다"  # 출처 없음
 
 | Feature | Description |
 |---------|-------------|
-| Single-cell Pipeline | Scanpy/Seurat integration |
-| Cell Type Annotation | CellTypist |
 | Proteomics | 단백질 분석 |
 | Genomics | 변이 분석 |
 | Drug Discovery | 약물 탐색 |
@@ -835,18 +836,19 @@ result = adapter.generate_bulk_report(cancer_type="BRCA")
 |---|------|------|
 | - | Cover | 제목, 날짜, 암종, 요약 통계 |
 | 1 | Summary | DEG 수, Hub genes 수 통계 카드 |
-| 2 | Abstract | LLM 생성 확장 초록 |
-| 3 | QC | PCA plot, 샘플 품질 분석 |
-| 4 | DEG Analysis | Volcano plot, Heatmap, DEG 테이블 |
-| 5 | Pathway | GO/KEGG enrichment, Pathway barplot |
-| 6 | Driver | Known drivers, Candidate regulators |
-| 7 | Network | Hub genes 테이블, 3D interactive network |
-| 8 | Clinical | 치료 표적, 바이오마커 후보 |
-| 9 | Follow-up | 검증 실험 제안 |
-| 10 | Research | 단기/중기/장기 연구 방향 |
-| 11 | Methods | 분석 파라미터 |
-| 12 | References | RAG 문헌 해석 (PMID 인용) |
-| 13 | Appendix | 전체 DEG 테이블 |
+| - | Abstract | LLM 생성 확장 초록 |
+| 2 | QC | PCA plot (Interactive), 샘플 품질 분석 |
+| 3 | DEG Analysis | Volcano plot, Heatmap (Interactive), DEG 테이블 |
+| 4 | Pathway | GO/KEGG enrichment, Pathway barplot |
+| 5 | 암 관련 유전자 검증 | Hub gene의 COSMIC/OncoKB DB 매칭, RAG 해석 (**Hub Gene ≠ Driver**) |
+| 6 | Network | Hub genes 테이블, 3D interactive network |
+| - | **ML 예측** | 암종 예측 + SHAP 근거 (cancer_prediction.json 있을 때) |
+| 7 | Clinical | 치료 표적, 바이오마커 후보 |
+| 8 | Follow-up | 검증 실험 제안 |
+| - | Research | 단기/중기/장기 연구 방향 (LLM 생성) |
+| 9 | Methods | 분석 파라미터 |
+| 10 | References | RAG 문헌 해석 (PMID 인용) |
+| 11 | Appendix | Top 50 DEG 테이블 + **전체 데이터 다운로드** |
 
 ### Single-cell RNA-seq 리포트 섹션
 
@@ -854,20 +856,37 @@ result = adapter.generate_bulk_report(cancer_type="BRCA")
 |---|------|------|
 | - | Cover | 제목, 세포 수, 클러스터 수 |
 | 1 | Summary | Cells, Genes, Clusters, Cell Types 카드 |
-| 2 | Abstract | LLM 생성 확장 초록 |
-| 3 | QC | Violin QC metrics |
-| 4 | Cell Type | UMAP, Cell type composition |
-| 5 | Markers | 클러스터별 마커 유전자, Heatmap, Dotplot |
-| 6 | Driver | COSMIC/OncoKB 매칭 driver genes |
-| 7 | Trajectory | Pseudotime 분석 |
-| 8 | TME | 종양 미세환경 구성 |
-| 9 | GRN | 유전자 조절 네트워크, TF-target |
-| 10 | Ploidy | CNV 추론, 악성세포 감별 |
-| 11 | Interaction | Cell-cell interaction |
-| 12 | Clinical | 임상적 시사점 |
-| 13 | Follow-up | 검증 실험 제안 |
-| 14 | Research | 후속 연구 추천 |
-| 15 | Methods | 분석 파라미터 |
+| - | Abstract | LLM 생성 확장 초록 |
+| 2 | QC | Violin QC metrics |
+| 3 | Cell Type | UMAP, Cell type composition |
+| 4 | Markers | 클러스터별 마커 유전자, Heatmap, Dotplot |
+| 5 | 암 관련 유전자 검증 | 마커 유전자의 COSMIC/OncoKB 매칭 |
+| - | Trajectory | Pseudotime 분석 (선택) |
+| - | TME | 종양 미세환경 구성 (선택) |
+| - | GRN | 유전자 조절 네트워크, TF-target (선택) |
+| - | Ploidy | CNV 추론, 악성세포 감별 (선택) |
+| - | Interaction | Cell-cell interaction (선택) |
+| - | **ML 예측** | Pseudo-bulk 암종 예측 + 클러스터별 결과 (선택) |
+| 7 | Clinical | 임상적 시사점 |
+| 8 | Follow-up | 검증 실험 제안 |
+| - | Research | 후속 연구 추천 (LLM 생성) |
+| 9 | Methods | 분석 파라미터 |
+| 10 | References | RAG 문헌 해석 (PMID 인용) |
+| 11 | Appendix | Top 50 마커 + **전체 데이터 다운로드** |
+
+### 선택 섹션(Optional) 활성화 조건
+
+| 섹션 | 활성화 파일 | 조건 |
+|------|-------------|------|
+| **Abstract** | `abstract_extended.json` | LLM Extended Abstract 생성됨 |
+| **Trajectory** | `trajectory_pseudotime.csv` 또는 `trajectory*.png` | Pseudotime 분석 실행됨 |
+| **TME** | `tme_composition.csv` | 종양 미세환경 분석 실행됨 |
+| **GRN** | `grn_edges.csv` 또는 `grn_network.png` | SCENIC/pySCENIC 분석 실행됨 |
+| **Ploidy** | `ploidy_by_celltype.csv` 또는 `cnv_heatmap.png` | inferCNV/CopyKAT 분석 실행됨 |
+| **Interaction** | `cell_interactions.csv` | CellChat/CellPhoneDB 분석 실행됨 |
+| **ML 예측** | `cancer_prediction.json` (Bulk) 또는 `pseudobulk_prediction.json` (SC) | ML predictor 실행됨 |
+| **Research** | `research_recommendations.json` | LLM 연구 추천 생성됨 |
+| **References** | `interpretation_report.json` | RAG 해석 실행됨 |
 
 ### 리포트 파일 구조
 
