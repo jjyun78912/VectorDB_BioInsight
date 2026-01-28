@@ -2110,6 +2110,8 @@ class ReportAgent(BaseAgent):
         if recommended_papers and recommended_papers.get('paper_count', 0) > 0:
             classic_papers = recommended_papers.get('classic_papers', [])
             breakthrough_papers = recommended_papers.get('breakthrough_papers', [])
+            other_papers = recommended_papers.get('other_papers', [])
+            all_papers = recommended_papers.get('papers', [])
 
             classic_items = []
             for p in classic_papers[:3]:
@@ -2129,21 +2131,47 @@ class ReportAgent(BaseAgent):
                 pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
                 breakthrough_items.append(f'<li><a href="{pubmed_url}" target="_blank">{paper_title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
 
-            papers_html = f'''
-            <div class="papers-box">
-                <h4>📄 추천 논문</h4>
-                <div class="papers-grid">
-                    <div class="paper-category classic">
-                        <h5>[Ref] 교과서급 핵심 연구 (Classic)</h5>
-                        <ul>{''.join(classic_items) if classic_items else '<li>없음</li>'}</ul>
-                    </div>
-                    <div class="paper-category emerging">
-                        <h5>🚀 최신 주목 연구 (Emerging)</h5>
-                        <ul>{''.join(breakthrough_items) if breakthrough_items else '<li>없음</li>'}</ul>
+            # Fallback: use other_papers or all_papers if no classic/breakthrough
+            related_items = []
+            if not classic_items and not breakthrough_items:
+                papers_to_show = other_papers[:4] if other_papers else all_papers[:4]
+                for p in papers_to_show:
+                    paper_title = p.get('title', '')[:80]
+                    pmid = p.get('pmid', '')
+                    citations = p.get('citation_count', 0)
+                    year = p.get('year', '')
+                    pubmed_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+                    related_items.append(f'<li><a href="{pubmed_url}" target="_blank">{paper_title}...</a> <span class="paper-meta">({year}, 인용 {citations}회)</span></li>')
+
+            if related_items:
+                # Show related papers when no classic/breakthrough available
+                papers_html = f'''
+                <div class="papers-box">
+                    <h4>📄 추천 논문</h4>
+                    <div class="papers-grid">
+                        <div class="paper-category related" style="grid-column: 1 / -1;">
+                            <h5>📚 관련 연구 (Related Papers)</h5>
+                            <ul>{''.join(related_items)}</ul>
+                        </div>
                     </div>
                 </div>
-            </div>
-            '''
+                '''
+            else:
+                papers_html = f'''
+                <div class="papers-box">
+                    <h4>📄 추천 논문</h4>
+                    <div class="papers-grid">
+                        <div class="paper-category classic">
+                            <h5>[Ref] 교과서급 핵심 연구 (Classic)</h5>
+                            <ul>{''.join(classic_items) if classic_items else '<li>없음</li>'}</ul>
+                        </div>
+                        <div class="paper-category emerging">
+                            <h5>🚀 최신 주목 연구 (Emerging)</h5>
+                            <ul>{''.join(breakthrough_items) if breakthrough_items else '<li>없음</li>'}</ul>
+                        </div>
+                    </div>
+                </div>
+                '''
 
         # Title section
         title_html = ''
