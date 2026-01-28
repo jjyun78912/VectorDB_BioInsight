@@ -288,7 +288,7 @@ export const translations: Record<Language, Translations> = {
   en: {
     // Header
     appName: 'BioInsight',
-    tagline: 'AI-Powered Biomedical Research Assistant',
+    tagline: 'Data that inspires researchers, Insight',
 
     // Hero Section
     heroBadge: 'AI-Powered Research Platform',
@@ -568,7 +568,7 @@ export const translations: Record<Language, Translations> = {
   ko: {
     // Header
     appName: 'BioInsight',
-    tagline: 'AI 기반 생의학 연구 어시스턴트',
+    tagline: '연구자에게 영감이 되는 데이터, Insight',
 
     // Hero Section
     heroBadge: 'AI 기반 연구 플랫폼',

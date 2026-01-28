@@ -91,6 +91,7 @@ source .venv/bin/activate
 # pip 업그레이드 후 패키지 설치
 pip install --upgrade pip
 pip install -r requirements.txt
+# 260126 07:34 여까지 작업함
 pip install -r requirements-rnaseq.txt  # RNA-seq 분석용
 ```
 
