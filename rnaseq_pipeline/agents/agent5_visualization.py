@@ -266,6 +266,9 @@ class VisualizationAgent(BaseAgent):
 
     def _get_gene_symbol(self, gene_id: str) -> str:
         """Extract gene symbol from gene_id or integrated table."""
+        # Ensure gene_id is string (may come as int from some data sources)
+        gene_id = str(gene_id)
+
         # Try to get symbol from integrated table
         if self.integrated_table is not None and 'gene_symbol' in self.integrated_table.columns:
             match = self.integrated_table[self.integrated_table['gene_id'] == gene_id]
@@ -654,8 +657,9 @@ class VisualizationAgent(BaseAgent):
         # Get gene symbols
         gene_labels = []
         for gene_id in expr_zscore.index:
-            symbol = self._get_gene_symbol(gene_id)
-            gene_labels.append(symbol if symbol != gene_id else gene_id.split('.')[0][-8:])
+            gene_id_str = str(gene_id)  # Ensure string type
+            symbol = self._get_gene_symbol(gene_id_str)
+            gene_labels.append(symbol if symbol != gene_id_str else gene_id_str.split('.')[0][-8:])
 
         # Create sample labels with condition
         sample_labels = []
@@ -1277,7 +1281,8 @@ class VisualizationAgent(BaseAgent):
                     gene_id_to_symbol[gid] = row['gene_symbol']
                 gene_id_to_direction[gid] = row.get('direction', 'none')
 
-        def get_gene_label(gene_id: str) -> str:
+        def get_gene_label(gene_id) -> str:
+            gene_id = str(gene_id)  # Ensure string type
             if gene_id in gene_id_to_symbol:
                 return gene_id_to_symbol[gene_id]
             if gene_id.startswith('ENSG'):
@@ -1425,7 +1430,8 @@ class VisualizationAgent(BaseAgent):
                 gene_id_to_direction[gid] = row.get('direction', 'none')
                 gene_id_to_log2fc[gid] = row.get('log2FC', 0)
 
-        def get_gene_label(gene_id: str) -> str:
+        def get_gene_label(gene_id) -> str:
+            gene_id = str(gene_id)  # Ensure string type
             if gene_id in gene_id_to_symbol:
                 return gene_id_to_symbol[gene_id]
             if gene_id.startswith('ENSG'):
@@ -2095,7 +2101,8 @@ class VisualizationAgent(BaseAgent):
                     'padj': row.get('padj', 1)
                 }
 
-        def get_gene_label(gene_id: str) -> str:
+        def get_gene_label(gene_id) -> str:
+            gene_id = str(gene_id)  # Ensure string type
             if gene_id in gene_id_to_symbol:
                 return gene_id_to_symbol[gene_id]
             if gene_id.startswith('ENSG'):
