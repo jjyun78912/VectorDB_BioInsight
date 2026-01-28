@@ -153,13 +153,17 @@ class DGIdbClient:
         }
         """
 
-        logger.info(f"Querying DGIdb for {len(genes)} genes...")
+        logger.info(f"Querying DGIdb for {len(genes)} genes: {genes[:10]}{'...' if len(genes) > 10 else ''}")
 
         result = self._execute_query(query, {"names": genes})
 
         if "errors" in result:
             logger.error(f"DGIdb query error: {result['errors']}")
             return {}
+
+        # Debug: log raw response structure
+        if not result.get("data", {}).get("genes", {}).get("nodes"):
+            logger.warning(f"DGIdb returned empty nodes. Response keys: {result.keys()}")
 
         return self._parse_interactions(result, min_score)
 

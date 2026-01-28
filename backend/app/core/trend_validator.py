@@ -178,9 +178,17 @@ class ValidatedTrend:
 # ============================================================================
 # API Configuration
 # ============================================================================
+import os
 
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 CLINICALTRIALS_API = "https://clinicaltrials.gov/api/v2/studies"
+
+# NCBI API Key (allows 10 req/sec instead of 3 req/sec)
+NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
+
+# Rate limiting: delay between requests (seconds)
+# Without API key: 0.34s (3 req/sec), With API key: 0.1s (10 req/sec)
+PUBMED_REQUEST_DELAY = 0.1 if NCBI_API_KEY else 0.35
 
 # Cache
 _validation_cache: Dict[str, ValidatedTrend] = {}
@@ -215,6 +223,9 @@ class SparseSignalExtractor:
     async def get_pubmed_count(self, query: str, year: int) -> int:
         """Get publication count for a query in a specific year."""
         try:
+            # Rate limiting delay
+            await asyncio.sleep(PUBMED_REQUEST_DELAY)
+
             client = await self._get_client()
             params = {
                 "db": "pubmed",
@@ -224,6 +235,10 @@ class SparseSignalExtractor:
                 "mindate": f"{year}/01/01",
                 "maxdate": f"{year}/12/31",
             }
+            # Add API key if available
+            if NCBI_API_KEY:
+                params["api_key"] = NCBI_API_KEY
+
             response = await client.get(f"{PUBMED_BASE}/esearch.fcgi", params=params)
             response.raise_for_status()
 
@@ -239,6 +254,9 @@ class SparseSignalExtractor:
         Returns: (unique_journals, high_if_journals, journal_list)
         """
         try:
+            # Rate limiting delay
+            await asyncio.sleep(PUBMED_REQUEST_DELAY)
+
             client = await self._get_client()
 
             # Search recent 2 years for journal diversity
@@ -251,6 +269,8 @@ class SparseSignalExtractor:
                 "mindate": f"{CURRENT_YEAR - 2}/01/01",
                 "maxdate": f"{CURRENT_YEAR}/12/31",
             }
+            if NCBI_API_KEY:
+                params["api_key"] = NCBI_API_KEY
 
             # Get PMIDs
             response = await client.get(f"{PUBMED_BASE}/esearch.fcgi", params=params)
@@ -267,8 +287,10 @@ class SparseSignalExtractor:
                 "id": ",".join(sample_pmids),
                 "retmode": "xml",
             }
+            if NCBI_API_KEY:
+                summary_params["api_key"] = NCBI_API_KEY
 
-            await asyncio.sleep(0.35)  # Rate limiting
+            await asyncio.sleep(PUBMED_REQUEST_DELAY)  # Rate limiting
             response = await client.get(f"{PUBMED_BASE}/efetch.fcgi", params=summary_params)
 
             # Extract journal names
@@ -346,6 +368,9 @@ class ValidationEvidenceCollector:
     async def get_pubmed_count(self, query: str, years_back: int = 3) -> int:
         """Get publication count for a query."""
         try:
+            # Rate limiting delay
+            await asyncio.sleep(PUBMED_REQUEST_DELAY)
+
             client = await self._get_client()
             params = {
                 "db": "pubmed",
@@ -355,6 +380,9 @@ class ValidationEvidenceCollector:
                 "mindate": f"{CURRENT_YEAR - years_back}/01/01",
                 "maxdate": f"{CURRENT_YEAR}/12/31",
             }
+            if NCBI_API_KEY:
+                params["api_key"] = NCBI_API_KEY
+
             response = await client.get(f"{PUBMED_BASE}/esearch.fcgi", params=params)
             match = re.search(r'<Count>(\d+)</Count>', response.text)
             return int(match.group(1)) if match else 0
@@ -374,7 +402,7 @@ class ValidationEvidenceCollector:
             sr_query = f'"{keyword}" AND (systematic review[pt] OR systematic review[ti])'
             sr_count = await self.get_pubmed_count(sr_query, years_back=5)
 
-            await asyncio.sleep(0.35)
+            await asyncio.sleep(PUBMED_REQUEST_DELAY)
 
             # Search for meta-analyses
             ma_query = f'"{keyword}" AND (meta-analysis[pt] OR meta-analysis[ti])'

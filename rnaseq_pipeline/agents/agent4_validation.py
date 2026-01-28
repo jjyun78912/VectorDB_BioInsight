@@ -1034,11 +1034,15 @@ class ValidationAgent(BaseAgent):
 
         if self.cancer_prediction is None:
             self.logger.warning("No ML prediction to validate")
-            return {
+            no_prediction_result = {
                 "validation_stage": 2,
                 "ml_prediction_validated": False,
+                "checks": {},
                 "reason": "No ML prediction found"
             }
+            # Save the result even when no prediction exists
+            self.save_json(no_prediction_result, "ml_validation_report.json")
+            return no_prediction_result
 
         predicted_cancer = self.cancer_prediction.get('predicted_cancer', 'Unknown')
         confidence = self.cancer_prediction.get('confidence', 0)

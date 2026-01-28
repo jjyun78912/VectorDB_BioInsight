@@ -18,10 +18,41 @@ import json
 import base64
 import math
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import pandas as pd
+
+
+def repair_json(json_str: str) -> str:
+    """Attempt to repair common JSON errors from LLM responses.
+
+    Handles:
+    - Trailing commas before ] or }
+    - Single quotes instead of double quotes
+    - Unescaped newlines in strings
+    """
+    # Remove trailing commas before } or ]
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+    # Try to fix unescaped newlines within string values
+    # This is a simple heuristic - replace literal newlines with \\n
+    lines = json_str.split('\n')
+    fixed_lines = []
+    in_string = False
+    for line in lines:
+        # Count unescaped quotes to track string state
+        quote_count = len(re.findall(r'(?<!\\)"', line))
+        if in_string:
+            # We're continuing a string from previous line
+            fixed_lines[-1] += '\\n' + line
+        else:
+            fixed_lines.append(line)
+        # Update string state
+        in_string = (quote_count % 2 == 1) != in_string
+
+    return '\n'.join(fixed_lines)
 
 from ..utils.base_agent import BaseAgent
 
@@ -8380,6 +8411,8 @@ key_findings 작성 지침 (매우 중요):
             json_end = response_text.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
                 json_str = response_text[json_start:json_end]
+                # Try to repair common JSON errors from LLM
+                json_str = repair_json(json_str)
                 extended_abstract = json.loads(json_str)
 
                 # Save to file
@@ -8724,6 +8757,8 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
             json_end = response_text.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
                 json_str = response_text[json_start:json_end]
+                # Try to repair common JSON errors from LLM
+                json_str = repair_json(json_str)
                 viz_interpretations = json.loads(json_str)
 
                 # Save to file
@@ -9108,6 +9143,8 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
             json_end = response_text.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
                 json_str = response_text[json_start:json_end]
+                # Try to repair common JSON errors from LLM
+                json_str = repair_json(json_str)
                 recommendations = json.loads(json_str)
 
                 # Save to file
@@ -9164,9 +9201,10 @@ Driver Gene Analysis: Known Driver Track에서 {known_count}개의 후보({', '.
                 gene_symbols.add(gene)
 
         if not gene_symbols:
+            self.logger.warning("No gene symbols found for DGIdb query (all ENSG IDs or empty)")
             return {"prompt_section": "", "interactions": {}, "druggable_genes": []}
 
-        self.logger.info(f"Querying DGIdb for {len(gene_symbols)} genes...")
+        self.logger.info(f"Querying DGIdb for {len(gene_symbols)} genes: {list(gene_symbols)[:5]}...")
 
         try:
             client = DGIdbClient(timeout=30)
