@@ -581,6 +581,12 @@ class PanCancerPreprocessor:
         else:
             transformed = normalized
 
+        # ★ 중복 gene index 처리 (배치 보정 전에 수행)
+        if transformed.index.duplicated().any():
+            dup_count = transformed.index.duplicated().sum()
+            logger.info(f"Found {dup_count} duplicate gene indices before batch correction, averaging...")
+            transformed = transformed.groupby(transformed.index).mean()
+
         # ★ 배치 보정 (v2)
         if apply_batch_correction and self.reference_means is not None:
             if use_quantile_norm:
