@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 14pt;
+}
+.priority-row { display: flex; gap: 14pt; }
+.priority-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 16pt 18pt; flex: 1;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.08);
+  border-top: 4pt solid #FC1C49;
+}
+.pc-badge {
+  background: #FC1C49; border-radius: 4pt; padding: 2pt 8pt;
+  display: inline-block; margin: 0 0 8pt 0;
+}
+.pc-badge-text {
+  color: #FFFFFF; font-size: 8pt; font-weight: bold; margin: 0;
+}
+.pc-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.bottom-bar {
+  background: #07024E; border-radius: 10pt; padding: 14pt 18pt;
+  display: flex; gap: 20pt;
+}
+.bb-col { flex: 1; }
+.bb-title {
+  color: #FC1C49; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.bb-desc {
+  color: #FFFFFF; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">향후 개발 계획</p>
+</div>
+<div class="content">
+  <div class="priority-row">
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">우선순위 1</p></div>
+      <p class="pc-title">영어 버전 보고서 추가</p>
+      <p class="pc-desc">다국어 리포트 생성 (한국어 / 영어)</p>
+      <p class="pc-desc">ReportConfig 언어 파라미터로 자동 전환</p>
+      <p class="pc-desc">LLM 해석 출력 언어 선택 지원</p>
+      <p class="pc-desc">글로벌 연구자 접근성 확대</p>
+    </div>
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">우선순위 2</p></div>
+      <p class="pc-title">ML 정확도 향상</p>
+      <p class="pc-desc">TCGA 외 학습 데이터 확장 (GEO, TARGET)</p>
+      <p class="pc-desc">앙상블 방법: CatBoost + XGBoost + LightGBM 투표</p>
+      <p class="pc-desc">혼동 가능 암종 쌍 전용 분류기 개발</p>
+      <p class="pc-desc">외부 코호트 교차 검증</p>
+    </div>
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">우선순위 3</p></div>
+      <p class="pc-title">Single-cell 강화</p>
+      <p class="pc-desc">SCENIC+ 기반 향상된 유전자 조절 네트워크</p>
+      <p class="pc-desc">CellChat / CellPhoneDB 세포 간 상호작용</p>
+      <p class="pc-desc">inferCNV / CopyKAT 악성 세포 감별</p>
+      <p class="pc-desc">공간 전사체학 통합 (Visium)</p>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <div class="bb-col">
+      <p class="bb-title">계획 중인 모듈</p>
+      <p class="bb-desc">Multi-omic: WGS/WES 변이 + RNA-seq 통합</p>
+      <p class="bb-desc">단백질체학: 질량분석 데이터 분석 파이프라인</p>
+    </div>
+    <div class="bb-col">
+      <p class="bb-title">플랫폼 확장</p>
+      <p class="bb-desc">DGIdb 연동 약물 탐색 모듈</p>
+      <p class="bb-desc">식별된 표적 기반 임상시험 매칭</p>
+    </div>
+    <div class="bb-col">
+      <p class="bb-title">인프라</p>
+      <p class="bb-desc">클라우드 배포 (GCP / AWS) 확장성 확보</p>
+      <p class="bb-desc">대규모 코호트 연구 배치 처리</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

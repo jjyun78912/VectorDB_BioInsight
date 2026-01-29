@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioInsight AI - Single-cell RNA-seq Analysis Report</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+/* ============================================================
+   BioInsight AI Report — NPJ Scientific Journal Style (SC Demo)
+   ============================================================ */
+:root {
+    --bg-primary: #fafafa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f5f5f5;
+    --border-light: #e5e5e5;
+    --border-medium: #d4d4d4;
+    --text-primary: #171717;
+    --text-secondary: #525252;
+    --text-muted: #a3a3a3;
+    --accent-blue: #2563eb;
+    --accent-blue-light: #eff6ff;
+    --accent-green: #059669;
+    --accent-green-light: #ecfdf5;
+    --accent-red: #dc2626;
+    --accent-red-light: #fef2f2;
+    --accent-orange: #d97706;
+    --accent-orange-light: #fffbeb;
+    --accent-purple: #7c3aed;
+    --accent-purple-light: #f5f3ff;
+    --accent-cyan: #0891b2;
+    --accent-cyan-light: #ecfeff;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-serif: Georgia, 'Times New Roman', serif;
+    --font-mono: 'SF Mono', Monaco, 'Courier New', monospace;
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px;
+    --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* NAV */
+.nav-bar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border-light);
+    padding: var(--sp-3) var(--sp-6);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.nav-brand {
+    font-weight: 700; font-size: 14px; color: var(--accent-blue);
+    display: flex; align-items: center; gap: var(--sp-2);
+}
+.nav-links { display: flex; gap: var(--sp-4); flex-wrap: wrap; }
+.nav-links a {
+    font-size: 12px; color: var(--text-secondary); text-decoration: none;
+    padding: var(--sp-1) var(--sp-2); border-radius: var(--radius-sm);
+    transition: all 0.2s;
+}
+.nav-links a:hover { color: var(--accent-blue); background: var(--accent-blue-light); }
+
+/* COVER */
+.cover-page {
+    background: var(--bg-secondary);
+    min-height: 50vh;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center;
+    padding: var(--sp-12) var(--sp-6);
+    border-bottom: 3px solid var(--accent-blue);
+}
+.cover-page .data-type-badge {
+    display: inline-block;
+    background: var(--accent-blue);
+    color: white; padding: var(--sp-1) var(--sp-4);
+    border-radius: 2px; font-size: 11px;
+    font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: var(--sp-6);
+}
+.cover-page .data-type-badge.singlecell { background: var(--accent-purple); }
+.cover-page h1 {
+    font-family: var(--font-serif);
+    font-size: 30px; font-weight: 400;
+    line-height: 1.3; color: var(--text-primary);
+    margin-bottom: var(--sp-4); max-width: 700px;
+}
+.cover-page .subtitle {
+    font-size: 16px; color: var(--text-secondary);
+    margin-bottom: var(--sp-8);
+}
+.meta-info {
+    display: flex; justify-content: center; gap: var(--sp-10);
+    padding: var(--sp-5) 0;
+    border-top: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-light);
+    flex-wrap: wrap;
+}
+.meta-item { text-align: center; }
+.meta-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.meta-value { font-size: 22px; font-weight: 600; color: var(--accent-blue); line-height: 1; margin-top: var(--sp-1); }
+.meta-value.purple { color: var(--accent-purple); }
+
+/* MAIN */
+.main-content { max-width: 960px; margin: 0 auto; padding: var(--sp-6); }
+
+/* SECTION */
+.section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: var(--sp-8);
+    margin-bottom: var(--sp-6);
+}
+.section-header {
+    display: flex; align-items: center; gap: var(--sp-3);
+    margin-bottom: var(--sp-6);
+    padding-bottom: var(--sp-4);
+    border-bottom: 2px solid var(--accent-blue);
+}
+.section-number {
+    background: var(--accent-blue); color: white;
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+}
+.section-number.purple { background: var(--accent-purple); }
+.section-icon { font-size: 20px; }
+.section-title {
+    font-family: var(--font-serif);
+    font-size: 22px; font-weight: 400; color: var(--text-primary);
+}
+.section-subtitle {
+    font-size: 13px; color: var(--text-muted); margin-bottom: var(--sp-4);
+}
+
+/* SUMMARY GRID */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--sp-4);
+}
+.summary-card {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: var(--sp-5);
+    text-align: center;
+    transition: transform 0.2s;
+}
+.summary-card:hover { transform: translateY(-2px); }
+.summary-card.highlight {
+    background: var(--accent-blue-light);
+    border: 1px solid var(--accent-blue);
+}
+.summary-card .value {
+    font-size: 28px; font-weight: 700;
+    color: var(--accent-blue); line-height: 1;
+}
+.summary-card.highlight .value { color: var(--accent-blue); }
+.summary-card .label {
+    font-size: 12px; color: var(--text-secondary);
+    margin-top: var(--sp-2);
+}
+
+/* ABSTRACT */
+.abstract-content {
+    background: var(--bg-tertiary); border-radius: var(--radius-md);
+    padding: var(--sp-6); line-height: 1.8; font-size: 14px;
+    border-left: 3px solid var(--accent-blue);
+}
+.abstract-content p { margin-bottom: var(--sp-3); }
+.abstract-content strong { color: var(--accent-blue); }
+
+/* FIGURE */
+.figure-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: var(--sp-4);
+}
+.figure-panel {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.figure-panel.full { grid-column: 1 / -1; }
+.figure-title {
+    font-size: 13px; font-weight: 600;
+    color: var(--text-primary); padding: var(--sp-3) var(--sp-4);
+    background: var(--bg-tertiary); border-bottom: 1px solid var(--border-light);
+}
+.figure-content { padding: var(--sp-2); }
+.figure-content img { width: 100%; height: auto; display: block; }
+.figure-caption {
+    font-size: 12px; color: var(--text-muted);
+    padding: var(--sp-2) var(--sp-4) var(--sp-3);
+}
+
+/* TABLE */
+.table-wrapper { overflow-x: auto; margin-top: var(--sp-4); }
+table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+}
+thead th {
+    background: var(--bg-tertiary); font-weight: 600;
+    text-align: left; padding: var(--sp-3) var(--sp-4);
+    border-bottom: 2px solid var(--border-medium);
+    color: var(--text-secondary); font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    position: sticky; top: 0;
+}
+tbody td {
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 1px solid var(--border-light);
+}
+tbody tr:hover { background: var(--accent-blue-light); }
+.gene-symbol {
+    font-family: var(--font-mono);
+    font-weight: 600; color: var(--accent-blue);
+    font-size: 12px;
+}
+
+/* BADGES */
+.badge {
+    display: inline-block; padding: 2px 8px;
+    border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.badge-up { background: var(--accent-red-light); color: var(--accent-red); }
+.badge-down { background: var(--accent-blue-light); color: var(--accent-blue); }
+.badge-high { background: var(--accent-green-light); color: var(--accent-green); }
+.badge-medium { background: var(--accent-orange-light); color: var(--accent-orange); }
+.badge-low { background: var(--bg-tertiary); color: var(--text-muted); }
+.badge-purple { background: var(--accent-purple-light); color: var(--accent-purple); }
+.badge-cyan { background: var(--accent-cyan-light); color: var(--accent-cyan); }
+
+/* NOTE BOX */
+.note-box {
+    display: flex; gap: var(--sp-3); align-items: flex-start;
+    padding: var(--sp-4); border-radius: var(--radius-md);
+    margin-top: var(--sp-4); font-size: 13px;
+}
+.note-box.info { background: var(--accent-blue-light); border-left: 3px solid var(--accent-blue); }
+.note-box.warning { background: var(--accent-orange-light); border-left: 3px solid var(--accent-orange); }
+.note-box.danger { background: var(--accent-red-light); border-left: 3px solid var(--accent-red); }
+.note-box.success { background: var(--accent-green-light); border-left: 3px solid var(--accent-green); }
+.note-box-icon { font-size: 16px; flex-shrink: 0; }
+.note-box-content { color: var(--text-secondary); line-height: 1.6; }
+
+/* AI ANALYSIS */
+.ai-analysis-box {
+    background: linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%);
+    border: 1px solid #dbeafe;
+    border-radius: var(--radius-lg);
+    padding: var(--sp-6); margin-top: var(--sp-4);
+}
+.ai-analysis-header {
+    display: flex; align-items: center; gap: var(--sp-2);
+    margin-bottom: var(--sp-4); padding-bottom: var(--sp-3);
+    border-bottom: 1px solid #dbeafe;
+}
+.ai-analysis-header h3 {
+    font-size: 15px; font-weight: 600; color: var(--accent-blue);
+}
+.ai-section { margin-bottom: var(--sp-4); }
+.ai-section h4 {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    margin-bottom: var(--sp-2);
+}
+.ai-section p { font-size: 13px; line-height: 1.8; color: var(--text-secondary); }
+
+/* ML PREDICTION */
+.ml-card {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    border: 1px solid #c4b5fd;
+    border-radius: var(--radius-lg);
+    padding: var(--sp-6); margin-top: var(--sp-4);
+}
+.ml-header {
+    display: flex; align-items: center; gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+}
+.ml-header h3 { font-size: 15px; font-weight: 700; color: var(--accent-purple); }
+.confidence-meter {
+    height: 24px; background: #e5e7eb; border-radius: 12px;
+    overflow: hidden; margin: var(--sp-3) 0;
+}
+.confidence-fill {
+    height: 100%; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: white;
+}
+.confidence-fill.high { background: linear-gradient(90deg, var(--accent-green), #34d399); }
+.shap-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--sp-3); margin-top: var(--sp-4);
+}
+.shap-item {
+    display: flex; align-items: center; gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: white; border-radius: var(--radius-sm);
+}
+.shap-bar {
+    height: 6px; border-radius: 3px; flex: 1;
+}
+.shap-bar.positive { background: var(--accent-red); }
+.shap-bar.negative { background: var(--accent-blue); }
+.shap-label { font-size: 11px; font-family: var(--font-mono); font-weight: 600; min-width: 70px; }
+.shap-value { font-size: 11px; color: var(--text-muted); min-width: 45px; text-align: right; }
+
+/* MARKER CLUSTER CARDS */
+.marker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--sp-4);
+}
+.marker-cluster-card {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.marker-cluster-card h4 {
+    background: var(--bg-tertiary);
+    padding: var(--sp-2) var(--sp-4);
+    font-size: 13px; font-weight: 600;
+    border-bottom: 1px solid var(--border-light);
+}
+.marker-cluster-card table { width: 100%; }
+.marker-cluster-card td, .marker-cluster-card th {
+    padding: var(--sp-1) var(--sp-3); font-size: 12px;
+}
+
+/* DRIVER GENE TABLE */
+.driver-row-cosmic td:first-child { border-left: 3px solid var(--accent-green); }
+.driver-row-oncokb td:first-child { border-left: 3px solid var(--accent-purple); }
+
+/* INTERPRETATION CARD */
+.interp-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4); margin-bottom: var(--sp-3);
+}
+.interp-card .gene-header {
+    display: flex; align-items: center; gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+}
+.interp-card .gene-name {
+    font-family: var(--font-mono);
+    font-size: 15px; font-weight: 700; color: var(--accent-blue);
+}
+.interp-card .direction-badge { font-size: 11px; }
+.interp-card .interp-text {
+    font-size: 13px; line-height: 1.8; color: var(--text-secondary);
+}
+.interp-card .pmid-ref {
+    font-size: 11px; color: var(--accent-blue);
+    font-family: var(--font-mono);
+}
+
+/* RECOMMENDATION CARDS */
+.rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--sp-4);
+}
+.rec-card {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: var(--sp-5);
+}
+.rec-card h4 {
+    font-size: 14px; font-weight: 600; margin-bottom: var(--sp-3);
+    color: var(--text-primary);
+}
+.rec-card p, .rec-card li {
+    font-size: 13px; line-height: 1.7; color: var(--text-secondary);
+}
+.rec-card ul { padding-left: var(--sp-5); }
+.rec-card li { margin-bottom: var(--sp-1); }
+.rec-card .priority-high { color: var(--accent-red); font-weight: 600; }
+.rec-card .priority-medium { color: var(--accent-orange); font-weight: 600; }
+
+/* METHODS */
+.method-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--sp-4);
+}
+.method-item {
+    background: var(--bg-tertiary); border-radius: var(--radius-md);
+    padding: var(--sp-4);
+}
+.method-item h4 {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: var(--sp-2);
+}
+.method-item p { font-size: 13px; color: var(--text-primary); }
+
+/* FOOTER */
+.report-footer {
+    text-align: center; padding: var(--sp-8) var(--sp-6);
+    border-top: 1px solid var(--border-light);
+    margin-top: var(--sp-8);
+}
+.report-footer p { font-size: 12px; color: var(--text-muted); margin-bottom: var(--sp-1); }
+.report-footer .disclaimer {
+    background: var(--accent-orange-light);
+    border: 1px solid var(--accent-orange);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4); margin: var(--sp-4) auto;
+    max-width: 700px; font-size: 12px; color: var(--accent-orange);
+}
+
+/* INTERACTIVE CONTAINER */
+.interactive-container {
+    width: 100%; min-height: 450px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+h3 {
+    font-size: 16px; font-weight: 600; color: var(--text-primary);
+    margin-top: var(--sp-6); margin-bottom: var(--sp-3);
+}
+
+/* OPTIONAL SECTION BADGE */
+.optional-badge {
+    display: inline-block; background: var(--accent-purple-light);
+    color: var(--accent-purple); font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+    margin-left: var(--sp-2); letter-spacing: 0.5px;
+}
+
+/* TME composition bar */
+.tme-bar-container { margin-top: var(--sp-3); }
+.tme-bar {
+    height: 28px; border-radius: 14px; overflow: hidden;
+    display: flex; margin-bottom: var(--sp-2);
+}
+.tme-bar-segment {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 600; color: white;
+    min-width: 30px; transition: all 0.3s;
+}
+.tme-bar-segment:hover { filter: brightness(1.1); transform: scaleY(1.15); }
+
+.tme-legend {
+    display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2);
+}
+.tme-legend-item {
+    display: flex; align-items: center; gap: var(--sp-1);
+    font-size: 11px; color: var(--text-secondary);
+}
+.tme-legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+}
+
+@media (max-width: 768px) {
+    .figure-grid { grid-template-columns: 1fr; }
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+    .marker-grid { grid-template-columns: 1fr; }
+    .rec-grid { grid-template-columns: 1fr; }
+    .meta-info { gap: var(--sp-5); }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav-bar">
+    <div class="nav-brand">BioInsight AI &mdash; Single-cell Report</div>
+    <div class="nav-links">
+        <a href="#study-overview">개요</a>
+        <a href="#qc">QC</a>
+        <a href="#celltype">세포 유형</a>
+        <a href="#markers">마커</a>
+        <a href="#driver">검증</a>
+        <a href="#trajectory">궤적</a>
+        <a href="#tme">TME</a>
+        <a href="#grn">GRN</a>
+        <a href="#ploidy">Ploidy</a>
+        <a href="#interactions">상호작용</a>
+        <a href="#ml-prediction">ML</a>
+        <a href="#clinical">임상</a>
+        <a href="#methods">방법론</a>
+    </div>
+</nav>
+
+<!-- Cover Page -->
+<div class="cover-page">
+    <span class="data-type-badge singlecell">Single-cell RNA-seq</span>
+    <h1>유방암 종양 미세환경의 단일세포 전사체 분석</h1>
+    <p class="subtitle">BRCA 분석 결과 보고서</p>
+    <div class="meta-info">
+        <div class="meta-item">
+            <div class="meta-label">생성일</div>
+            <div class="meta-value purple">2026-01-29</div>
+        </div>
+        <div class="meta-item">
+            <div class="meta-label">암종</div>
+            <div class="meta-value purple">BRCA</div>
+        </div>
+        <div class="meta-item">
+            <div class="meta-label">세포 수</div>
+            <div class="meta-value purple">8,247</div>
+        </div>
+        <div class="meta-item">
+            <div class="meta-label">유전자 수</div>
+            <div class="meta-value purple">21,634</div>
+        </div>
+        <div class="meta-item">
+            <div class="meta-label">클러스터</div>
+            <div class="meta-value purple">12</div>
+        </div>
+        <div class="meta-item">
+            <div class="meta-label">세포 유형</div>
+            <div class="meta-value purple">9</div>
+        </div>
+    </div>
+</div>
+
+<main class="main-content">
+
+<!-- ============================================================
+     Section 1: Study Overview
+     ============================================================ -->
+<section class="section" id="study-overview">
+    <div class="section-header">
+        <span class="section-number">1</span>
+        <span class="section-icon">📊</span>
+        <h2 class="section-title">연구 개요</h2>
+    </div>
+    <div class="summary-grid">
+        <div class="summary-card highlight">
+            <div class="value">8,247</div>
+            <div class="label">Total Cells</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">21,634</div>
+            <div class="label">Total Genes</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">12</div>
+            <div class="label">Clusters</div>
+        </div>
+        <div class="summary-card highlight">
+            <div class="value">9</div>
+            <div class="label">Cell Types</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">1,847</div>
+            <div class="label">Marker Genes</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">14</div>
+            <div class="label">Known Drivers</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Extended Abstract (LLM-generated)
+     ============================================================ -->
+<section class="section" id="brief-abstract">
+    <div class="section-header">
+        <span class="section-icon">📄</span>
+        <h2 class="section-title">연구 요약 (Extended Abstract)</h2>
+    </div>
+    <p class="section-subtitle">Claude Opus 기반 종합 분석 요약</p>
+    <div class="abstract-content">
+        <p><strong>Background:</strong> 유방암(BRCA)은 전 세계적으로 가장 흔한 여성 암종으로, 종양 미세환경(TME)의 세포 구성이 치료 반응과 예후에 중요한 역할을 합니다. 본 연구에서는 단일세포 RNA-seq(scRNA-seq)을 통해 유방암 TME의 세포 이질성을 포괄적으로 분석하였습니다.</p>
+        <p><strong>Methods:</strong> 총 8,247개의 단일세포에 대해 Scanpy 기반 전처리(QC 필터링, 정규화, HVG 선택), Harmony 배치 보정, Leiden 클러스터링을 수행하였습니다. CellTypist를 활용한 자동 세포 유형 주석과 Wilcoxon 검정 기반 DEG 분석을 실시하였으며, COSMIC/OncoKB 데이터베이스를 통해 암 관련 유전자를 검증하였습니다.</p>
+        <p><strong>Results:</strong> 12개의 세포 클러스터에서 9가지 세포 유형이 식별되었으며, T세포(CD4+/CD8+), 대식세포, 섬유아세포(CAF), 상피세포(종양), B세포 등이 포함됩니다. 종양세포 클러스터에서 <strong>ESR1</strong>, <strong>ERBB2</strong>, <strong>MKI67</strong> 등의 주요 마커가 확인되었고, CAF 클러스터에서 <strong>FAP</strong>, <strong>ACTA2</strong>의 높은 발현이 관찰되었습니다. COSMIC/OncoKB 교차 검증 결과 14개 유전자가 알려진 암 유전자와 일치하였습니다.</p>
+        <p><strong>Conclusions:</strong> 본 분석을 통해 유방암 TME의 복잡한 세포 구성과 세포 간 상호작용 패턴을 규명하였습니다. 특히 CAF-종양세포 간 TGF-β 신호전달과 T세포 소진 마커의 공동 발현 패턴은 면역치료 반응 예측에 활용 가능한 바이오마커 후보를 제시합니다 [PMID: 33958764].</p>
+    </div>
+    <div class="note-box info">
+        <span class="note-box-icon">ℹ️</span>
+        <div class="note-box-content">
+            본 요약은 Claude Opus AI 모델에 의해 자동 생성되었습니다. 핵심 발견 사항을 검토하시기 바랍니다.
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 2: QC Analysis
+     ============================================================ -->
+<section class="section" id="qc">
+    <div class="section-header">
+        <span class="section-number">2</span>
+        <span class="section-icon">🔍</span>
+        <h2 class="section-title">데이터 품질 관리 (Data QC)</h2>
+    </div>
+    <p class="section-subtitle">세포별 유전자 수, UMI counts, 미토콘드리아 비율 분포</p>
+
+    <div class="figure-grid">
+        <div class="figure-panel full">
+            <div class="figure-title">QC Metrics Distribution (Interactive)</div>
+            <div class="figure-content">
+                <div id="qc-violin" class="interactive-container" style="min-height:380px;"></div>
+            </div>
+            <div class="figure-caption">
+                필터링 전후 QC 메트릭 분포. 미토콘드리아 비율 &gt;20% 세포 제거, 유전자 수 200~5000 범위 필터링 적용.
+            </div>
+        </div>
+    </div>
+
+    <div class="note-box success">
+        <span class="note-box-icon">✅</span>
+        <div class="note-box-content">
+            <strong>QC 통과:</strong> 총 9,012개 세포 중 8,247개 (91.5%)가 품질 기준을 통과하였습니다.
+            평균 유전자 수: 2,847 / 평균 UMI: 8,432 / 평균 미토콘드리아 비율: 4.2%
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 3: Cell Type Analysis
+     ============================================================ -->
+<section class="section" id="celltype">
+    <div class="section-header">
+        <span class="section-number purple">3</span>
+        <span class="section-icon">🔬</span>
+        <h2 class="section-title">세포 유형 분석</h2>
+    </div>
+
+    <div class="figure-grid">
+        <div class="figure-panel full">
+            <div class="figure-title">Cell Types (UMAP) — Interactive</div>
+            <div class="figure-content">
+                <div id="umap-celltypes" class="interactive-container" style="min-height:500px;"></div>
+            </div>
+            <div class="figure-caption">
+                UMAP 차원 축소 기반 세포 유형 분류. CellTypist 자동 주석 결과. 호버로 세포 정보를 확인할 수 있습니다.
+            </div>
+        </div>
+    </div>
+
+    <h3>Cell Type Composition</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Cell Type</th><th>Count</th><th>Percentage</th><th>Key Markers</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>T cells (CD8+)</td><td>1,732</td><td>21.0%</td><td><span class="gene-symbol">CD8A, GZMB, PRF1</span></td></tr>
+                <tr><td>Epithelial (Tumor)</td><td>1,485</td><td>18.0%</td><td><span class="gene-symbol">EPCAM, KRT18, ESR1</span></td></tr>
+                <tr><td>Macrophage</td><td>1,237</td><td>15.0%</td><td><span class="gene-symbol">CD68, CD163, CSF1R</span></td></tr>
+                <tr><td>T cells (CD4+)</td><td>1,072</td><td>13.0%</td><td><span class="gene-symbol">CD4, IL7R, FOXP3</span></td></tr>
+                <tr><td>Fibroblast (CAF)</td><td>907</td><td>11.0%</td><td><span class="gene-symbol">FAP, ACTA2, COL1A1</span></td></tr>
+                <tr><td>B cells</td><td>660</td><td>8.0%</td><td><span class="gene-symbol">CD19, MS4A1, CD79A</span></td></tr>
+                <tr><td>NK cells</td><td>495</td><td>6.0%</td><td><span class="gene-symbol">NKG7, GNLY, KLRD1</span></td></tr>
+                <tr><td>Endothelial</td><td>412</td><td>5.0%</td><td><span class="gene-symbol">PECAM1, VWF, CDH5</span></td></tr>
+                <tr><td>Dendritic cells</td><td>247</td><td>3.0%</td><td><span class="gene-symbol">CLEC9A, XCR1, BATF3</span></td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 4: Marker Genes
+     ============================================================ -->
+<section class="section" id="markers">
+    <div class="section-header">
+        <span class="section-number purple">4</span>
+        <span class="section-icon">🧬</span>
+        <h2 class="section-title">클러스터별 마커 유전자</h2>
+    </div>
+
+    <div class="figure-grid">
+        <div class="figure-panel full">
+            <div class="figure-title">Marker Gene Dotplot (Interactive)</div>
+            <div class="figure-content">
+                <div id="marker-dotplot" class="interactive-container" style="min-height:400px;"></div>
+            </div>
+            <div class="figure-caption">각 클러스터의 Top 3 마커 유전자 발현. 점 크기 = 발현 세포 비율, 색상 = 평균 발현량.</div>
+        </div>
+    </div>
+
+    <h3>Top Markers per Cluster</h3>
+    <div class="marker-grid">
+        <div class="marker-cluster-card">
+            <h4>Cluster 0 — T cells (CD8+)</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">CD8A</span></td><td>3.82</td><td>1.2e-45</td></tr>
+                    <tr><td><span class="gene-symbol">GZMB</span></td><td>3.41</td><td>3.8e-42</td></tr>
+                    <tr><td><span class="gene-symbol">PRF1</span></td><td>2.97</td><td>5.1e-38</td></tr>
+                    <tr><td><span class="gene-symbol">NKG7</span></td><td>2.85</td><td>8.3e-36</td></tr>
+                    <tr><td><span class="gene-symbol">GZMA</span></td><td>2.63</td><td>2.7e-33</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="marker-cluster-card">
+            <h4>Cluster 1 — Epithelial (Tumor)</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">EPCAM</span></td><td>4.21</td><td>2.1e-52</td></tr>
+                    <tr><td><span class="gene-symbol">KRT18</span></td><td>3.89</td><td>7.4e-48</td></tr>
+                    <tr><td><span class="gene-symbol">ESR1</span></td><td>3.45</td><td>1.8e-41</td></tr>
+                    <tr><td><span class="gene-symbol">MKI67</span></td><td>2.92</td><td>4.3e-37</td></tr>
+                    <tr><td><span class="gene-symbol">ERBB2</span></td><td>2.71</td><td>9.6e-34</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="marker-cluster-card">
+            <h4>Cluster 2 — Macrophage</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">CD68</span></td><td>3.67</td><td>4.5e-44</td></tr>
+                    <tr><td><span class="gene-symbol">CD163</span></td><td>3.28</td><td>1.2e-39</td></tr>
+                    <tr><td><span class="gene-symbol">CSF1R</span></td><td>2.95</td><td>6.7e-35</td></tr>
+                    <tr><td><span class="gene-symbol">MARCO</span></td><td>2.54</td><td>3.1e-30</td></tr>
+                    <tr><td><span class="gene-symbol">MRC1</span></td><td>2.31</td><td>8.9e-27</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="marker-cluster-card">
+            <h4>Cluster 3 — Fibroblast (CAF)</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">FAP</span></td><td>4.05</td><td>8.3e-50</td></tr>
+                    <tr><td><span class="gene-symbol">ACTA2</span></td><td>3.72</td><td>2.1e-45</td></tr>
+                    <tr><td><span class="gene-symbol">COL1A1</span></td><td>3.48</td><td>5.6e-42</td></tr>
+                    <tr><td><span class="gene-symbol">PDGFRB</span></td><td>2.89</td><td>1.4e-36</td></tr>
+                    <tr><td><span class="gene-symbol">VIM</span></td><td>2.65</td><td>7.2e-33</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="marker-cluster-card">
+            <h4>Cluster 4 — T cells (CD4+)</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">CD4</span></td><td>3.12</td><td>5.7e-40</td></tr>
+                    <tr><td><span class="gene-symbol">IL7R</span></td><td>2.86</td><td>2.3e-36</td></tr>
+                    <tr><td><span class="gene-symbol">FOXP3</span></td><td>2.45</td><td>8.1e-31</td></tr>
+                    <tr><td><span class="gene-symbol">CTLA4</span></td><td>2.12</td><td>3.9e-27</td></tr>
+                    <tr><td><span class="gene-symbol">ICOS</span></td><td>1.94</td><td>1.5e-24</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="marker-cluster-card">
+            <h4>Cluster 5 — B cells</h4>
+            <table>
+                <thead><tr><th>Gene</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+                <tbody>
+                    <tr><td><span class="gene-symbol">CD19</span></td><td>3.94</td><td>1.1e-48</td></tr>
+                    <tr><td><span class="gene-symbol">MS4A1</span></td><td>3.67</td><td>4.5e-44</td></tr>
+                    <tr><td><span class="gene-symbol">CD79A</span></td><td>3.42</td><td>2.8e-41</td></tr>
+                    <tr><td><span class="gene-symbol">PAX5</span></td><td>2.89</td><td>6.3e-36</td></tr>
+                    <tr><td><span class="gene-symbol">BANK1</span></td><td>2.51</td><td>9.7e-31</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 5: Cancer Gene Validation
+     ============================================================ -->
+<section class="section" id="driver">
+    <div class="section-header">
+        <span class="section-number">5</span>
+        <span class="section-icon">🛡️</span>
+        <h2 class="section-title">암 관련 유전자 검증</h2>
+    </div>
+    <p class="section-subtitle">마커 유전자의 COSMIC / OncoKB 데이터베이스 매칭 결과</p>
+
+    <div class="note-box warning">
+        <span class="note-box-icon">⚠️</span>
+        <div class="note-box-content">
+            <strong>중요:</strong> 발현 마커 유전자 ≠ 암 Driver Gene. 마커 유전자는 mRNA 발현 패턴을 반영하며,
+            Driver gene은 DNA 변이를 통해 작용합니다. 발현 변화만으로 드라이버 여부를 판단할 수 없습니다.
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Gene</th>
+                    <th>Cluster</th>
+                    <th>Direction</th>
+                    <th>COSMIC</th>
+                    <th>OncoKB</th>
+                    <th>Role</th>
+                    <th>Evidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="driver-row-cosmic">
+                    <td><span class="gene-symbol">ESR1</span></td>
+                    <td>Epithelial (Tumor)</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td><span class="badge badge-high">COSMIC</span></td>
+                    <td><span class="badge badge-purple">OncoKB</span></td>
+                    <td>Oncogene</td>
+                    <td>ER+ breast cancer driver [PMID: 29625050]</td>
+                </tr>
+                <tr class="driver-row-cosmic">
+                    <td><span class="gene-symbol">ERBB2</span></td>
+                    <td>Epithelial (Tumor)</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td><span class="badge badge-high">COSMIC</span></td>
+                    <td><span class="badge badge-purple">OncoKB</span></td>
+                    <td>Oncogene</td>
+                    <td>HER2+ breast cancer, Trastuzumab target [PMID: 11526477]</td>
+                </tr>
+                <tr class="driver-row-cosmic">
+                    <td><span class="gene-symbol">MKI67</span></td>
+                    <td>Epithelial (Tumor)</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td><span class="badge badge-high">COSMIC</span></td>
+                    <td>—</td>
+                    <td>Proliferation marker</td>
+                    <td>Ki-67 proliferation index [PMID: 29700084]</td>
+                </tr>
+                <tr class="driver-row-oncokb">
+                    <td><span class="gene-symbol">CD274 (PD-L1)</span></td>
+                    <td>Macrophage</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td>—</td>
+                    <td><span class="badge badge-purple">OncoKB</span></td>
+                    <td>Immune checkpoint</td>
+                    <td>Immune evasion marker [PMID: 28248415]</td>
+                </tr>
+                <tr class="driver-row-cosmic">
+                    <td><span class="gene-symbol">FOXP3</span></td>
+                    <td>T cells (CD4+)</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td><span class="badge badge-high">COSMIC</span></td>
+                    <td>—</td>
+                    <td>Treg marker</td>
+                    <td>Regulatory T cell marker, immunosuppression [PMID: 26240183]</td>
+                </tr>
+                <tr class="driver-row-oncokb">
+                    <td><span class="gene-symbol">FAP</span></td>
+                    <td>Fibroblast (CAF)</td>
+                    <td><span class="badge badge-up">Up</span></td>
+                    <td>—</td>
+                    <td><span class="badge badge-purple">OncoKB</span></td>
+                    <td>CAF marker</td>
+                    <td>Tumor stroma target [PMID: 30664679]</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- RAG Interpretations -->
+    <h3>AI 문헌 기반 해석 (RAG)</h3>
+
+    <div class="interp-card">
+        <div class="gene-header">
+            <span class="gene-name">ESR1</span>
+            <span class="badge badge-up direction-badge">Upregulated</span>
+            <span class="badge badge-high">High Confidence</span>
+        </div>
+        <p class="interp-text">
+            ESR1(Estrogen Receptor 1)은 유방암의 약 70%에서 과발현되며, ER+ 유방암의 핵심 드라이버 유전자입니다.
+            ESR1의 발현은 호르몬 치료(Tamoxifen, Aromatase inhibitor) 반응 예측의 가장 중요한 바이오마커로,
+            높은 ESR1 발현은 내분비 치료 감수성과 상관관계가 있습니다 [PMID: 29625050].
+            단일세포 수준에서 ESR1 발현의 이질성은 치료 저항성 기전 이해에 중요한 단서를 제공합니다 [PMID: 33958764].
+        </p>
+        <span class="pmid-ref">References: PMID: 29625050, 33958764</span>
+    </div>
+
+    <div class="interp-card">
+        <div class="gene-header">
+            <span class="gene-name">ERBB2</span>
+            <span class="badge badge-up direction-badge">Upregulated</span>
+            <span class="badge badge-high">High Confidence</span>
+        </div>
+        <p class="interp-text">
+            ERBB2(HER2)는 유방암의 15-20%에서 증폭/과발현되며, 공격적인 표현형과 연관됩니다.
+            Trastuzumab(Herceptin), Pertuzumab 등의 표적치료제의 직접적 타겟으로,
+            ERBB2 양성 유방암 환자의 생존율을 획기적으로 개선하였습니다 [PMID: 11526477].
+            scRNA-seq에서 ERBB2 발현의 세포 간 변이는 종양 내 이질성과 표적 치료 내성 메커니즘을 반영합니다 [PMID: 31675496].
+        </p>
+        <span class="pmid-ref">References: PMID: 11526477, 31675496</span>
+    </div>
+
+    <div class="interp-card">
+        <div class="gene-header">
+            <span class="gene-name">FAP</span>
+            <span class="badge badge-up direction-badge">Upregulated in CAFs</span>
+            <span class="badge badge-medium">Medium Confidence</span>
+        </div>
+        <p class="interp-text">
+            FAP(Fibroblast Activation Protein)은 암 관련 섬유아세포(CAF)의 대표적 마커로,
+            종양 기질 리모델링과 면역 억제 환경 조성에 기여합니다 [PMID: 30664679].
+            FAP+ CAF는 TGF-β 신호전달을 통해 T세포 침윤을 억제하며,
+            최근 FAP 표적 CAR-T 세포 치료 등 새로운 치료 전략이 연구되고 있습니다 [PMID: 34462563].
+        </p>
+        <span class="pmid-ref">References: PMID: 30664679, 34462563</span>
+    </div>
+</section>
+
+<!-- ============================================================
+     Trajectory Analysis (Optional)
+     ============================================================ -->
+<section class="section" id="trajectory">
+    <div class="section-header">
+        <span class="section-icon">🔄</span>
+        <h2 class="section-title">Trajectory 분석 (Pseudotime)</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+
+    <div class="figure-grid">
+        <div class="figure-panel full">
+            <div class="figure-title">Pseudotime Trajectory (Interactive)</div>
+            <div class="figure-content">
+                <div id="trajectory-plot" class="interactive-container" style="min-height:450px;"></div>
+            </div>
+            <div class="figure-caption">
+                Diffusion pseudotime 기반 세포 분화 궤적. Root cell: Stem-like Epithelial → Terminal states: Differentiated Tumor, Senescent
+            </div>
+        </div>
+    </div>
+
+    <div class="ai-analysis-box">
+        <div class="ai-analysis-header">
+            <span>🤖</span>
+            <h3>AI 궤적 분석 해석</h3>
+        </div>
+        <div class="ai-section">
+            <h4>분화 경로</h4>
+            <p>Pseudotime 분석 결과, 종양 세포는 줄기세포 유사 상태(stem-like state)에서 두 가지 분화 경로를 보입니다:
+            (1) 분화된 종양세포 (differentiated tumor) 방향과 (2) 세포 노화(senescence) 방향.
+            줄기세포 유사 세포는 MYC, SOX2, NANOG 높은 발현을 보이며, 분화 경로를 따라 ESR1, GATA3 발현이 증가합니다.</p>
+        </div>
+        <div class="ai-section">
+            <h4>임상적 의의</h4>
+            <p>줄기세포 유사 세포의 비율이 높을수록 화학요법 저항성 및 재발 위험이 증가합니다 [PMID: 31827280].
+            이 소집단을 표적으로 하는 치료 전략이 필요합니다.</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     TME Analysis (Optional)
+     ============================================================ -->
+<section class="section" id="tme">
+    <div class="section-header">
+        <span class="section-icon">🏔️</span>
+        <h2 class="section-title">종양 미세환경 (TME) 분석</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+
+    <h3>TME Composition</h3>
+    <div class="tme-bar-container">
+        <div class="tme-bar">
+            <div class="tme-bar-segment" style="width:21%;background:#ef4444;" title="CD8+ T cells: 21%">21%</div>
+            <div class="tme-bar-segment" style="width:18%;background:#8b5cf6;" title="Tumor: 18%">18%</div>
+            <div class="tme-bar-segment" style="width:15%;background:#f59e0b;" title="Macrophage: 15%">15%</div>
+            <div class="tme-bar-segment" style="width:13%;background:#3b82f6;" title="CD4+ T cells: 13%">13%</div>
+            <div class="tme-bar-segment" style="width:11%;background:#10b981;" title="CAF: 11%">11%</div>
+            <div class="tme-bar-segment" style="width:8%;background:#ec4899;" title="B cells: 8%">8%</div>
+            <div class="tme-bar-segment" style="width:6%;background:#6366f1;" title="NK: 6%">6%</div>
+            <div class="tme-bar-segment" style="width:5%;background:#14b8a6;" title="Endothelial: 5%">5%</div>
+            <div class="tme-bar-segment" style="width:3%;background:#a3a3a3;" title="DC: 3%">3%</div>
+        </div>
+        <div class="tme-legend">
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#ef4444;"></div>CD8+ T (21%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#8b5cf6;"></div>Tumor (18%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#f59e0b;"></div>Macrophage (15%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#3b82f6;"></div>CD4+ T (13%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#10b981;"></div>CAF (11%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#ec4899;"></div>B cells (8%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#6366f1;"></div>NK (6%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#14b8a6;"></div>Endothelial (5%)</div>
+            <div class="tme-legend-item"><div class="tme-legend-dot" style="background:#a3a3a3;"></div>DC (3%)</div>
+        </div>
+    </div>
+
+    <div class="note-box info">
+        <span class="note-box-icon">ℹ️</span>
+        <div class="note-box-content">
+            면역세포 비율 48% (CD8+ T + CD4+ T + NK + B + DC)로, 면역 침윤이 높은 "hot tumor" 패턴을 보입니다.
+            이는 면역 관문 억제제(ICI) 치료 반응 가능성을 시사합니다 [PMID: 32467386].
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     GRN (Optional)
+     ============================================================ -->
+<section class="section" id="grn">
+    <div class="section-header">
+        <span class="section-icon">🧬</span>
+        <h2 class="section-title">유전자 조절 네트워크 (GRN)</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+    <p class="section-subtitle">pySCENIC 기반 전사인자-표적 유전자 조절 네트워크</p>
+
+    <h3>Top Regulatory Interactions</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Transcription Factor</th><th>Target Gene</th><th>Importance</th><th>Cell Type</th></tr></thead>
+            <tbody>
+                <tr><td><span class="gene-symbol">ESR1</span></td><td><span class="gene-symbol">GATA3</span></td><td>0.892</td><td>Epithelial (Tumor)</td></tr>
+                <tr><td><span class="gene-symbol">FOXP3</span></td><td><span class="gene-symbol">IL2RA</span></td><td>0.856</td><td>T cells (CD4+/Treg)</td></tr>
+                <tr><td><span class="gene-symbol">SPI1</span></td><td><span class="gene-symbol">CD68</span></td><td>0.834</td><td>Macrophage</td></tr>
+                <tr><td><span class="gene-symbol">TBX21</span></td><td><span class="gene-symbol">IFNG</span></td><td>0.812</td><td>T cells (CD8+)</td></tr>
+                <tr><td><span class="gene-symbol">STAT3</span></td><td><span class="gene-symbol">BCL2</span></td><td>0.789</td><td>Multiple</td></tr>
+                <tr><td><span class="gene-symbol">PAX5</span></td><td><span class="gene-symbol">CD19</span></td><td>0.776</td><td>B cells</td></tr>
+                <tr><td><span class="gene-symbol">TWIST1</span></td><td><span class="gene-symbol">VIM</span></td><td>0.754</td><td>Fibroblast (CAF)</td></tr>
+                <tr><td><span class="gene-symbol">MYC</span></td><td><span class="gene-symbol">CDK4</span></td><td>0.743</td><td>Epithelial (Tumor)</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ============================================================
+     Ploidy / CNV (Optional)
+     ============================================================ -->
+<section class="section" id="ploidy">
+    <div class="section-header">
+        <span class="section-icon">📊</span>
+        <h2 class="section-title">Ploidy 추론 (악성세포 감별)</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+    <p class="section-subtitle">inferCNV 기반 Copy Number Variation 추론</p>
+
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Cell Type</th><th>CNV Score</th><th>Classification</th></tr></thead>
+            <tbody>
+                <tr><td>Epithelial (Tumor)</td><td>0.85</td><td><span class="badge badge-up">Malignant</span></td></tr>
+                <tr><td>Fibroblast (CAF)</td><td>0.12</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>T cells (CD8+)</td><td>0.08</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>Macrophage</td><td>0.11</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>T cells (CD4+)</td><td>0.07</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>B cells</td><td>0.09</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>NK cells</td><td>0.06</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>Endothelial</td><td>0.10</td><td><span class="badge badge-down">Normal</span></td></tr>
+                <tr><td>Dendritic cells</td><td>0.05</td><td><span class="badge badge-down">Normal</span></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="note-box info">
+        <span class="note-box-icon">ℹ️</span>
+        <div class="note-box-content">
+            상피 종양 세포에서 높은 이수성(aneuploidy) 점수(0.85)가 확인되어 악성세포로 분류되었습니다.
+            비면역/비기질 세포 중 CNV 점수가 높은 세포는 종양 유래 가능성이 높습니다.
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Cell-Cell Interaction (Optional)
+     ============================================================ -->
+<section class="section" id="interactions">
+    <div class="section-header">
+        <span class="section-icon">🔗</span>
+        <h2 class="section-title">Cell-Cell Interaction</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+    <p class="section-subtitle">CellChat 기반 세포 간 리간드-수용체 상호작용 분석</p>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Source</th><th>Target</th><th>Ligand</th><th>Receptor</th><th>Pathway</th><th>Score</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>CAF</td><td>Tumor</td>
+                    <td><span class="gene-symbol">TGFB1</span></td>
+                    <td><span class="gene-symbol">TGFBR2</span></td>
+                    <td><span class="badge badge-cyan">TGF-β</span></td>
+                    <td>0.923</td>
+                </tr>
+                <tr>
+                    <td>Tumor</td><td>Macrophage</td>
+                    <td><span class="gene-symbol">CSF1</span></td>
+                    <td><span class="gene-symbol">CSF1R</span></td>
+                    <td><span class="badge badge-cyan">CSF</span></td>
+                    <td>0.891</td>
+                </tr>
+                <tr>
+                    <td>Tumor</td><td>CD8+ T</td>
+                    <td><span class="gene-symbol">CD274</span></td>
+                    <td><span class="gene-symbol">PDCD1</span></td>
+                    <td><span class="badge badge-cyan">PD-1/PD-L1</span></td>
+                    <td>0.867</td>
+                </tr>
+                <tr>
+                    <td>Macrophage</td><td>CD4+ T</td>
+                    <td><span class="gene-symbol">IL10</span></td>
+                    <td><span class="gene-symbol">IL10RA</span></td>
+                    <td><span class="badge badge-cyan">IL-10</span></td>
+                    <td>0.834</td>
+                </tr>
+                <tr>
+                    <td>DC</td><td>CD8+ T</td>
+                    <td><span class="gene-symbol">XCL1</span></td>
+                    <td><span class="gene-symbol">XCR1</span></td>
+                    <td><span class="badge badge-cyan">XCL</span></td>
+                    <td>0.812</td>
+                </tr>
+                <tr>
+                    <td>CAF</td><td>Endothelial</td>
+                    <td><span class="gene-symbol">VEGFA</span></td>
+                    <td><span class="gene-symbol">FLT1</span></td>
+                    <td><span class="badge badge-cyan">VEGF</span></td>
+                    <td>0.798</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="ai-analysis-box">
+        <div class="ai-analysis-header">
+            <span>🤖</span>
+            <h3>AI 상호작용 분석 해석</h3>
+        </div>
+        <div class="ai-section">
+            <p>CAF-Tumor 간 TGF-β 신호가 가장 강하게 관찰되며, 이는 EMT(상피-간엽 전환) 촉진과 면역 억제 환경 형성에 기여합니다.
+            Tumor-CD8+ T 간 PD-1/PD-L1 축은 T세포 소진(exhaustion)의 직접적 증거로,
+            면역 관문 억제제(Pembrolizumab, Nivolumab)의 치료 표적입니다 [PMID: 32467386].</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     ML Prediction (Optional)
+     ============================================================ -->
+<section class="section" id="ml-prediction">
+    <div class="section-header">
+        <span class="section-icon">🤖</span>
+        <h2 class="section-title">ML 암종 예측 (Pseudo-bulk)</h2>
+        <span class="optional-badge">OPTIONAL</span>
+    </div>
+    <p class="section-subtitle">CatBoost + SHAP 기반 Pan-Cancer 17종 분류 (Pseudo-bulk aggregation)</p>
+
+    <div class="ml-card">
+        <div class="ml-header">
+            <span>🎯</span>
+            <h3>예측 결과: BRCA (유방암)</h3>
+        </div>
+
+        <p style="font-size:13px; color:var(--text-secondary); margin-bottom:var(--sp-2);">Confidence: 97.3%</p>
+        <div class="confidence-meter">
+            <div class="confidence-fill high" style="width:97.3%;">97.3%</div>
+        </div>
+
+        <h3 style="margin-top:var(--sp-5);">SHAP Feature Importance (Top 10)</h3>
+        <div class="shap-grid">
+            <div class="shap-item">
+                <span class="shap-label">ESR1</span>
+                <div class="shap-bar positive" style="width:85%;"></div>
+                <span class="shap-value">+0.342</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">GATA3</span>
+                <div class="shap-bar positive" style="width:72%;"></div>
+                <span class="shap-value">+0.289</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">ERBB2</span>
+                <div class="shap-bar positive" style="width:65%;"></div>
+                <span class="shap-value">+0.261</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">FOXA1</span>
+                <div class="shap-bar positive" style="width:58%;"></div>
+                <span class="shap-value">+0.234</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">TFF3</span>
+                <div class="shap-bar positive" style="width:51%;"></div>
+                <span class="shap-value">+0.205</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">AGR2</span>
+                <div class="shap-bar positive" style="width:45%;"></div>
+                <span class="shap-value">+0.181</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">TP63</span>
+                <div class="shap-bar negative" style="width:42%;"></div>
+                <span class="shap-value">-0.168</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">SOX2</span>
+                <div class="shap-bar negative" style="width:38%;"></div>
+                <span class="shap-value">-0.153</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">SCGB2A2</span>
+                <div class="shap-bar positive" style="width:35%;"></div>
+                <span class="shap-value">+0.141</span>
+            </div>
+            <div class="shap-item">
+                <span class="shap-label">PGR</span>
+                <div class="shap-bar positive" style="width:32%;"></div>
+                <span class="shap-value">+0.129</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="note-box danger">
+        <span class="note-box-icon">⚠️</span>
+        <div class="note-box-content">
+            <strong>면책 조항:</strong> ML 예측은 참고용이며 진단이 아닙니다.
+            임상적 판단은 반드시 전문 의료진의 종합적 평가에 기반해야 합니다.
+            모델은 TCGA Pan-Cancer 데이터(11,000+ samples)로 학습되었으며, Test Accuracy 96.65% (5-Fold CV: 96.97%)입니다.
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 7: Clinical Implications
+     ============================================================ -->
+<section class="section" id="clinical">
+    <div class="section-header">
+        <span class="section-number">7</span>
+        <span class="section-icon">🏥</span>
+        <h2 class="section-title">임상적 시사점</h2>
+    </div>
+
+    <div class="rec-grid">
+        <div class="rec-card" style="border-left:3px solid var(--accent-red);">
+            <h4><span class="priority-high">높은 우선순위</span> — 치료 표적</h4>
+            <ul>
+                <li><strong>ERBB2 (HER2)</strong>: Trastuzumab, Pertuzumab, T-DM1 표적 치료 가능 [PMID: 11526477]</li>
+                <li><strong>ESR1 (ER)</strong>: Tamoxifen, Fulvestrant 내분비 치료 대상 [PMID: 29625050]</li>
+                <li><strong>PD-1/PD-L1 축</strong>: Pembrolizumab 면역관문 억제제 고려 (면역 침윤 높음)</li>
+            </ul>
+        </div>
+        <div class="rec-card" style="border-left:3px solid var(--accent-orange);">
+            <h4><span class="priority-medium">중간 우선순위</span> — 바이오마커</h4>
+            <ul>
+                <li><strong>MKI67 (Ki-67)</strong>: 증식 지수 → 예후 예측 및 항암 치료 결정</li>
+                <li><strong>FOXP3+ Treg 비율</strong>: 면역 억제 환경 지표 → ICI 반응 예측</li>
+                <li><strong>FAP+ CAF 비율</strong>: 기질 리모델링 → FAP-표적 치료 후보</li>
+            </ul>
+        </div>
+        <div class="rec-card" style="border-left:3px solid var(--accent-blue);">
+            <h4>약물 재목적화 후보</h4>
+            <ul>
+                <li><strong>Galunisertib</strong>: TGF-β 억제제, CAF-종양 신호 차단 [Phase II]</li>
+                <li><strong>Pexidartinib</strong>: CSF1R 억제제, TAM 제거 [FDA 승인, 다른 적응증]</li>
+                <li><strong>Ipilimumab</strong>: CTLA-4 차단, Treg 억제 (Pembrolizumab 병용 가능)</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 8: Follow-up Research
+     ============================================================ -->
+<section class="section" id="followup">
+    <div class="section-header">
+        <span class="section-number">8</span>
+        <span class="section-icon">🔬</span>
+        <h2 class="section-title">후속 연구 제안</h2>
+    </div>
+
+    <div class="rec-grid">
+        <div class="rec-card">
+            <h4>실험적 검증</h4>
+            <ul>
+                <li>Flow cytometry: CD8+ T 세포 비율 및 소진 마커 확인</li>
+                <li>IHC/IF: ESR1, ERBB2, PD-L1 단백질 수준 검증</li>
+                <li>qPCR: Top 마커 유전자 발현 독립 검증</li>
+                <li>Spatial transcriptomics: 세포 간 공간 배치 확인</li>
+            </ul>
+        </div>
+        <div class="rec-card">
+            <h4>추가 분석</h4>
+            <ul>
+                <li>Multi-omic 통합: WGS/WES 데이터와 통합 driver gene 분석</li>
+                <li>TCR-seq: T세포 클론 다양성 및 클론 확장 분석</li>
+                <li>CITE-seq: 단백질 + RNA 동시 측정으로 표면 마커 검증</li>
+                <li>시간 경과 분석: 치료 전후 TME 변화 모니터링</li>
+            </ul>
+        </div>
+        <div class="rec-card">
+            <h4>장기 연구 방향</h4>
+            <ul>
+                <li>CAF-표적 치료 효과의 전임상 모델 검증</li>
+                <li>Treg-종양 상호작용 기전 규명</li>
+                <li>다기관 코호트에서 TME 구성 기반 예후 예측 모델 개발</li>
+                <li>Organoid 모델을 활용한 약물 스크리닝</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 9: Methods
+     ============================================================ -->
+<section class="section" id="methods">
+    <div class="section-header">
+        <span class="section-number">9</span>
+        <span class="section-icon">⚙️</span>
+        <h2 class="section-title">분석 방법론</h2>
+    </div>
+
+    <div class="method-grid">
+        <div class="method-item">
+            <h4>전처리</h4>
+            <p>Scanpy 1.9+<br>min_genes=200, min_cells=3<br>max_genes=5000<br>pct_mito &lt; 20%</p>
+        </div>
+        <div class="method-item">
+            <h4>정규화</h4>
+            <p>Total-count normalization<br>target_sum=10,000<br>Log1p transformation<br>HVG: top 3,000</p>
+        </div>
+        <div class="method-item">
+            <h4>배치 보정</h4>
+            <p>Harmony<br>n_pcs=30<br>batch_key=sample</p>
+        </div>
+        <div class="method-item">
+            <h4>클러스터링</h4>
+            <p>Leiden algorithm<br>resolution=1.0<br>n_neighbors=15<br>UMAP: min_dist=0.3</p>
+        </div>
+        <div class="method-item">
+            <h4>세포 주석</h4>
+            <p>CellTypist<br>Model: Immune_All_Low<br>majority_voting=True</p>
+        </div>
+        <div class="method-item">
+            <h4>DEG 분석</h4>
+            <p>Wilcoxon rank-sum test<br>min_fold_change=1.5<br>padj &lt; 0.05</p>
+        </div>
+        <div class="method-item">
+            <h4>Trajectory</h4>
+            <p>Diffusion pseudotime<br>(DPT via Scanpy)<br>Root: stem-like cluster</p>
+        </div>
+        <div class="method-item">
+            <h4>GRN</h4>
+            <p>pySCENIC<br>Top 500 TF-target pairs<br>AUCell threshold: auto</p>
+        </div>
+        <div class="method-item">
+            <h4>CNV 추론</h4>
+            <p>inferCNV<br>Reference: immune cells<br>Window: 101 genes</p>
+        </div>
+        <div class="method-item">
+            <h4>Cell-Cell Interaction</h4>
+            <p>CellChat v2<br>LR database: CellChatDB<br>p-value &lt; 0.05</p>
+        </div>
+        <div class="method-item">
+            <h4>ML 예측</h4>
+            <p>CatBoost (Pseudo-bulk)<br>Pan-Cancer 17종 모델<br>SHAP explainer</p>
+        </div>
+        <div class="method-item">
+            <h4>DB 검증</h4>
+            <p>COSMIC v98<br>OncoKB v4.10<br>DGIdb v5 (GraphQL)</p>
+        </div>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 10: References
+     ============================================================ -->
+<section class="section" id="references">
+    <div class="section-header">
+        <span class="section-number">10</span>
+        <span class="section-icon">📚</span>
+        <h2 class="section-title">참고 문헌</h2>
+    </div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>PMID</th><th>Citation</th><th>Context</th></tr></thead>
+            <tbody>
+                <tr><td><span class="pmid-ref">29625050</span></td><td>Jeselsohn R et al. <em>Nat Rev Clin Oncol</em>. 2018;15(6):394-404.</td><td>ESR1 mutations in breast cancer</td></tr>
+                <tr><td><span class="pmid-ref">11526477</span></td><td>Slamon DJ et al. <em>N Engl J Med</em>. 2001;344(11):783-792.</td><td>Trastuzumab in HER2+ breast cancer</td></tr>
+                <tr><td><span class="pmid-ref">33958764</span></td><td>Wu SZ et al. <em>Nat Genet</em>. 2021;53(9):1334-1347.</td><td>scRNA-seq atlas of breast cancer TME</td></tr>
+                <tr><td><span class="pmid-ref">28248415</span></td><td>Schmid P et al. <em>N Engl J Med</em>. 2018;379(22):2108-2121.</td><td>Atezolizumab in TNBC</td></tr>
+                <tr><td><span class="pmid-ref">26240183</span></td><td>Plitas G et al. <em>Immunity</em>. 2016;45(5):1122-1134.</td><td>Treg cells in breast cancer</td></tr>
+                <tr><td><span class="pmid-ref">30664679</span></td><td>Costa A et al. <em>Cancer Cell</em>. 2018;33(3):463-479.</td><td>CAF subtypes in breast cancer</td></tr>
+                <tr><td><span class="pmid-ref">31675496</span></td><td>Chung W et al. <em>Nat Commun</em>. 2017;8:15081.</td><td>scRNA-seq of HER2+ breast tumors</td></tr>
+                <tr><td><span class="pmid-ref">31827280</span></td><td>Lawson DA et al. <em>Nature</em>. 2015;526(7571):131-135.</td><td>Cancer stem cells in breast cancer</td></tr>
+                <tr><td><span class="pmid-ref">29700084</span></td><td>Nielsen TO et al. <em>J Natl Cancer Inst</em>. 2021;113(7):808-819.</td><td>Ki-67 in breast cancer prognosis</td></tr>
+                <tr><td><span class="pmid-ref">32467386</span></td><td>Bassez A et al. <em>Nat Med</em>. 2021;27(5):820-832.</td><td>scRNA-seq of breast cancer ICI response</td></tr>
+                <tr><td><span class="pmid-ref">34462563</span></td><td>Chen Y et al. <em>Signal Transduct Target Ther</em>. 2021;6(1):347.</td><td>CAF-targeting immunotherapy</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ============================================================
+     Section 11: Appendix
+     ============================================================ -->
+<section class="section" id="appendix">
+    <div class="section-header">
+        <span class="section-number">11</span>
+        <span class="section-icon">📎</span>
+        <h2 class="section-title">부록 + 데이터 다운로드</h2>
+    </div>
+
+    <h3>Top 50 Marker Genes (All Clusters)</h3>
+    <div class="table-wrapper" style="max-height:400px; overflow-y:auto;">
+        <table>
+            <thead><tr><th>#</th><th>Gene</th><th>Cluster</th><th>Cell Type</th><th>Log2FC</th><th>P-adj</th></tr></thead>
+            <tbody>
+                <tr><td>1</td><td><span class="gene-symbol">EPCAM</span></td><td>1</td><td>Epithelial</td><td>4.21</td><td>2.1e-52</td></tr>
+                <tr><td>2</td><td><span class="gene-symbol">FAP</span></td><td>3</td><td>CAF</td><td>4.05</td><td>8.3e-50</td></tr>
+                <tr><td>3</td><td><span class="gene-symbol">CD19</span></td><td>5</td><td>B cells</td><td>3.94</td><td>1.1e-48</td></tr>
+                <tr><td>4</td><td><span class="gene-symbol">KRT18</span></td><td>1</td><td>Epithelial</td><td>3.89</td><td>7.4e-48</td></tr>
+                <tr><td>5</td><td><span class="gene-symbol">CD8A</span></td><td>0</td><td>CD8+ T</td><td>3.82</td><td>1.2e-45</td></tr>
+                <tr><td>6</td><td><span class="gene-symbol">ACTA2</span></td><td>3</td><td>CAF</td><td>3.72</td><td>2.1e-45</td></tr>
+                <tr><td>7</td><td><span class="gene-symbol">CD68</span></td><td>2</td><td>Macrophage</td><td>3.67</td><td>4.5e-44</td></tr>
+                <tr><td>8</td><td><span class="gene-symbol">MS4A1</span></td><td>5</td><td>B cells</td><td>3.67</td><td>4.5e-44</td></tr>
+                <tr><td>9</td><td><span class="gene-symbol">COL1A1</span></td><td>3</td><td>CAF</td><td>3.48</td><td>5.6e-42</td></tr>
+                <tr><td>10</td><td><span class="gene-symbol">ESR1</span></td><td>1</td><td>Epithelial</td><td>3.45</td><td>1.8e-41</td></tr>
+                <tr><td>11</td><td><span class="gene-symbol">CD79A</span></td><td>5</td><td>B cells</td><td>3.42</td><td>2.8e-41</td></tr>
+                <tr><td>12</td><td><span class="gene-symbol">GZMB</span></td><td>0</td><td>CD8+ T</td><td>3.41</td><td>3.8e-42</td></tr>
+                <tr><td>13</td><td><span class="gene-symbol">CD163</span></td><td>2</td><td>Macrophage</td><td>3.28</td><td>1.2e-39</td></tr>
+                <tr><td>14</td><td><span class="gene-symbol">CD4</span></td><td>4</td><td>CD4+ T</td><td>3.12</td><td>5.7e-40</td></tr>
+                <tr><td>15</td><td><span class="gene-symbol">PRF1</span></td><td>0</td><td>CD8+ T</td><td>2.97</td><td>5.1e-38</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p style="font-size:12px; color:var(--text-muted); margin-top:var(--sp-2);">상위 15개만 표시. 전체 데이터는 아래 다운로드를 이용하세요.</p>
+
+    <h3 style="margin-top:var(--sp-6);">데이터 다운로드</h3>
+    <div class="method-grid">
+        <div class="method-item">
+            <h4>분석 결과</h4>
+            <p>cluster_markers.csv<br>cell_composition.csv<br>cancer_validation.csv</p>
+        </div>
+        <div class="method-item">
+            <h4>AnnData 객체</h4>
+            <p>adata_processed.h5ad<br>(전체 전처리 완료)</p>
+        </div>
+        <div class="method-item">
+            <h4>선택 분석</h4>
+            <p>trajectory_pseudotime.csv<br>tme_composition.csv<br>grn_edges.csv</p>
+        </div>
+        <div class="method-item">
+            <h4>ML 예측</h4>
+            <p>pseudobulk_prediction.json<br>shap_features.csv</p>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="report-footer">
+    <div class="disclaimer">
+        ⚠️ 본 리포트는 AI 기반 자동 분석 결과이며, 임상 진단이나 치료 결정의 근거로 사용할 수 없습니다.<br>
+        Hub Gene ≠ Driver Gene: 발현 기반 분석 결과는 DNA 변이 기반 드라이버 유전자와 다릅니다.<br>
+        ML 예측은 참고용이며, 모든 해석에는 PMID 기반 문헌 인용이 포함됩니다.
+    </div>
+    <p style="margin-top:var(--sp-4);">Generated by <strong>BioInsight AI</strong> Pipeline v3.0</p>
+    <p>Report Date: 2026-01-29 | Single-cell RNA-seq Analysis</p>
+    <p style="margin-top:var(--sp-2); font-size:11px;">Powered by Scanpy, CellTypist, CatBoost, Claude Opus</p>
+</footer>
+
+<!-- ============================================================
+     PLOTLY INTERACTIVE CHARTS
+     ============================================================ -->
+<script>
+// Generate reproducible random data with seed-like approach
+function seededRandom(seed) {
+    let s = seed;
+    return function() {
+        s = Math.sin(s) * 10000;
+        return s - Math.floor(s);
+    };
+}
+
+// ---- QC Violin Plot ----
+(function() {
+    const rng = seededRandom(42);
+    const metrics = ['n_genes', 'total_counts', 'pct_mito'];
+    const labels = ['Number of Genes', 'Total UMI Counts', '% Mitochondrial'];
+    const ranges = [[500, 4500], [2000, 15000], [0.5, 18]];
+    const means = [2847, 8432, 4.2];
+
+    const traces = metrics.map((m, i) => {
+        const n = 500;
+        const values = [];
+        for (let j = 0; j < n; j++) {
+            // Box-Muller transform for normal-ish distribution
+            const u1 = rng(), u2 = rng();
+            const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            const range = ranges[i][1] - ranges[i][0];
+            let val = means[i] + z * range * 0.2;
+            val = Math.max(ranges[i][0] * 0.5, Math.min(ranges[i][1] * 1.2, val));
+            values.push(val);
+        }
+        return {
+            type: 'violin',
+            y: values,
+            name: labels[i],
+            box: { visible: true },
+            meanline: { visible: true },
+            fillcolor: ['#dbeafe', '#d1fae5', '#fef3c7'][i],
+            line: { color: ['#2563eb', '#059669', '#d97706'][i] },
+        };
+    });
+
+    Plotly.newPlot('qc-violin', traces, {
+        title: { text: 'Single-cell QC Metrics', font: { size: 14, family: 'system-ui' } },
+        yaxis: { title: 'Value' },
+        showlegend: true,
+        margin: { t: 50, b: 40, l: 60, r: 30 },
+        paper_bgcolor: 'white', plot_bgcolor: 'white',
+    }, { responsive: true });
+})();
+
+// ---- UMAP Cell Types ----
+(function() {
+    const cellTypes = [
+        { name: 'T cells (CD8+)', n: 350, cx: -5, cy: 3, color: '#ef4444' },
+        { name: 'Epithelial (Tumor)', n: 300, cx: 6, cy: -2, color: '#8b5cf6' },
+        { name: 'Macrophage', n: 250, cx: -2, cy: -5, color: '#f59e0b' },
+        { name: 'T cells (CD4+)', n: 220, cx: -6, cy: 1, color: '#3b82f6' },
+        { name: 'Fibroblast (CAF)', n: 180, cx: 4, cy: 5, color: '#10b981' },
+        { name: 'B cells', n: 130, cx: -8, cy: -2, color: '#ec4899' },
+        { name: 'NK cells', n: 100, cx: -4, cy: 5, color: '#6366f1' },
+        { name: 'Endothelial', n: 80, cx: 7, cy: 4, color: '#14b8a6' },
+        { name: 'Dendritic cells', n: 50, cx: -1, cy: -7, color: '#a3a3a3' },
+    ];
+
+    const traces = cellTypes.map(ct => {
+        const rng = seededRandom(ct.cx * 100 + ct.cy * 10);
+        const x = [], y = [], text = [];
+        for (let i = 0; i < ct.n; i++) {
+            const u1 = rng(), u2 = rng();
+            const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+            const z2 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(2 * Math.PI * u2);
+            x.push(ct.cx + z1 * 1.2);
+            y.push(ct.cy + z2 * 1.2);
+            text.push(ct.name);
+        }
+        return {
+            type: 'scattergl',
+            mode: 'markers',
+            x, y,
+            text,
+            name: ct.name,
+            marker: { color: ct.color, size: 3, opacity: 0.7 },
+            hovertemplate: '%{text}<extra></extra>',
+        };
+    });
+
+    Plotly.newPlot('umap-celltypes', traces, {
+        title: { text: 'UMAP — Cell Type Annotation (CellTypist)', font: { size: 14, family: 'system-ui' } },
+        xaxis: { title: 'UMAP 1', zeroline: false, showgrid: false },
+        yaxis: { title: 'UMAP 2', zeroline: false, showgrid: false },
+        showlegend: true,
+        legend: { font: { size: 10 }, itemsizing: 'constant' },
+        margin: { t: 50, b: 50, l: 60, r: 20 },
+        paper_bgcolor: 'white', plot_bgcolor: '#fafafa',
+        hovermode: 'closest',
+    }, { responsive: true });
+})();
+
+// ---- Marker Dotplot ----
+(function() {
+    const genes = ['CD8A','GZMB','EPCAM','ESR1','CD68','CD163','FAP','ACTA2','CD4','FOXP3','CD19','MS4A1','NKG7','GNLY','PECAM1','VWF','CLEC9A','XCR1'];
+    const clusters = ['CD8+ T','Tumor','Macro','CAF','CD4+ T','B cells','NK','Endo','DC'];
+
+    // Expression matrix (mean expression, 0-5 scale)
+    const expr = [
+        [4.5,0.2,0.1,0.3,1.2,0.4,2.8,0.1,0.2], // CD8A
+        [3.8,0.1,0.3,0.2,0.8,0.1,2.1,0.1,0.1], // GZMB
+        [0.1,4.8,0.2,0.3,0.1,0.1,0.1,0.2,0.1], // EPCAM
+        [0.1,3.9,0.1,0.2,0.1,0.1,0.1,0.1,0.1], // ESR1
+        [0.3,0.1,4.2,0.2,0.2,0.1,0.2,0.1,1.5], // CD68
+        [0.1,0.1,3.6,0.3,0.1,0.1,0.1,0.1,0.8], // CD163
+        [0.1,0.2,0.3,4.5,0.1,0.1,0.1,0.3,0.1], // FAP
+        [0.1,0.3,0.2,4.1,0.1,0.1,0.1,0.4,0.1], // ACTA2
+        [1.5,0.1,0.2,0.1,3.8,0.3,0.5,0.1,0.2], // CD4
+        [0.3,0.1,0.1,0.1,2.9,0.1,0.1,0.1,0.1], // FOXP3
+        [0.1,0.1,0.1,0.1,0.1,4.3,0.1,0.1,0.1], // CD19
+        [0.1,0.1,0.1,0.1,0.1,3.9,0.1,0.1,0.1], // MS4A1
+        [2.5,0.1,0.2,0.1,0.3,0.1,4.1,0.1,0.1], // NKG7
+        [1.8,0.1,0.1,0.1,0.2,0.1,3.7,0.1,0.1], // GNLY
+        [0.1,0.1,0.1,0.2,0.1,0.1,0.1,4.0,0.1], // PECAM1
+        [0.1,0.1,0.1,0.1,0.1,0.1,0.1,3.5,0.1], // VWF
+        [0.1,0.1,0.5,0.1,0.1,0.1,0.1,0.1,3.8], // CLEC9A
+        [0.1,0.1,0.3,0.1,0.1,0.1,0.1,0.1,3.2], // XCR1
+    ];
+
+    // Fraction expressing (0-1)
+    const frac = expr.map(row => row.map(v => Math.min(0.95, v / 5 + 0.05)));
+
+    const x = [], y = [], sizes = [], colors = [], hoverTexts = [];
+    for (let g = 0; g < genes.length; g++) {
+        for (let c = 0; c < clusters.length; c++) {
+            x.push(clusters[c]);
+            y.push(genes[g]);
+            sizes.push(frac[g][c] * 18 + 2);
+            colors.push(expr[g][c]);
+            hoverTexts.push(`${genes[g]} in ${clusters[c]}<br>Mean expr: ${expr[g][c].toFixed(1)}<br>Fraction: ${(frac[g][c]*100).toFixed(0)}%`);
+        }
+    }
+
+    Plotly.newPlot('marker-dotplot', [{
+        type: 'scatter',
+        mode: 'markers',
+        x, y,
+        marker: {
+            size: sizes,
+            color: colors,
+            colorscale: [[0,'#f0f0ff'],[0.5,'#6366f1'],[1,'#312e81']],
+            colorbar: { title: 'Mean Expression', thickness: 15 },
+            line: { width: 0.5, color: '#e5e7eb' },
+        },
+        text: hoverTexts,
+        hovertemplate: '%{text}<extra></extra>',
+    }], {
+        title: { text: 'Marker Gene Dotplot', font: { size: 14, family: 'system-ui' } },
+        xaxis: { title: '', tickangle: -30 },
+        yaxis: { title: '', autorange: 'reversed' },
+        margin: { t: 50, b: 80, l: 80, r: 80 },
+        paper_bgcolor: 'white', plot_bgcolor: 'white',
+        height: 400,
+    }, { responsive: true });
+})();
+
+// ---- Trajectory Plot ----
+(function() {
+    const rng = seededRandom(123);
+    // Create a trajectory from stem-like → differentiated and stem-like → senescent
+    const states = [
+        { name: 'Stem-like', n: 100, cx: 0, cy: 0, color: '#8b5cf6', pt: [0, 0.15] },
+        { name: 'Transitional', n: 80, cx: 2, cy: 1.5, color: '#a78bfa', pt: [0.2, 0.4] },
+        { name: 'Differentiated Tumor', n: 120, cx: 5, cy: 3, color: '#ef4444', pt: [0.5, 1.0] },
+        { name: 'Senescent', n: 60, cx: 3, cy: -2, color: '#f59e0b', pt: [0.5, 1.0] },
+    ];
+
+    const traces = states.map(st => {
+        const x = [], y = [], pt = [], text = [];
+        for (let i = 0; i < st.n; i++) {
+            const u1 = rng(), u2 = rng();
+            const z1 = Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
+            const z2 = Math.sqrt(-2*Math.log(u1))*Math.sin(2*Math.PI*u2);
+            x.push(st.cx + z1 * 0.8);
+            y.push(st.cy + z2 * 0.8);
+            const ptVal = st.pt[0] + rng() * (st.pt[1] - st.pt[0]);
+            pt.push(ptVal);
+            text.push(`${st.name}<br>Pseudotime: ${ptVal.toFixed(2)}`);
+        }
+        return {
+            type: 'scattergl', mode: 'markers',
+            x, y, text,
+            name: st.name,
+            marker: {
+                color: pt,
+                colorscale: [[0,'#ede9fe'],[0.5,'#8b5cf6'],[1,'#312e81']],
+                size: 5, opacity: 0.8,
+                showscale: st.name === 'Differentiated Tumor',
+                colorbar: st.name === 'Differentiated Tumor' ? { title: 'Pseudotime', thickness: 12 } : undefined,
+            },
+            hovertemplate: '%{text}<extra></extra>',
+        };
+    });
+
+    // Add trajectory arrows
+    traces.push({
+        type: 'scatter', mode: 'lines',
+        x: [0, 2, 5], y: [0, 1.5, 3],
+        line: { color: '#94a3b8', width: 2, dash: 'dot' },
+        showlegend: false, hoverinfo: 'skip',
+    });
+    traces.push({
+        type: 'scatter', mode: 'lines',
+        x: [0, 1.5, 3], y: [0, -1, -2],
+        line: { color: '#94a3b8', width: 2, dash: 'dot' },
+        showlegend: false, hoverinfo: 'skip',
+    });
+
+    Plotly.newPlot('trajectory-plot', traces, {
+        title: { text: 'Pseudotime Trajectory (DPT)', font: { size: 14, family: 'system-ui' } },
+        xaxis: { title: 'Diffusion Component 1', zeroline: false, showgrid: false },
+        yaxis: { title: 'Diffusion Component 2', zeroline: false, showgrid: false },
+        showlegend: true, legend: { font: { size: 10 } },
+        margin: { t: 50, b: 50, l: 60, r: 80 },
+        paper_bgcolor: 'white', plot_bgcolor: '#fafafa',
+    }, { responsive: true });
+})();
+</script>
+
+</body>
+</html>

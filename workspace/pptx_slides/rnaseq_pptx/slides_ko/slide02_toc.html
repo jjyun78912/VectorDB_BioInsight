@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+.content {
+  margin: 14pt 28pt 0 28pt;
+  display: flex; gap: 14pt;
+}
+.col { flex: 1; display: flex; flex-direction: column; gap: 5pt; }
+
+/* TOC row */
+.row {
+  display: flex; align-items: center; gap: 8pt;
+  background: #F4F5F7; border-radius: 6pt; padding: 7pt 12pt;
+}
+.num {
+  background: #07024E; border-radius: 50%; width: 20pt; height: 20pt;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.num p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.title {
+  color: #07024E; font-size: 9pt; font-weight: bold; margin: 0;
+}
+
+/* Highlight row */
+.row-hl {
+  display: flex; align-items: center; gap: 8pt;
+  background: #07024E; border-radius: 6pt; padding: 7pt 12pt;
+}
+.num-hl {
+  background: #FC1C49; border-radius: 50%; width: 20pt; height: 20pt;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.num-hl p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.title-hl {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+
+/* Section divider */
+.section-label {
+  color: #FC1C49; font-size: 7pt; font-weight: bold; margin: 4pt 0 0 0;
+  text-transform: uppercase; letter-spacing: 1pt;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">목차</p>
+</div>
+<div class="content">
+
+  <div class="col">
+    <p class="section-label">INTRODUCTION</p>
+    <div class="row">
+      <div class="num"><p>01</p></div>
+      <p class="title">프로젝트 개요</p>
+    </div>
+    <div class="row">
+      <div class="num"><p>02</p></div>
+      <p class="title">RNA-seq 분석 파이프라인</p>
+    </div>
+
+    <p class="section-label">ANALYSIS</p>
+    <div class="row">
+      <div class="num"><p>03</p></div>
+      <p class="title">DEG 분석 및 네트워크 구축</p>
+    </div>
+    <div class="row">
+      <div class="num"><p>04</p></div>
+      <p class="title">경로 분석 및 DB 검증</p>
+    </div>
+    <div class="row-hl">
+      <div class="num-hl"><p>05</p></div>
+      <p class="title-hl">ML 암종 예측 모듈</p>
+    </div>
+  </div>
+
+  <div class="col">
+    <p class="section-label">PLATFORM</p>
+    <div class="row">
+      <div class="num"><p>06</p></div>
+      <p class="title">Single-cell RNA-seq 파이프라인</p>
+    </div>
+    <div class="row">
+      <div class="num"><p>07</p></div>
+      <p class="title">기술 스택</p>
+    </div>
+    <div class="row">
+      <div class="num"><p>08</p></div>
+      <p class="title">인터랙티브 리포트 시스템</p>
+    </div>
+
+    <p class="section-label">RESULTS</p>
+    <div class="row">
+      <div class="num"><p>09</p></div>
+      <p class="title">결과 및 벤치마크</p>
+    </div>
+    <div class="row">
+      <div class="num"><p>10</p></div>
+      <p class="title">향후 개발 계획</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

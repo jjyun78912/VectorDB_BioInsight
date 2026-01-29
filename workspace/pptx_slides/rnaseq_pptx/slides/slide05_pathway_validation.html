@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; gap: 14pt;
+}
+.col { flex: 1; display: flex; flex-direction: column; gap: 12pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 16pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.card-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.dark-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 16pt;
+}
+.dk-title {
+  color: #FC1C49; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.dk-desc {
+  color: #FFFFFF; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.tag-row { display: flex; gap: 6pt; margin: 8pt 0 0 0; flex-wrap: wrap; }
+.tag {
+  background: rgba(252, 28, 73, 0.15); border-radius: 4pt; padding: 3pt 8pt;
+}
+.tag-text {
+  color: #FC1C49; font-size: 8pt; margin: 0; font-weight: bold;
+}
+.rag-card {
+  background: #F0F1FF; border-radius: 10pt; padding: 14pt 16pt;
+}
+.rag-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.rag-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.quote-box {
+  background: #FFFFFF; border-radius: 6pt; padding: 8pt 12pt; margin: 8pt 0 0 0;
+  border-left: 4pt solid #FC1C49;
+}
+.quote-text {
+  color: #1E293B; font-size: 8pt; margin: 0; font-style: italic; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Pathway Enrichment & Database Validation</p>
+</div>
+<div class="content">
+  <div class="col">
+    <div class="card">
+      <p class="card-title">Agent 3: Pathway Enrichment</p>
+      <p class="card-desc">GO Biological Process, Molecular Function, Cellular Component analysis via Enrichr API.</p>
+      <p class="card-desc">KEGG pathway mapping for metabolic and signaling pathway identification.</p>
+      <p class="card-desc">Automatic barplot generation with significance thresholds.</p>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">Agent 4: Cancer DB Validation</p>
+      <p class="dk-desc">COSMIC: Known cancer gene census matching with mutation frequency data.</p>
+      <p class="dk-desc">OncoKB: Actionability levels (1-4) and therapeutic implications.</p>
+      <p class="dk-desc">DGIdb: Drug-gene interactions, FDA-approved drug mapping.</p>
+      <div class="tag-row">
+        <div class="tag"><p class="tag-text">COSMIC</p></div>
+        <div class="tag"><p class="tag-text">OncoKB</p></div>
+        <div class="tag"><p class="tag-text">DGIdb</p></div>
+        <div class="tag"><p class="tag-text">DrugBank</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="rag-card">
+      <p class="rag-title">RAG Literature Interpretation</p>
+      <p class="rag-desc">PubMedBERT embeddings index 850+ papers (53K+ chunks) across 17 cancer types in ChromaDB.</p>
+      <p class="rag-desc">Gene + cancer type + direction query retrieves top-k relevant literature chunks for Claude API interpretation.</p>
+      <div class="quote-box">
+        <p class="quote-text">"BRCA1 plays a critical role in DNA damage repair via homologous recombination..." [PMID: 12345678]</p>
+      </div>
+    </div>
+    <div class="card">
+      <p class="card-title">Agent 5: Visualization</p>
+      <p class="card-desc">Volcano Plot: log2FC vs -log10(padj) with significance cutoffs.</p>
+      <p class="card-desc">Interactive Heatmap: Top DEG expression across samples.</p>
+      <p class="card-desc">3D Network: Force-directed graph with hub gene highlights.</p>
+      <p class="card-desc">Pathway Barplot: Top enriched terms with -log10(pvalue).</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

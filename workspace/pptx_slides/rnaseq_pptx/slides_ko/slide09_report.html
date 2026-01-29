@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 14pt 24pt 0 24pt; display: flex; gap: 14pt;
+}
+.left { width: 320pt; display: flex; flex-direction: column; gap: 10pt; }
+.right { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.section-card {
+  background: #F8F9FA; border-radius: 8pt; padding: 10pt 14pt;
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.06);
+}
+.sc-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.sc-row { display: flex; gap: 4pt; flex-wrap: wrap; }
+.sc-tag {
+  background: #E8E9FF; border-radius: 3pt; padding: 2pt 6pt;
+}
+.sc-tag-text {
+  color: #131866; font-size: 7pt; margin: 0;
+}
+.sc-tag-accent {
+  background: rgba(252, 28, 73, 0.12); border-radius: 3pt; padding: 2pt 6pt;
+}
+.sc-tag-accent-text {
+  color: #FC1C49; font-size: 7pt; margin: 0; font-weight: bold;
+}
+.dark-card {
+  background: #07024E; border-radius: 8pt; padding: 10pt 14pt;
+}
+.dk-title {
+  color: #FC1C49; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.dk-desc {
+  color: #FFFFFF; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.purple-card {
+  background: #F0F1FF; border-radius: 8pt; padding: 10pt 14pt;
+}
+.pc-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">인터랙티브 리포트 시스템</p>
+</div>
+<div class="content">
+  <div class="left">
+    <div class="section-card">
+      <p class="sc-title">Bulk RNA-seq 리포트 (11개 섹션)</p>
+      <div class="sc-row">
+        <div class="sc-tag"><p class="sc-tag-text">표지</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">요약</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">초록 (LLM)</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">QC / PCA</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">DEG 분석</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">경로 분석</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">DB 검증</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">네트워크</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">ML 예측</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">임상</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">후속 연구</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">연구 추천 (LLM)</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">방법론</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">참고문헌</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">부록</p></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <p class="sc-title">Single-cell 리포트 (확장 섹션)</p>
+      <div class="sc-row">
+        <div class="sc-tag"><p class="sc-tag-text">세포 유형 UMAP</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">마커 유전자</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">세포 구성</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">궤적 분석</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">종양미세환경</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">유전자조절네트워크</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">CNV / 배수체</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">세포 상호작용</p></div>
+      </div>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">LLM 생성 콘텐츠</p>
+      <p class="dk-desc">확장 초록: Claude Opus 스토리텔링 (~$0.30)</p>
+      <p class="dk-desc">연구 추천: 치료 표적, 약물 재목적화, 실험 검증</p>
+      <p class="dk-desc">모든 해석에 PMID 참조 포함</p>
+    </div>
+  </div>
+  <div class="right">
+    <div class="purple-card">
+      <p class="pc-title">인터랙티브 기능</p>
+      <p class="pc-desc">Plotly.js 차트: 확대/축소, 호버 툴팁</p>
+      <p class="pc-desc">3D 힘 기반 네트워크 그래프</p>
+      <p class="pc-desc">정렬/필터 가능한 데이터 테이블</p>
+      <p class="pc-desc">부록에서 전체 데이터셋 CSV 다운로드</p>
+      <p class="pc-desc">단일 HTML 파일 (서버 불필요)</p>
+    </div>
+    <div class="section-card">
+      <p class="sc-title">통합 리포트 아키텍처</p>
+      <p class="pc-desc">Bulk/Single-cell 공유 CSS/스타일 시스템</p>
+      <p class="pc-desc">데이터 유형에 따른 적응형 섹션 선택</p>
+      <p class="pc-desc">출력 파일 기반 선택 섹션 자동 활성화</p>
+      <p class="pc-desc">기존 Agent 호환 ReportAdapter</p>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">리포트 안전장치</p>
+      <p class="dk-desc">Hub 유전자 != Driver 유전자 면책 조항</p>
+      <p class="dk-desc">ML 예측 = 참고용, 진단이 아님</p>
+      <p class="dk-desc">모든 해석에 불확실성 수준 표시</p>
+      <p class="dk-desc">검증 실험 제안 포함</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+.header-sub {
+  color: rgba(255,255,255,0.65); font-size: 11pt; margin: 0 0 0 12pt;
+}
+.content {
+  margin: 10pt 28pt 0 28pt;
+  display: flex; flex-direction: column; gap: 8pt;
+}
+
+/* Section label */
+.section-label {
+  color: #07024E; font-size: 10pt; font-weight: bold; margin: 0;
+}
+.section-label span {
+  color: #64748B; font-weight: normal; font-size: 8pt;
+}
+
+/* Flow row */
+.flow-row {
+  display: flex; gap: 0pt; align-items: stretch; justify-content: center;
+}
+.flow-card {
+  background: #F4F5F7; border-radius: 8pt; padding: 8pt 10pt;
+  width: 105pt;
+  display: flex; flex-direction: column; align-items: center;
+}
+.flow-card-accent {
+  background: #EEF2FF; border-radius: 8pt; padding: 8pt 10pt;
+  width: 105pt;
+  display: flex; flex-direction: column; align-items: center;
+  border: 1pt solid #C7D2FE;
+}
+.flow-num {
+  background: #07024E; border-radius: 50%; width: 22pt; height: 22pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.flow-num p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.flow-title {
+  color: #07024E; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.flow-desc {
+  color: #475569; font-size: 6.5pt; margin: 0; text-align: center; line-height: 1.5;
+}
+.arr {
+  display: flex; align-items: center; justify-content: center; width: 16pt;
+}
+.arr p {
+  color: #FC1C49; font-size: 13pt; font-weight: bold; margin: 0;
+}
+
+/* Comparison table */
+.compare-row {
+  display: flex; gap: 10pt;
+}
+.compare-box {
+  background: #F4F5F7; border-radius: 8pt; padding: 10pt 14pt; flex: 1;
+}
+.compare-box-warn {
+  background: #FEF2F2; border-radius: 8pt; padding: 10pt 14pt; flex: 1;
+  border-left: 3pt solid #DC2626;
+}
+.cmp-badge {
+  border-radius: 4pt; padding: 2pt 8pt; display: inline-block; margin: 0 0 6pt 0;
+}
+.badge-navy { background: #07024E; }
+.badge-red { background: #DC2626; }
+.cmp-badge p {
+  color: #FFFFFF; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+.cmp-title {
+  color: #07024E; font-size: 9pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.cmp-item {
+  color: #334155; font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+.cmp-item-bold {
+  color: #07024E; font-size: 7pt; font-weight: bold; margin: 0 0 2pt 0; line-height: 1.5;
+}
+
+/* WGS integration row */
+.wgs-row {
+  display: flex; gap: 10pt;
+}
+.wgs-card {
+  background: #F0FDF4; border-radius: 8pt; padding: 10pt 14pt; flex: 1;
+  border-top: 3pt solid #16A34A;
+}
+.wgs-dark {
+  background: #07024E; border-radius: 8pt; padding: 10pt 14pt; flex: 1;
+}
+.wgs-title {
+  color: #07024E; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.wgs-desc {
+  color: #334155; font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+.wgs-dark-title {
+  color: #FC1C49; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.wgs-dark-desc {
+  color: rgba(255,255,255,0.85); font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+
+/* Score badges */
+.score-row {
+  display: flex; gap: 4pt; flex-wrap: wrap; margin: 4pt 0 0 0;
+}
+.score-tag {
+  border-radius: 4pt; padding: 2pt 6pt;
+}
+.score-green { background: #DCFCE7; }
+.score-yellow { background: #FEF9C3; }
+.score-gray { background: #F1F5F9; }
+.score-tag p {
+  font-size: 6pt; font-weight: bold; margin: 0;
+}
+.score-green p { color: #166534; }
+.score-yellow p { color: #854D0E; }
+.score-gray p { color: #475569; }
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Agent 4: 유전자 DB 검증</p>
+  <p class="header-sub">COSMIC / OncoKB / WGS 통합 검증</p>
+</div>
+<div class="content">
+
+  <!-- Validation Flow -->
+  <p class="section-label">검증 파이프라인 <span>| Hub Gene, Marker Gene의 암 데이터베이스 교차 검증</span></p>
+  <div class="flow-row">
+    <div class="flow-card">
+      <div class="flow-num"><p>1</p></div>
+      <p class="flow-title">입력 유전자</p>
+      <p class="flow-desc">Hub Genes (Bulk)<br/>Marker Genes (SC)<br/>DEG 상위 유전자</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="flow-card">
+      <div class="flow-num"><p>2</p></div>
+      <p class="flow-title">COSMIC 매칭</p>
+      <p class="flow-desc">CGC (Cancer Gene Census)<br/>체세포 변이 빈도<br/>Tier 1 / Tier 2 분류</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="flow-card">
+      <div class="flow-num"><p>3</p></div>
+      <p class="flow-title">OncoKB 매칭</p>
+      <p class="flow-desc">Oncogene / TSG 분류<br/>Level of Evidence<br/>Actionable 여부</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="flow-card-accent">
+      <div class="flow-num"><p>4</p></div>
+      <p class="flow-title">통합 스코어링</p>
+      <p class="flow-desc">DB 매칭 점수<br/>발현 변화 방향<br/>RAG 문헌 근거</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="flow-card">
+      <div class="flow-num"><p>5</p></div>
+      <p class="flow-title">RAG 해석</p>
+      <p class="flow-desc">PubMedBERT + ChromaDB<br/>유전자별 문헌 기반<br/>해석 (PMID 인용)</p>
+    </div>
+  </div>
+
+  <!-- Hub Gene vs Driver Gene -->
+  <div class="compare-row">
+    <div class="compare-box">
+      <div class="cmp-badge badge-navy"><p>HUB GENE (발현 기반)</p></div>
+      <p class="cmp-title">DEG 기반 발현 변화 상위 유전자</p>
+      <p class="cmp-item">데이터: RNA-seq (mRNA 발현량)</p>
+      <p class="cmp-item">산출: |log2FC| x -log10(p-value)</p>
+      <p class="cmp-item-bold">의미: 전사체 수준 변화 반영 (결과)</p>
+    </div>
+    <div class="compare-box-warn">
+      <div class="cmp-badge badge-red"><p>DRIVER GENE (변이 기반)</p></div>
+      <p class="cmp-title">암 발생/진행 직접 유발 유전자</p>
+      <p class="cmp-item">데이터: WGS/WES (DNA 변이)</p>
+      <p class="cmp-item">산출: 체세포 변이 빈도 + 기능적 증거</p>
+      <p class="cmp-item-bold">의미: 단백질 기능 변화 유발 (원인)</p>
+    </div>
+  </div>
+
+  <!-- WGS Integration -->
+  <div class="wgs-row">
+    <div class="wgs-card">
+      <p class="wgs-title">Multi-omic 통합 (RNA-seq + WGS/WES)</p>
+      <p class="wgs-desc">VCF/MAF 파일 존재 시 자동 활성화</p>
+      <p class="wgs-desc">Hotspot 변이 검출 (KRAS G12C, BRAF V600E 등)</p>
+      <p class="wgs-desc">LOF/GOF 효과 예측 + VAF/Depth 품질 필터링</p>
+      <div class="score-row">
+        <div class="score-tag score-green"><p>confirmed_driver &ge;80</p></div>
+        <div class="score-tag score-green"><p>high_confidence &ge;60</p></div>
+        <div class="score-tag score-yellow"><p>candidate &ge;40</p></div>
+        <div class="score-tag score-gray"><p>mutation_only / expression_only</p></div>
+      </div>
+    </div>
+    <div class="wgs-dark">
+      <p class="wgs-dark-title">Hub Gene &ne; Driver Gene</p>
+      <p class="wgs-dark-desc">TP53 변이: 단백질 기능 상실이지만 mRNA 정상 가능</p>
+      <p class="wgs-dark-desc">RNA-seq 단독: DB 매칭 예측만 (PREDICTION)</p>
+      <p class="wgs-dark-desc">RNA-seq + WGS: 변이 검증 가능 (IDENTIFICATION)</p>
+      <p class="wgs-dark-desc">리포트에 면책 조항 필수 표시</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

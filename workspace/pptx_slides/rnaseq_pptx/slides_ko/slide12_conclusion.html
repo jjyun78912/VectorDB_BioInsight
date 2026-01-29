@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #181838; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #181838; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.wrap { width: 600pt; }
+h1 {
+  color: #FFFFFF; font-size: 30pt; text-align: center; margin: 0 0 6pt 0;
+}
+.sub {
+  color: #A0A0C0; font-size: 14pt; text-align: center; margin: 0 0 28pt 0;
+}
+.cards { display: flex; gap: 12pt; margin: 0 0 24pt 0; }
+.card {
+  background: rgba(255,255,255,0.08); border-radius: 10pt; padding: 14pt 14pt; flex: 1;
+  border: 1pt solid rgba(255,255,255,0.12);
+}
+.card-title {
+  color: #FC1C49; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: rgba(255,255,255,0.8); font-size: 8.5pt; margin: 0; line-height: 1.6;
+}
+.quote-area {
+  background: rgba(252, 28, 73, 0.1); border-radius: 10pt; padding: 16pt 20pt;
+  border-left: 4pt solid #FC1C49;
+}
+.quote {
+  color: #FFFFFF; font-size: 13pt; text-align: center; margin: 0; font-style: italic; line-height: 1.6;
+}
+.badge-area {
+  margin: 20pt auto 0 auto; width: 220pt;
+  background: rgba(252, 28, 73, 0.15); border-radius: 20pt; padding: 6pt 0;
+}
+.badge {
+  color: #FC1C49; font-size: 11pt; text-align: center; margin: 0; font-weight: bold;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>감사합니다</h1>
+  <p class="sub">BioInsight AI - RNA-seq 분석 플랫폼</p>
+  <div class="cards">
+    <div class="card">
+      <p class="card-title">6-Agent 파이프라인</p>
+      <p class="card-desc">DEG, 네트워크, 경로, 검증, 시각화, 리포트 자동화</p>
+    </div>
+    <div class="card">
+      <p class="card-title">ML 암종 예측</p>
+      <p class="card-desc">CatBoost + SHAP 기반 Pan-Cancer 98.8% 정확도 (17종)</p>
+    </div>
+    <div class="card">
+      <p class="card-title">RAG 문헌 해석</p>
+      <p class="card-desc">850편 이상 논문, PMID 인용 기반 유전자 해석</p>
+    </div>
+  </div>
+  <div class="quote-area">
+    <p class="quote">"연구자의 발견을 가속화하되, 판단은 연구자에게"</p>
+  </div>
+  <div class="badge-area">
+    <p class="badge">커널아카데미 | AI 심화캠프</p>
+  </div>
+</div>
+</body>
+</html>

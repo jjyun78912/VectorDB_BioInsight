@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+.content {
+  margin: 10pt 24pt 0 24pt;
+  display: flex; flex-direction: column; gap: 7pt;
+}
+
+/* Section label */
+.label-row {
+  display: flex; align-items: center; gap: 8pt; margin: 0;
+}
+.label-common {
+  background: #07024E; border-radius: 4pt; padding: 2pt 8pt;
+}
+.label-common p {
+  color: #FFFFFF; font-size: 7pt; font-weight: bold; margin: 0;
+}
+.label-bulk {
+  background: #07024E; border-radius: 4pt; padding: 2pt 8pt;
+}
+.label-bulk p {
+  color: #FFFFFF; font-size: 7pt; font-weight: bold; margin: 0;
+}
+.label-sc {
+  background: #FC1C49; border-radius: 4pt; padding: 2pt 8pt;
+}
+.label-sc p {
+  color: #FFFFFF; font-size: 7pt; font-weight: bold; margin: 0;
+}
+.label-desc {
+  color: #64748B; font-size: 6.5pt; margin: 0;
+}
+
+/* Section flow row */
+.flow-row {
+  display: flex; gap: 4pt; flex-wrap: wrap;
+}
+
+/* Tags */
+.tag {
+  background: #F0F1F8; border-radius: 5pt; padding: 5pt 8pt;
+  display: flex; align-items: center; gap: 4pt;
+}
+.tag-num {
+  background: #07024E; border-radius: 50%; width: 14pt; height: 14pt;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tag-num p {
+  color: #FFFFFF; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+.tag-text {
+  color: #07024E; font-size: 7pt; font-weight: bold; margin: 0;
+}
+
+/* Bulk-only tag */
+.tag-bulk {
+  background: #E8E9FF; border-radius: 5pt; padding: 5pt 8pt;
+  display: flex; align-items: center; gap: 4pt;
+}
+
+/* SC-only tag */
+.tag-sc {
+  background: #FFF0F2; border-radius: 5pt; padding: 5pt 8pt;
+  display: flex; align-items: center; gap: 4pt;
+}
+.tag-num-sc {
+  background: #FC1C49; border-radius: 50%; width: 14pt; height: 14pt;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tag-num-sc p {
+  color: #FFFFFF; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+.tag-text-sc {
+  color: #FC1C49; font-size: 7pt; font-weight: bold; margin: 0;
+}
+
+/* LLM / Optional tag */
+.tag-llm {
+  background: #FFFBEB; border-radius: 5pt; padding: 5pt 8pt;
+  display: flex; align-items: center; gap: 4pt;
+  border: 1pt solid #F59E0B;
+}
+.tag-num-llm {
+  background: #F59E0B; border-radius: 50%; width: 14pt; height: 14pt;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tag-num-llm p {
+  color: #FFFFFF; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+.tag-text-llm {
+  color: #92400E; font-size: 7pt; font-weight: bold; margin: 0;
+}
+
+/* Optional SC tags */
+.tag-opt {
+  background: #FFF0F2; border-radius: 5pt; padding: 5pt 8pt;
+  display: flex; align-items: center; gap: 4pt;
+  border: 1pt dashed #FC1C49;
+}
+.tag-text-opt {
+  color: #FC1C49; font-size: 6.5pt; font-weight: bold; margin: 0;
+}
+
+/* Bottom row */
+.bottom-row {
+  display: flex; gap: 8pt;
+}
+.bot-card {
+  background: #F4F5F7; border-radius: 8pt; padding: 8pt 10pt; flex: 1;
+}
+.bot-title {
+  color: #07024E; font-size: 8pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.bot-desc {
+  color: #334155; font-size: 6.5pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+.bot-dark {
+  background: #07024E; border-radius: 8pt; padding: 8pt 10pt; flex: 1;
+}
+.bot-dark-title {
+  color: #FC1C49; font-size: 8pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.bot-dark-desc {
+  color: rgba(255,255,255,0.85); font-size: 6.5pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+
+/* Legend */
+.legend-row {
+  display: flex; gap: 10pt; align-items: center;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 4pt;
+}
+.leg-box { width: 10pt; height: 10pt; border-radius: 3pt; }
+.leg-common { background: #F0F1F8; }
+.leg-bulk { background: #E8E9FF; }
+.leg-sc { background: #FFF0F2; }
+.leg-llm { background: #FFFBEB; border: 1pt solid #F59E0B; }
+.leg-opt { background: #FFF0F2; border: 1pt dashed #FC1C49; }
+.leg-text {
+  color: #475569; font-size: 6pt; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">통합 리포트 구조</p>
+</div>
+<div class="content">
+
+  <!-- Legend -->
+  <div class="legend-row">
+    <div class="legend-item"><div class="leg-box leg-common"></div><p class="leg-text">공통</p></div>
+    <div class="legend-item"><div class="leg-box leg-bulk"></div><p class="leg-text">Bulk 전용</p></div>
+    <div class="legend-item"><div class="leg-box leg-sc"></div><p class="leg-text">Single-cell 전용</p></div>
+    <div class="legend-item"><div class="leg-box leg-llm"></div><p class="leg-text">LLM 생성</p></div>
+    <div class="legend-item"><div class="leg-box leg-opt"></div><p class="leg-text">선택 섹션 (파일 존재 시 활성화)</p></div>
+  </div>
+
+  <!-- Common: Cover ~ Abstract -->
+  <div class="label-row">
+    <div class="label-common"><p>공통 섹션</p></div>
+    <p class="label-desc">Bulk / Single-cell 동일 CSS, 데이터 유형별 자동 선택</p>
+  </div>
+  <div class="flow-row">
+    <div class="tag"><div class="tag-num"><p>C</p></div><p class="tag-text">표지 (Cover)</p></div>
+    <div class="tag"><div class="tag-num"><p>1</p></div><p class="tag-text">요약 통계</p></div>
+    <div class="tag-llm"><div class="tag-num-llm"><p>A</p></div><p class="tag-text-llm">확장 초록 (Opus)</p></div>
+    <div class="tag"><div class="tag-num"><p>2</p></div><p class="tag-text">QC 분석</p></div>
+  </div>
+
+  <!-- Bulk-specific / SC-specific -->
+  <div class="label-row">
+    <div class="label-bulk"><p>BULK 전용</p></div>
+    <div class="label-sc"><p>SINGLE-CELL 전용</p></div>
+  </div>
+  <div class="flow-row">
+    <div class="tag-bulk"><div class="tag-num"><p>3</p></div><p class="tag-text">DEG 분석</p></div>
+    <div class="tag-bulk"><div class="tag-num"><p>4</p></div><p class="tag-text">경로 분석</p></div>
+    <div class="tag-bulk"><div class="tag-num"><p>6</p></div><p class="tag-text">네트워크</p></div>
+    <div class="tag-sc"><div class="tag-num-sc"><p>3</p></div><p class="tag-text-sc">세포 유형 UMAP</p></div>
+    <div class="tag-sc"><div class="tag-num-sc"><p>4</p></div><p class="tag-text-sc">마커 유전자</p></div>
+  </div>
+
+  <!-- SC optional sections -->
+  <div class="label-row">
+    <div class="label-sc"><p>SINGLE-CELL 선택 섹션</p></div>
+    <p class="label-desc">출력 파일 존재 시 자동 활성화</p>
+  </div>
+  <div class="flow-row">
+    <div class="tag-opt"><p class="tag-text-opt">궤적 분석</p></div>
+    <div class="tag-opt"><p class="tag-text-opt">종양 미세환경 (TME)</p></div>
+    <div class="tag-opt"><p class="tag-text-opt">유전자 조절 네트워크</p></div>
+    <div class="tag-opt"><p class="tag-text-opt">CNV / 배수체</p></div>
+    <div class="tag-opt"><p class="tag-text-opt">세포 상호작용</p></div>
+  </div>
+
+  <!-- Common: Validation ~ Appendix -->
+  <div class="label-row">
+    <div class="label-common"><p>공통 하단 섹션</p></div>
+  </div>
+  <div class="flow-row">
+    <div class="tag"><div class="tag-num"><p>5</p></div><p class="tag-text">암 유전자 검증</p></div>
+    <div class="tag-llm"><div class="tag-num-llm"><p>ML</p></div><p class="tag-text-llm">ML 암종 예측</p></div>
+    <div class="tag"><div class="tag-num"><p>7</p></div><p class="tag-text">임상 시사점</p></div>
+    <div class="tag"><div class="tag-num"><p>8</p></div><p class="tag-text">후속 연구</p></div>
+    <div class="tag-llm"><div class="tag-num-llm"><p>R</p></div><p class="tag-text-llm">연구 추천</p></div>
+    <div class="tag"><div class="tag-num"><p>9</p></div><p class="tag-text">방법론</p></div>
+    <div class="tag"><div class="tag-num"><p>10</p></div><p class="tag-text">참고문헌</p></div>
+    <div class="tag"><div class="tag-num"><p>11</p></div><p class="tag-text">부록 + 다운로드</p></div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="bottom-row">
+    <div class="bot-card">
+      <p class="bot-title">통합 아키텍처</p>
+      <p class="bot-desc">rnaseq_pipeline/reports/ 모듈</p>
+      <p class="bot-desc">common.py (공통) + bulk.py + singlecell.py</p>
+      <p class="bot-desc">ReportAdapter로 기존 Agent 호환</p>
+    </div>
+    <div class="bot-card">
+      <p class="bot-title">인터랙티브 기능</p>
+      <p class="bot-desc">Plotly.js 차트 (확대/축소/호버)</p>
+      <p class="bot-desc">3D 네트워크, 정렬/필터 테이블</p>
+      <p class="bot-desc">단일 HTML (서버 불필요)</p>
+    </div>
+    <div class="bot-dark">
+      <p class="bot-dark-title">안전장치</p>
+      <p class="bot-dark-desc">Hub Gene != Driver Gene 면책 조항</p>
+      <p class="bot-dark-desc">ML 예측 = 참고용 (진단 아님)</p>
+      <p class="bot-dark-desc">모든 해석에 PMID 인용 필수</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 14pt 24pt 0 24pt; display: flex; gap: 14pt;
+}
+.left { width: 320pt; display: flex; flex-direction: column; gap: 10pt; }
+.right { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.section-card {
+  background: #F8F9FA; border-radius: 8pt; padding: 10pt 14pt;
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.06);
+}
+.sc-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.sc-row { display: flex; gap: 4pt; flex-wrap: wrap; }
+.sc-tag {
+  background: #E8E9FF; border-radius: 3pt; padding: 2pt 6pt;
+}
+.sc-tag-text {
+  color: #131866; font-size: 7pt; margin: 0;
+}
+.sc-tag-accent {
+  background: rgba(252, 28, 73, 0.12); border-radius: 3pt; padding: 2pt 6pt;
+}
+.sc-tag-accent-text {
+  color: #FC1C49; font-size: 7pt; margin: 0; font-weight: bold;
+}
+.dark-card {
+  background: #07024E; border-radius: 8pt; padding: 10pt 14pt;
+}
+.dk-title {
+  color: #FC1C49; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.dk-desc {
+  color: #FFFFFF; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.purple-card {
+  background: #F0F1FF; border-radius: 8pt; padding: 10pt 14pt;
+}
+.pc-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Interactive Report System</p>
+</div>
+<div class="content">
+  <div class="left">
+    <div class="section-card">
+      <p class="sc-title">Bulk RNA-seq Report (11 Sections)</p>
+      <div class="sc-row">
+        <div class="sc-tag"><p class="sc-tag-text">Cover</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Summary</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">Abstract (LLM)</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">QC / PCA</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">DEG Analysis</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Pathway</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">DB Validation</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Network</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">ML Prediction</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Clinical</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Follow-up</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">Research (LLM)</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Methods</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">References</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Appendix</p></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <p class="sc-title">Single-cell Report (Extended)</p>
+      <div class="sc-row">
+        <div class="sc-tag"><p class="sc-tag-text">Cell Type UMAP</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Markers</p></div>
+        <div class="sc-tag"><p class="sc-tag-text">Composition</p></div>
+        <div class="sc-tag-accent"><p class="sc-tag-accent-text">Trajectory</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">TME</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">GRN</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">CNV / Ploidy</p></div>
+        <div class="sc-tag_accent"><p class="sc-tag-accent-text">Interaction</p></div>
+      </div>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">LLM-Generated Content</p>
+      <p class="dk-desc">Extended Abstract: Claude Opus storytelling (~$0.30)</p>
+      <p class="dk-desc">Research Recommendations: therapeutic targets, drug repurposing, experimental validation</p>
+      <p class="dk-desc">All interpretations cite PMID references</p>
+    </div>
+  </div>
+  <div class="right">
+    <div class="purple-card">
+      <p class="pc-title">Interactive Features</p>
+      <p class="pc-desc">Plotly.js charts with zoom, hover tooltips</p>
+      <p class="pc-desc">3D force-directed network graph</p>
+      <p class="pc-desc">Sortable / filterable data tables</p>
+      <p class="pc-desc">Full dataset CSV download from appendix</p>
+      <p class="pc-desc">Responsive single-file HTML (no server needed)</p>
+    </div>
+    <div class="section-card">
+      <p class="sc-title">Unified Report Architecture</p>
+      <p class="pc-desc">Shared CSS/style system for Bulk and Single-cell</p>
+      <p class="pc-desc">Data-type adaptive section selection</p>
+      <p class="pc-desc">Optional sections auto-activate by output files</p>
+      <p class="pc-desc">ReportAdapter for backward compatibility</p>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">Guardrails in Reports</p>
+      <p class="dk-desc">Hub Gene != Driver Gene disclaimer</p>
+      <p class="dk-desc">ML prediction = reference only, not diagnosis</p>
+      <p class="dk-desc">Uncertainty levels for all interpretations</p>
+      <p class="dk-desc">Suggested validation experiments</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

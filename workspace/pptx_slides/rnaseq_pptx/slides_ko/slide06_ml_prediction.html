@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 12pt;
+}
+.top-row { display: flex; gap: 14pt; }
+.model-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 16pt; flex: 1;
+}
+.mc-title {
+  color: #FC1C49; font-size: 14pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.mc-desc {
+  color: #FFFFFF; font-size: 9pt; margin: 0 0 3pt 0; line-height: 1.6;
+}
+.stat-row { display: flex; gap: 6pt; margin: 10pt 0 0 0; }
+.stat-item {
+  background: rgba(252, 28, 73, 0.2); border-radius: 6pt; padding: 8pt 0; flex: 1;
+}
+.stat-num {
+  color: #FC1C49; font-size: 18pt; font-weight: bold; margin: 0; text-align: center;
+}
+.stat-label {
+  color: rgba(255,255,255,0.8); font-size: 7pt; margin: 0; text-align: center;
+}
+.mid-row { display: flex; gap: 14pt; }
+.info-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 16pt; flex: 1;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.ic-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.ic-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.bottom-bar {
+  background: #F0F1FF; border-radius: 10pt; padding: 12pt 16pt;
+  display: flex; gap: 20pt; align-items: center;
+}
+.warn-text {
+  color: #131866; font-size: 9pt; margin: 0; line-height: 1.5; flex: 1;
+}
+.warn-bold {
+  color: #FC1C49; font-size: 10pt; font-weight: bold; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">ML 암종 예측 모듈</p>
+</div>
+<div class="content">
+  <div class="top-row">
+    <div class="model-card">
+      <p class="mc-title">CatBoost + SHAP 모델</p>
+      <p class="mc-desc">TCGA 데이터로 학습된 그래디언트 부스팅 분류기. Optuna 하이퍼파라미터 최적화 적용.</p>
+      <p class="mc-desc">모든 예측에 대해 SHAP waterfall 설명 제공 - 주요 기여 유전자 시각화.</p>
+      <div class="stat-row">
+        <div class="stat-item">
+          <p class="stat-num">0.998</p>
+          <p class="stat-label">BRCA AUC</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">98.8%</p>
+          <p class="stat-label">Pan-Cancer 정확도</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">17종</p>
+          <p class="stat-label">지원 암종</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">11K+</p>
+          <p class="stat-label">TCGA 학습 샘플</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mid-row">
+    <div class="info-card">
+      <p class="ic-title">학습 파이프라인</p>
+      <p class="ic-desc">TCGA 데이터 &rarr; TPM &rarr; log2 변환 &rarr; 표준화 &rarr; Optuna HPO &rarr; CatBoost &rarr; SHAP</p>
+      <p class="ic-desc">사용자 데이터 &rarr; Gene ID 매핑 &rarr; 예측 &rarr; SHAP Waterfall 시각화</p>
+    </div>
+    <div class="info-card">
+      <p class="ic-title">2차 검증 시스템</p>
+      <p class="ic-desc">신뢰도 갭 분석 (Top1 - Top2 확률 차이, 15% 미만 시 불확실)</p>
+      <p class="ic-desc">혼동 가능 암종 쌍 탐지 (예: 편평상피암 HNSC/LUSC/SKCM)</p>
+      <p class="ic-desc">조직 특이 마커 발현 검사로 보정</p>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <p class="warn-bold">안전장치</p>
+    <p class="warn-text">모든 예측에 면책 조항 포함: "이 예측은 진단이 아니며, 참고용입니다." 제안 검증: 조직 검사 확인, 추가 마커 검사.</p>
+  </div>
+</div>
+</body>
+</html>

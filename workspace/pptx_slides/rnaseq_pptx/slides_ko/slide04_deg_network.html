@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; gap: 14pt;
+}
+.col { flex: 1; display: flex; flex-direction: column; gap: 12pt; }
+.section-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 16pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.section-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.section-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.highlight-box {
+  background: #07024E; border-radius: 10pt; padding: 14pt 16pt;
+}
+.hl-title {
+  color: #FC1C49; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.hl-desc {
+  color: #FFFFFF; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.stat-row { display: flex; gap: 8pt; margin: 8pt 0 0 0; }
+.stat-box {
+  background: rgba(252, 28, 73, 0.15); border-radius: 6pt; padding: 6pt 10pt;
+  flex: 1;
+}
+.stat-val {
+  color: #FC1C49; font-size: 14pt; font-weight: bold; margin: 0; text-align: center;
+}
+.stat-label {
+  color: rgba(255,255,255,0.8); font-size: 7pt; margin: 0; text-align: center;
+}
+.perf-card {
+  background: #F0F1FF; border-radius: 10pt; padding: 14pt 16pt;
+}
+.perf-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.perf-item {
+  color: #1E293B; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">DEG 분석 및 네트워크 구축</p>
+</div>
+<div class="content">
+  <div class="col">
+    <div class="section-card">
+      <p class="section-title">Agent 1: DEG 분석</p>
+      <p class="section-desc">DESeq2 통계 분석 + apeglm log fold change 수축. 보정된 p-value와 fold change 임계값으로 자동 필터링.</p>
+      <p class="section-desc">Raw count 및 사전 계산된 DEG 테이블 모두 지원. 메타데이터 기반 배치 효과 보정.</p>
+    </div>
+    <div class="section-card">
+      <p class="section-title">Agent 2: 네트워크 분석</p>
+      <p class="section-desc">벡터화된 numpy 연산으로 Spearman 상관 행렬 계산. NetworkX 기반 그래프 구축 및 적응형 Hub 중심성 알고리즘.</p>
+      <p class="section-desc">밀집 그래프 (>100만 엣지): 가중 차수 프록시. 대규모 (>1천 노드): k-샘플링 근사.</p>
+    </div>
+  </div>
+  <div class="col">
+    <div class="highlight-box">
+      <p class="hl-title">Hub 유전자 식별</p>
+      <p class="hl-desc">복합 점수 = |log2FC| x -log10(padj). 상위 20개 Hub 유전자를 네트워크 중심으로 선정.</p>
+      <p class="hl-desc">주의: Hub 유전자는 발현 수준 변화를 반영하며, Driver 변이(DNA 수준)와는 다른 개념입니다.</p>
+      <div class="stat-row">
+        <div class="stat-box">
+          <p class="stat-val">7,583</p>
+          <p class="stat-label">DEG 수 (BRCA)</p>
+        </div>
+        <div class="stat-box">
+          <p class="stat-val">338만</p>
+          <p class="stat-label">네트워크 엣지</p>
+        </div>
+        <div class="stat-box">
+          <p class="stat-val">20</p>
+          <p class="stat-label">Hub 유전자</p>
+        </div>
+      </div>
+    </div>
+    <div class="perf-card">
+      <p class="perf-title">성능 최적화</p>
+      <p class="perf-item">상관 계산: O(n^2) 루프 &rarr; 행렬 곱 (100배 이상)</p>
+      <p class="perf-item">그래프 구축: from_pandas_edgelist 벡터화 (10배 이상)</p>
+      <p class="perf-item">중심성 계산: 적응형 알고리즘 (17초 vs 무한대)</p>
+      <p class="perf-item">Agent 1+2 총 소요: BRCA 50 샘플 기준 ~2.5분</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

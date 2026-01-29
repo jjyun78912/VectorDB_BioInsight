@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 22pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+.header-sub {
+  color: rgba(255,255,255,0.65); font-size: 11pt; margin: 0 0 0 12pt;
+}
+.content {
+  margin: 10pt 28pt 0 28pt;
+  display: flex; flex-direction: column; gap: 8pt;
+}
+
+/* Section label */
+.section-label {
+  color: #07024E; font-size: 10pt; font-weight: bold; margin: 0;
+}
+.section-label span {
+  color: #64748B; font-weight: normal; font-size: 8pt;
+}
+
+/* RAG flow row */
+.rag-row {
+  display: flex; gap: 0pt; align-items: stretch; justify-content: center;
+}
+.rag-card {
+  background: #F4F5F7; border-radius: 8pt; padding: 8pt 8pt;
+  width: 90pt;
+  display: flex; flex-direction: column; align-items: center;
+}
+.rag-card-llm {
+  background: #FFFBEB; border-radius: 8pt; padding: 8pt 8pt;
+  width: 90pt;
+  display: flex; flex-direction: column; align-items: center;
+  border: 1pt solid #F59E0B;
+}
+.rag-card-out {
+  background: #F0FDF4; border-radius: 8pt; padding: 8pt 8pt;
+  width: 90pt;
+  display: flex; flex-direction: column; align-items: center;
+  border: 1pt solid #86EFAC;
+}
+.rag-num {
+  background: #07024E; border-radius: 50%; width: 22pt; height: 22pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.rag-num p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.rag-num-llm {
+  background: #F59E0B; border-radius: 50%; width: 22pt; height: 22pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.rag-num-llm p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.rag-num-out {
+  background: #16A34A; border-radius: 50%; width: 22pt; height: 22pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.rag-num-out p {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.rag-title {
+  color: #07024E; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.rag-title-llm {
+  color: #92400E; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.rag-title-out {
+  color: #166534; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.rag-desc {
+  color: #475569; font-size: 6.5pt; margin: 0; text-align: center; line-height: 1.5;
+}
+.arr {
+  display: flex; align-items: center; justify-content: center; width: 14pt;
+}
+.arr p {
+  color: #FC1C49; font-size: 13pt; font-weight: bold; margin: 0;
+}
+
+/* LLM sections row */
+.llm-row {
+  display: flex; gap: 8pt;
+}
+.llm-card {
+  background: #FFFBEB; border-radius: 8pt; padding: 10pt 12pt; flex: 1;
+  border-left: 3pt solid #F59E0B;
+}
+.llm-title {
+  color: #92400E; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.llm-desc {
+  color: #78350F; font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.6;
+}
+.llm-tag {
+  background: #FDE68A; border-radius: 4pt; padding: 2pt 6pt;
+  display: inline-block; margin: 4pt 4pt 0 0;
+}
+.llm-tag p {
+  color: #92400E; font-size: 6pt; font-weight: bold; margin: 0;
+}
+
+/* Validation + Safeguard */
+.val-row {
+  display: flex; gap: 8pt;
+}
+.val-card {
+  background: #F4F5F7; border-radius: 8pt; padding: 10pt 12pt; flex: 1;
+}
+.val-title {
+  color: #07024E; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.val-desc {
+  color: #334155; font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+.val-dark {
+  background: #07024E; border-radius: 8pt; padding: 10pt 12pt; flex: 1;
+}
+.val-dark-title {
+  color: #FC1C49; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.val-dark-desc {
+  color: rgba(255,255,255,0.85); font-size: 7pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+
+/* Collection stats */
+.stats-row {
+  display: flex; gap: 6pt; flex-wrap: wrap; margin: 4pt 0 0 0;
+}
+.stat-tag {
+  background: #EEF2FF; border-radius: 4pt; padding: 2pt 6pt;
+}
+.stat-tag p {
+  color: #3730A3; font-size: 6pt; font-weight: bold; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Agent 6: LLM 기반 리포트</p>
+  <p class="header-sub">RAG 해석 + 검증 + 자동 생성</p>
+</div>
+<div class="content">
+
+  <!-- RAG Interpretation Flow -->
+  <p class="section-label">RAG 해석 파이프라인 <span>| 유전자별 문헌 근거 기반 해석, 모든 해석에 PMID 인용 필수</span></p>
+  <div class="rag-row">
+    <div class="rag-card">
+      <div class="rag-num"><p>1</p></div>
+      <p class="rag-title">입력 쿼리</p>
+      <p class="rag-desc">Gene Symbol<br/>Cancer Type<br/>발현 방향 (Up/Down)</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="rag-card">
+      <div class="rag-num"><p>2</p></div>
+      <p class="rag-title">PubMedBERT</p>
+      <p class="rag-desc">바이오 도메인 특화<br/>임베딩 벡터 생성<br/>(768차원)</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="rag-card">
+      <div class="rag-num"><p>3</p></div>
+      <p class="rag-title">ChromaDB 검색</p>
+      <p class="rag-desc">~850편 논문<br/>53,000+ chunks<br/>Top-k 유사 문헌</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="rag-card-llm">
+      <div class="rag-num-llm"><p>4</p></div>
+      <p class="rag-title-llm">Claude API 해석</p>
+      <p class="rag-desc">문헌 근거 종합<br/>PMID 인용 생성<br/>한국어 해석</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="rag-card-out">
+      <div class="rag-num-out"><p>5</p></div>
+      <p class="rag-title-out">검증된 해석 출력</p>
+      <p class="rag-desc">유전자 기능 설명<br/>암종 특이 맥락<br/>[PMID: 12345678]</p>
+    </div>
+  </div>
+
+  <!-- LLM Generated Sections -->
+  <p class="section-label">LLM 생성 리포트 섹션 <span>| Claude Opus 4 (Extended Abstract) + Sonnet 4 (일반 해석)</span></p>
+  <div class="llm-row">
+    <div class="llm-card">
+      <p class="llm-title">확장 초록 (Extended Abstract)</p>
+      <p class="llm-desc">Opus 모델로 전체 분석 결과를 스토리텔링 형식으로 요약</p>
+      <p class="llm-desc">DEG, Network, Pathway 결과를 통합 서술</p>
+      <div class="llm-tag"><p>Opus 4</p></div>
+      <div class="llm-tag"><p>~8,000 tokens</p></div>
+    </div>
+    <div class="llm-card">
+      <p class="llm-title">연구 추천 (Research Recommendations)</p>
+      <p class="llm-desc">치료 표적, 약물 재목적화, 실험 검증 프로토콜</p>
+      <p class="llm-desc">바이오마커 후보, 단/중/장기 연구 방향</p>
+      <div class="llm-tag"><p>DGIdb v5</p></div>
+      <div class="llm-tag"><p>JSON 출력</p></div>
+    </div>
+    <div class="llm-card">
+      <p class="llm-title">임상 시사점 (Clinical Insights)</p>
+      <p class="llm-desc">Hub Gene의 약물 상호작용 (DGIdb)</p>
+      <p class="llm-desc">FDA 승인 약물, Actionable 표적 식별</p>
+      <div class="llm-tag"><p>Sonnet 4</p></div>
+      <div class="llm-tag"><p>PMID 필수</p></div>
+    </div>
+  </div>
+
+  <!-- Validation + Safeguard -->
+  <div class="val-row">
+    <div class="val-card">
+      <p class="val-title">VectorDB 논문 컬렉션 (17종 암종)</p>
+      <p class="val-desc">BRCA, COAD, HNSC, LUAD, LUSC, KIRC, LIHC 등 17종</p>
+      <p class="val-desc">암종별 50편 (총 ~850편), PubMedBERT 임베딩</p>
+      <p class="val-desc">인용 수 기반 품질 점수 (Semantic Scholar API)</p>
+      <div class="stats-row">
+        <div class="stat-tag"><p>53,000+ chunks</p></div>
+        <div class="stat-tag"><p>768차원 벡터</p></div>
+        <div class="stat-tag"><p>Top-k 검색</p></div>
+      </div>
+    </div>
+    <div class="val-card">
+      <p class="val-title">LLM Fallback Chain</p>
+      <p class="val-desc">1차: OpenAI (gpt-4o-mini) - 빠르고 저렴</p>
+      <p class="val-desc">2차: Claude API (Anthropic) - Fallback</p>
+      <p class="val-desc">3차: Vertex AI (Google) - Secondary</p>
+      <div class="stats-row">
+        <div class="stat-tag"><p>자동 전환</p></div>
+        <div class="stat-tag"><p>고가용성</p></div>
+      </div>
+    </div>
+    <div class="val-dark">
+      <p class="val-dark-title">안전장치 (Guardrail)</p>
+      <p class="val-dark-desc">Hub Gene != Driver Gene 면책 조항</p>
+      <p class="val-dark-desc">ML 예측 = 참고용 (진단 아님)</p>
+      <p class="val-dark-desc">모든 해석에 PMID 인용 필수</p>
+      <p class="val-dark-desc">출처 없는 주장 금지</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

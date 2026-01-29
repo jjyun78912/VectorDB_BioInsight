@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 14pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 10pt;
+}
+.subtitle {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0;
+}
+.pipeline-flow {
+  display: flex; gap: 5pt; align-items: stretch;
+}
+.step-card {
+  background: #F8F9FA; border-radius: 7pt; padding: 8pt 8pt; flex: 1;
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; align-items: center;
+}
+.step-num {
+  background: #07024E; border-radius: 50%; width: 22pt; height: 22pt;
+  display: flex; align-items: center; justify-content: center; margin: 0 0 4pt 0;
+}
+.num-text {
+  color: #FFFFFF; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.step-name {
+  color: #131866; font-size: 8.5pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.step-desc {
+  color: #1E293B; font-size: 7pt; margin: 0; text-align: center; line-height: 1.3;
+}
+.arr { display: flex; align-items: center; }
+.arr-text { color: #FC1C49; font-size: 12pt; margin: 0; font-weight: bold; }
+.two-col { display: flex; gap: 14pt; }
+.col { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 12pt 14pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.card-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.dark-card {
+  background: #07024E; border-radius: 10pt; padding: 12pt 14pt;
+}
+.dk-title {
+  color: #FC1C49; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.dk-desc {
+  color: #FFFFFF; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Single-cell RNA-seq Pipeline</p>
+</div>
+<div class="content">
+  <p class="subtitle">Unified Scanpy Pipeline: QC &rarr; Clustering &rarr; Annotation &rarr; Markers &rarr; Report</p>
+  <div class="pipeline-flow">
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">1</p></div>
+      <p class="step-name">QC</p>
+      <p class="step-desc">Filter cells &amp; genes</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">2</p></div>
+      <p class="step-name">Normalize</p>
+      <p class="step-desc">Log normalize + HVG</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">3</p></div>
+      <p class="step-name">PCA</p>
+      <p class="step-desc">Dimension reduction</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">4</p></div>
+      <p class="step-name">Batch Corr</p>
+      <p class="step-desc">Harmony integration</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">5</p></div>
+      <p class="step-name">Cluster</p>
+      <p class="step-desc">UMAP + Leiden</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">6</p></div>
+      <p class="step-name">Annotate</p>
+      <p class="step-desc">CellTypist</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">7</p></div>
+      <p class="step-name">DEG</p>
+      <p class="step-desc">Wilcoxon test</p>
+    </div>
+    <div class="arr"><p class="arr-text">&rarr;</p></div>
+    <div class="step-card">
+      <div class="step-num"><p class="num-text">8</p></div>
+      <p class="step-name">Report</p>
+      <p class="step-desc">HTML output</p>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="col">
+      <div class="card">
+        <p class="card-title">Key Analysis Features</p>
+        <p class="card-desc">Cell type annotation via CellTypist with pre-trained models</p>
+        <p class="card-desc">UMAP / t-SNE dimensionality reduction visualization</p>
+        <p class="card-desc">Cluster-specific marker gene detection (Wilcoxon)</p>
+        <p class="card-desc">Pseudo-bulk aggregation for ML prediction</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="dark-card">
+        <p class="dk-title">Optional Advanced Modules</p>
+        <p class="dk-desc">Trajectory: Pseudotime analysis for differentiation</p>
+        <p class="dk-desc">TME: Tumor microenvironment composition</p>
+        <p class="dk-desc">GRN: Gene regulatory network (SCENIC)</p>
+        <p class="dk-desc">CNV: Copy number variation inference (inferCNV)</p>
+        <p class="dk-desc">Interaction: Cell-cell communication (CellChat)</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

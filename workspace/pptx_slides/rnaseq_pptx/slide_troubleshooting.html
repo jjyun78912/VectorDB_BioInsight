@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+.content {
+  margin: 14pt 28pt 0 28pt;
+  display: flex; flex-direction: column; gap: 10pt;
+}
+
+/* Problem statement */
+.problem-box {
+  background: #FEF2F2; border-radius: 10pt; padding: 12pt 16pt;
+  border-left: 4pt solid #DC2626;
+}
+.problem-title {
+  color: #DC2626; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.problem-desc {
+  color: #1E293B; font-size: 8pt; margin: 0 0 3pt 0; line-height: 1.6;
+}
+
+/* Before / After comparison */
+.compare-row {
+  display: flex; gap: 12pt;
+}
+.before-box {
+  background: #F4F5F7; border-radius: 10pt; padding: 12pt 16pt; flex: 1;
+  border-top: 3pt solid #DC2626;
+}
+.after-box {
+  background: #F0FDF4; border-radius: 10pt; padding: 12pt 16pt; flex: 1;
+  border-top: 3pt solid #16A34A;
+}
+.box-badge {
+  border-radius: 4pt; padding: 2pt 8pt;
+  display: inline-block; margin: 0 0 6pt 0;
+}
+.badge-red { background: #DC2626; }
+.badge-green { background: #16A34A; }
+.box-badge p {
+  color: #FFFFFF; font-size: 7pt; font-weight: bold; margin: 0;
+}
+.box-title {
+  color: #07024E; font-size: 10pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.box-step {
+  color: #334155; font-size: 7.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.box-step-bold {
+  color: #07024E; font-size: 7.5pt; font-weight: bold; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.box-result {
+  margin: 6pt 0 0 0; padding: 6pt 0 0 0; border-top: 1pt solid #E2E8F0;
+}
+.result-label {
+  color: #64748B; font-size: 6.5pt; font-weight: bold; margin: 0 0 2pt 0;
+}
+.result-value-bad {
+  color: #DC2626; font-size: 9pt; font-weight: bold; margin: 0;
+}
+.result-value-good {
+  color: #16A34A; font-size: 9pt; font-weight: bold; margin: 0;
+}
+
+/* Bottom takeaway */
+.takeaway {
+  background: #07024E; border-radius: 10pt; padding: 12pt 18pt;
+  display: flex; gap: 18pt;
+}
+.take-col { flex: 1; }
+.take-title {
+  color: #FC1C49; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.take-desc {
+  color: rgba(255,255,255,0.85); font-size: 7pt; margin: 0 0 3pt 0; line-height: 1.6;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">트러블슈팅: ML 과적합 (Data Leakage)</p>
+</div>
+<div class="content">
+
+  <!-- Problem -->
+  <div class="problem-box">
+    <p class="problem-title">문제 발견: ML 정확도가 비정상적으로 높음 (~97-99%)</p>
+    <p class="problem-desc">Pan-Cancer 17종 분류 모델의 정확도가 의심스러울 정도로 높게 측정됨. 조사 결과, 전체 데이터에 전처리(유전자 선택 + StandardScaler)를 적용한 후 Train/Test를 분리하여 테스트 데이터 정보가 학습에 누수(Data Leakage)된 것을 확인.</p>
+  </div>
+
+  <!-- Before / After -->
+  <div class="compare-row">
+    <div class="before-box">
+      <div class="box-badge badge-red"><p>BEFORE (v2 - Data Leakage)</p></div>
+      <p class="box-title">전처리 후 Split (잘못된 순서)</p>
+      <p class="box-step">1. 전체 데이터 로드 (2,986 samples)</p>
+      <p class="box-step">2. Log2 변환 (전체)</p>
+      <p class="box-step-bold">3. 유전자 선택 - 전체 데이터 분산 기준 5,000개</p>
+      <p class="box-step-bold">4. StandardScaler.fit() - 전체 데이터</p>
+      <p class="box-step">5. Train/Test Split (85:15)</p>
+      <p class="box-step">6. CatBoost 학습</p>
+      <div class="box-result">
+        <p class="result-label">Test Accuracy (과대 평가)</p>
+        <p class="result-value-bad">97.54% (Leakage)</p>
+      </div>
+    </div>
+    <div class="after-box">
+      <div class="box-badge badge-green"><p>AFTER (v3 - Leakage 수정)</p></div>
+      <p class="box-title">Split 후 전처리 (올바른 순서)</p>
+      <p class="box-step">1. 전체 데이터 로드 (2,986 samples)</p>
+      <p class="box-step">2. Log2 변환 (고정 변환, 무관)</p>
+      <p class="box-step-bold">3. Train/Test Split 먼저 (85:15)</p>
+      <p class="box-step-bold">4. 유전자 선택 - Train 데이터만 기준</p>
+      <p class="box-step-bold">5. StandardScaler.fit() - Train만</p>
+      <p class="box-step">6. Test에는 transform()만 적용</p>
+      <div class="box-result">
+        <p class="result-label">Test Accuracy (정상 평가)</p>
+        <p class="result-value-good">96.65% (Valid)</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Takeaway -->
+  <div class="takeaway">
+    <div class="take-col">
+      <p class="take-title">Data Leakage 원인</p>
+      <p class="take-desc">StandardScaler가 테스트 데이터의 평균/표준편차를 학습에 반영</p>
+      <p class="take-desc">유전자 선택 시 테스트 데이터의 분산 정보가 포함</p>
+      <p class="take-desc">모델이 테스트 분포를 이미 "알고 있는" 상태로 평가</p>
+    </div>
+    <div class="take-col">
+      <p class="take-title">수정 후 검증 (v3)</p>
+      <p class="take-desc">Test Accuracy: 96.65% | F1 Macro: 96.82%</p>
+      <p class="take-desc">5-Fold CV: 96.97% (±0.81%) - 각 fold 독립 전처리</p>
+      <p class="take-desc">CV fold마다 train에만 fit, val에 transform만 적용</p>
+    </div>
+    <div class="take-col">
+      <p class="take-title">교훈</p>
+      <p class="take-desc">전처리는 반드시 Train/Test 분리 이후 수행</p>
+      <p class="take-desc">fit()은 Train에만, transform()은 Test에만</p>
+      <p class="take-desc">높은 정확도는 항상 의심하고 파이프라인 검증 필요</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

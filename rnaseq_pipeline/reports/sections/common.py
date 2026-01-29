@@ -255,8 +255,8 @@ class QCSection(BaseSection):
     section_id = "qc"
     section_number = 2
     section_icon = "🔍"
-    section_title = "데이터 품질 관리 (QC)"
-    section_title_en = "Quality Control"
+    section_title = "데이터 품질 관리 (Data QC)"
+    section_title_en = "Data Quality Control"
 
     def render(self) -> str:
         figures_html = ""
@@ -342,8 +342,8 @@ class DriverSection(BaseSection):
     section_id = "driver-analysis"
     section_number = 5
     section_icon = "🎯"
-    section_title = "Driver 유전자 분석"
-    section_title_en = "Driver Gene Analysis"
+    section_title = "유전자 후보 검증 (Gene Candidate Validation)"
+    section_title_en = "Gene Candidate Validation"
 
     def is_available(self) -> bool:
         return bool(self.data.driver_known or self.data.driver_novel or

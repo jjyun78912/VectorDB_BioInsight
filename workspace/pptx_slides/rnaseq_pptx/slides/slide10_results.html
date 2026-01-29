@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 14pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 12pt;
+}
+.stats-row { display: flex; gap: 10pt; }
+.stat-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 12pt; flex: 1;
+  display: flex; flex-direction: column; align-items: center;
+}
+.stat-num {
+  color: #FC1C49; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.stat-label {
+  color: #FFFFFF; font-size: 8pt; margin: 2pt 0 0 0; text-align: center;
+}
+.two-col { display: flex; gap: 14pt; }
+.col { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 12pt 14pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.card-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.purple-card {
+  background: #F0F1FF; border-radius: 10pt; padding: 12pt 14pt;
+}
+.pc-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.benchmark-bar {
+  background: #F8F9FA; border-radius: 10pt; padding: 10pt 14pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.bm-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.bm-row { display: flex; gap: 16pt; }
+.bm-item {
+  color: #1E293B; font-size: 8pt; margin: 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Results & Benchmarks</p>
+</div>
+<div class="content">
+  <div class="stats-row">
+    <div class="stat-card">
+      <p class="stat-num">0.998</p>
+      <p class="stat-label">BRCA AUC</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">98.8%</p>
+      <p class="stat-label">Pan-Cancer (17 types)</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">~8min</p>
+      <p class="stat-label">Full Pipeline (50 samples)</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">850+</p>
+      <p class="stat-label">Papers in VectorDB</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">11</p>
+      <p class="stat-label">Report Sections</p>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="col">
+      <div class="card">
+        <p class="card-title">Bulk RNA-seq Validation</p>
+        <p class="card-desc">TCGA BRCA (50 samples): 7,583 DEGs, 3.38M network edges, 20 hub genes identified</p>
+        <p class="card-desc">Pathway enrichment: 66 GO/KEGG terms with p-adj &lt; 0.05</p>
+        <p class="card-desc">COSMIC/OncoKB match rate: 80%+ hub genes validated</p>
+      </div>
+      <div class="purple-card">
+        <p class="pc-title">ML Pan-Cancer Accuracy</p>
+        <p class="pc-desc">84/85 test samples correct (98.8%)</p>
+        <p class="pc-desc">1 misclass: SKCM &rarr; HNSC (mucosal melanoma pattern)</p>
+        <p class="pc-desc">Confusable pairs detected: SCC, adenocarcinoma, GI tract</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <p class="card-title">Single-cell Validation</p>
+        <p class="card-desc">CellTypist annotation with pre-trained immune/tumor models</p>
+        <p class="card-desc">Cluster-specific marker detection via Wilcoxon rank-sum</p>
+        <p class="card-desc">Pseudo-bulk aggregation enables ML prediction per cluster</p>
+      </div>
+      <div class="card">
+        <p class="card-title">RAG Interpretation Quality</p>
+        <p class="card-desc">53K+ paper chunks across 17 cancer types</p>
+        <p class="card-desc">All gene interpretations include PMID citations</p>
+        <p class="card-desc">LLM Extended Abstract via Claude Opus for storytelling</p>
+      </div>
+    </div>
+  </div>
+  <div class="benchmark-bar">
+    <p class="bm-title">Pipeline Benchmark (TCGA BRCA 50 samples)</p>
+    <div class="bm-row">
+      <p class="bm-item">Agent 1 (DEG): ~30s</p>
+      <p class="bm-item">Agent 2 (Network): ~2min</p>
+      <p class="bm-item">Agent 3 (Pathway): ~22s</p>
+      <p class="bm-item">Agent 4 (Valid): ~2min</p>
+      <p class="bm-item">Agent 5 (Viz): ~2min</p>
+      <p class="bm-item">Agent 6 (Report): ~1min</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

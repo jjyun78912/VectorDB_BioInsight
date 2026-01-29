@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 14pt;
+}
+.priority-row { display: flex; gap: 14pt; }
+.priority-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 16pt 18pt; flex: 1;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.08);
+  border-top: 4pt solid #FC1C49;
+}
+.pc-badge {
+  background: #FC1C49; border-radius: 4pt; padding: 2pt 8pt;
+  display: inline-block; margin: 0 0 8pt 0;
+}
+.pc-badge-text {
+  color: #FFFFFF; font-size: 8pt; font-weight: bold; margin: 0;
+}
+.pc-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.secondary-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 16pt 18pt; flex: 1;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.08);
+  border-top: 4pt solid #07024E;
+}
+.sc-badge {
+  background: #07024E; border-radius: 4pt; padding: 2pt 8pt;
+  display: inline-block; margin: 0 0 8pt 0;
+}
+.sc-badge-text {
+  color: #FFFFFF; font-size: 8pt; font-weight: bold; margin: 0;
+}
+.sc-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.sc-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.bottom-bar {
+  background: #07024E; border-radius: 10pt; padding: 14pt 18pt;
+  display: flex; gap: 20pt;
+}
+.bb-col { flex: 1; }
+.bb-title {
+  color: #FC1C49; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.bb-desc {
+  color: #FFFFFF; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">Future Development Plan</p>
+</div>
+<div class="content">
+  <div class="priority-row">
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">PRIORITY 1</p></div>
+      <p class="pc-title">English Report Support</p>
+      <p class="pc-desc">Multi-language report generation (Korean / English)</p>
+      <p class="pc-desc">Language parameter in ReportConfig for automatic switching</p>
+      <p class="pc-desc">LLM interpretation output in selected language</p>
+      <p class="pc-desc">Global researcher accessibility expansion</p>
+    </div>
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">PRIORITY 2</p></div>
+      <p class="pc-title">ML Accuracy Enhancement</p>
+      <p class="pc-desc">Expand training data beyond TCGA (GEO, TARGET datasets)</p>
+      <p class="pc-desc">Ensemble methods: CatBoost + XGBoost + LightGBM voting</p>
+      <p class="pc-desc">Confusable pair classifier with tissue-specific markers</p>
+      <p class="pc-desc">Cross-validation with external cohorts</p>
+    </div>
+    <div class="priority-card">
+      <div class="pc-badge"><p class="pc-badge-text">PRIORITY 3</p></div>
+      <p class="pc-title">Single-cell Enhancement</p>
+      <p class="pc-desc">SCENIC+ for enhanced gene regulatory networks</p>
+      <p class="pc-desc">CellChat / CellPhoneDB cell-cell interaction</p>
+      <p class="pc-desc">inferCNV / CopyKAT for malignant cell detection</p>
+      <p class="pc-desc">Spatial transcriptomics integration (Visium)</p>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <div class="bb-col">
+      <p class="bb-title">Planned Modules</p>
+      <p class="bb-desc">Multi-omic: WGS/WES variant + RNA-seq integration</p>
+      <p class="bb-desc">Proteomics: Mass spec data analysis pipeline</p>
+    </div>
+    <div class="bb-col">
+      <p class="bb-title">Platform Expansion</p>
+      <p class="bb-desc">Drug Discovery module with DGIdb integration</p>
+      <p class="bb-desc">Clinical trial matching for identified targets</p>
+    </div>
+    <div class="bb-col">
+      <p class="bb-title">Infrastructure</p>
+      <p class="bb-desc">Cloud deployment (GCP / AWS) for scalability</p>
+      <p class="bb-desc">Batch processing for large cohort studies</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

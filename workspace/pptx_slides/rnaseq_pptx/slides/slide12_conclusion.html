@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #181838; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #181838; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.wrap { width: 600pt; }
+h1 {
+  color: #FFFFFF; font-size: 30pt; text-align: center; margin: 0 0 6pt 0;
+}
+.sub {
+  color: #A0A0C0; font-size: 14pt; text-align: center; margin: 0 0 28pt 0;
+}
+.cards { display: flex; gap: 12pt; margin: 0 0 24pt 0; }
+.card {
+  background: rgba(255,255,255,0.08); border-radius: 10pt; padding: 14pt 14pt; flex: 1;
+  border: 1pt solid rgba(255,255,255,0.12);
+}
+.card-title {
+  color: #FC1C49; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: rgba(255,255,255,0.8); font-size: 8.5pt; margin: 0; line-height: 1.6;
+}
+.quote-area {
+  background: rgba(252, 28, 73, 0.1); border-radius: 10pt; padding: 16pt 20pt;
+  border-left: 4pt solid #FC1C49;
+}
+.quote {
+  color: #FFFFFF; font-size: 13pt; text-align: center; margin: 0; font-style: italic; line-height: 1.6;
+}
+.badge-area {
+  margin: 20pt auto 0 auto; width: 220pt;
+  background: rgba(252, 28, 73, 0.15); border-radius: 20pt; padding: 6pt 0;
+}
+.badge {
+  color: #FC1C49; font-size: 11pt; text-align: center; margin: 0; font-weight: bold;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Thank You</h1>
+  <p class="sub">BioInsight AI - RNA-seq Analysis Platform</p>
+  <div class="cards">
+    <div class="card">
+      <p class="card-title">6-Agent Pipeline</p>
+      <p class="card-desc">Automated DEG, Network, Pathway, Validation, Visualization, Report</p>
+    </div>
+    <div class="card">
+      <p class="card-title">ML Prediction</p>
+      <p class="card-desc">CatBoost + SHAP with 98.8% Pan-Cancer accuracy (17 types)</p>
+    </div>
+    <div class="card">
+      <p class="card-title">RAG Interpretation</p>
+      <p class="card-desc">850+ papers, PMID-cited literature-backed gene interpretation</p>
+    </div>
+  </div>
+  <div class="quote-area">
+    <p class="quote">"Accelerate discovery, keep judgment with researchers"</p>
+  </div>
+  <div class="badge-area">
+    <p class="badge">Kernel Academy | AI Camp</p>
+  </div>
+</div>
+</body>
+</html>

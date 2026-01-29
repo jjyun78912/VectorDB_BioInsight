@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 14pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 12pt;
+}
+.stats-row { display: flex; gap: 10pt; }
+.stat-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 12pt; flex: 1;
+  display: flex; flex-direction: column; align-items: center;
+}
+.stat-num {
+  color: #FC1C49; font-size: 22pt; font-weight: bold; margin: 0;
+}
+.stat-label {
+  color: #FFFFFF; font-size: 8pt; margin: 2pt 0 0 0; text-align: center;
+}
+.two-col { display: flex; gap: 14pt; }
+.col { flex: 1; display: flex; flex-direction: column; gap: 10pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 12pt 14pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.card-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.purple-card {
+  background: #F0F1FF; border-radius: 10pt; padding: 12pt 14pt;
+}
+.pc-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.pc-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.benchmark-bar {
+  background: #F8F9FA; border-radius: 10pt; padding: 10pt 14pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.bm-title {
+  color: #131866; font-size: 10pt; font-weight: bold; margin: 0 0 4pt 0;
+}
+.bm-row { display: flex; gap: 16pt; }
+.bm-item {
+  color: #1E293B; font-size: 8pt; margin: 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">결과 및 벤치마크</p>
+</div>
+<div class="content">
+  <div class="stats-row">
+    <div class="stat-card">
+      <p class="stat-num">0.998</p>
+      <p class="stat-label">BRCA AUC</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">98.8%</p>
+      <p class="stat-label">Pan-Cancer (17종)</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">~8분</p>
+      <p class="stat-label">전체 파이프라인 (50 샘플)</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">850+</p>
+      <p class="stat-label">VectorDB 논문 수</p>
+    </div>
+    <div class="stat-card">
+      <p class="stat-num">11</p>
+      <p class="stat-label">리포트 섹션 수</p>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="col">
+      <div class="card">
+        <p class="card-title">Bulk RNA-seq 검증 결과</p>
+        <p class="card-desc">TCGA BRCA (50 샘플): DEG 7,583개, 네트워크 엣지 338만개, Hub 유전자 20개 식별</p>
+        <p class="card-desc">경로 분석: GO/KEGG 66개 유의 용어 (p-adj &lt; 0.05)</p>
+        <p class="card-desc">COSMIC/OncoKB 매칭률: Hub 유전자 80% 이상 검증됨</p>
+      </div>
+      <div class="purple-card">
+        <p class="pc-title">ML Pan-Cancer 정확도</p>
+        <p class="pc-desc">테스트 85개 중 84개 정답 (98.8%)</p>
+        <p class="pc-desc">오분류 1건: SKCM &rarr; HNSC (점막 흑색종 유사 패턴)</p>
+        <p class="pc-desc">혼동 가능 쌍 탐지: 편평상피암, 선암, 소화기 암종</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <p class="card-title">Single-cell 검증 결과</p>
+        <p class="card-desc">CellTypist 면역/종양 사전학습 모델 기반 세포 주석</p>
+        <p class="card-desc">Wilcoxon 순위합 검정으로 클러스터별 마커 탐지</p>
+        <p class="card-desc">Pseudo-bulk 집계로 클러스터별 ML 예측 가능</p>
+      </div>
+      <div class="card">
+        <p class="card-title">RAG 해석 품질</p>
+        <p class="card-desc">17개 암종 53K+ 논문 청크 인덱싱</p>
+        <p class="card-desc">모든 유전자 해석에 PMID 인용 포함</p>
+        <p class="card-desc">Claude Opus 기반 확장 초록 스토리텔링</p>
+      </div>
+    </div>
+  </div>
+  <div class="benchmark-bar">
+    <p class="bm-title">파이프라인 벤치마크 (TCGA BRCA 50 샘플)</p>
+    <div class="bm-row">
+      <p class="bm-item">Agent 1 (DEG): ~30초</p>
+      <p class="bm-item">Agent 2 (네트워크): ~2분</p>
+      <p class="bm-item">Agent 3 (경로): ~22초</p>
+      <p class="bm-item">Agent 4 (검증): ~2분</p>
+      <p class="bm-item">Agent 5 (시각화): ~2분</p>
+      <p class="bm-item">Agent 6 (리포트): ~1분</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

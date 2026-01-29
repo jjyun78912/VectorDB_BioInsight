@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+/* Header */
+.header {
+  background: #07024E; width: 720pt; height: 52pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 28pt;
+}
+
+/* Content area */
+.content {
+  margin: 10pt 28pt 0 28pt;
+  display: flex; flex-direction: column; gap: 6pt;
+}
+
+/* Section subtitle */
+.section-sub {
+  color: #1E293B; font-size: 9pt; font-weight: bold; margin: 0 0 2pt 0;
+}
+.section-sub span {
+  color: #64748B; font-weight: normal; font-size: 8pt;
+}
+
+/* Pipeline row */
+.pipe-row {
+  display: flex; gap: 0pt; align-items: stretch; justify-content: center;
+}
+
+/* Agent card */
+.card {
+  background: #F4F5F7; border-radius: 8pt; padding: 6pt 4pt 8pt 4pt;
+  width: 76pt;
+  display: flex; flex-direction: column; align-items: center;
+}
+.card-num {
+  background: #07024E; border-radius: 50%; width: 24pt; height: 24pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.card-num p {
+  color: #FFFFFF; font-size: 11pt; font-weight: bold; margin: 0;
+}
+.card-name {
+  color: #07024E; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.card-desc {
+  color: #475569; font-size: 6pt; margin: 0; text-align: center; line-height: 1.4;
+}
+
+/* SC card (pink accent) */
+.card-sc {
+  background: #FFF5F6; border-radius: 8pt; padding: 6pt 4pt 8pt 4pt;
+  width: 76pt;
+  display: flex; flex-direction: column; align-items: center;
+}
+.card-num-sc {
+  background: #FC1C49; border-radius: 50%; width: 24pt; height: 24pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.card-num-sc p {
+  color: #FFFFFF; font-size: 11pt; font-weight: bold; margin: 0;
+}
+.card-name-sc {
+  color: #131866; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+
+/* ML card (amber accent) */
+.card-ml {
+  background: #FFFBEB; border-radius: 8pt; padding: 6pt 4pt 8pt 4pt;
+  width: 76pt;
+  display: flex; flex-direction: column; align-items: center;
+}
+.card-num-ml {
+  background: #F59E0B; border-radius: 50%; width: 24pt; height: 24pt;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 0 4pt 0;
+}
+.card-num-ml p {
+  color: #FFFFFF; font-size: 8pt; font-weight: bold; margin: 0;
+}
+.card-name-ml {
+  color: #92400E; font-size: 8pt; font-weight: bold; margin: 0 0 3pt 0; text-align: center;
+}
+.card-desc-ml {
+  color: #78350F; font-size: 6pt; margin: 0; text-align: center; line-height: 1.4;
+}
+
+/* Arrows */
+.arr {
+  display: flex; align-items: center; justify-content: center;
+  width: 14pt;
+}
+.arr p {
+  color: #FC1C49; font-size: 12pt; font-weight: bold; margin: 0;
+}
+
+/* Bottom row */
+.bottom-row {
+  display: flex; gap: 10pt; margin: 6pt 0 0 0;
+}
+.bot-card {
+  background: #F4F5F7; border-radius: 8pt; padding: 10pt 12pt; flex: 1;
+}
+.bot-title {
+  color: #07024E; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.bot-desc {
+  color: #334155; font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+.bot-dark {
+  background: #07024E; border-radius: 8pt; padding: 10pt 12pt; flex: 1;
+}
+.bot-dark-title {
+  color: #FC1C49; font-size: 9pt; font-weight: bold; margin: 0 0 5pt 0;
+}
+.bot-dark-desc {
+  color: rgba(255,255,255,0.85); font-size: 7pt; margin: 0 0 2pt 0; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">RNA-seq 6-Agent 파이프라인</p>
+</div>
+<div class="content">
+
+  <!-- ===== BULK ===== -->
+  <p class="section-sub">Bulk RNA-seq: 자동화된 멀티 에이전트 분석 시스템 <span>| count_matrix.csv + metadata.csv</span></p>
+  <div class="pipe-row">
+    <div class="card">
+      <div class="card-num"><p>1</p></div>
+      <p class="card-name">DEG</p>
+      <p class="card-desc">DESeq2 + apeglm<br/>수축 필터링</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card">
+      <div class="card-num"><p>2</p></div>
+      <p class="card-name">네트워크</p>
+      <p class="card-desc">Spearman 상관,<br/>Hub 유전자,<br/>NetworkX</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card">
+      <div class="card-num"><p>3</p></div>
+      <p class="card-name">경로 분석</p>
+      <p class="card-desc">GO / KEGG Enrichr<br/>경로 분석</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card">
+      <div class="card-num"><p>4</p></div>
+      <p class="card-name">DB 검증</p>
+      <p class="card-desc">COSMIC, OncoKB<br/>데이터베이스<br/>스코어링</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card">
+      <div class="card-num"><p>5</p></div>
+      <p class="card-name">시각화</p>
+      <p class="card-desc">Volcano, Heatmap,<br/>3D 네트워크</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-ml">
+      <div class="card-num-ml"><p>ML</p></div>
+      <p class="card-name-ml">ML 예측</p>
+      <p class="card-desc-ml">CatBoost + SHAP<br/>암종 분류 (17종)</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card">
+      <div class="card-num"><p>6</p></div>
+      <p class="card-name">리포트</p>
+      <p class="card-desc">인터랙티브 HTML +<br/>ML + RAG</p>
+    </div>
+  </div>
+
+  <!-- ===== SINGLE-CELL ===== -->
+  <p class="section-sub">Single-cell RNA-seq: 세포 수준 이질성 분석 시스템 <span>| 10X Genomics / h5ad</span></p>
+  <div class="pipe-row">
+    <div class="card-sc">
+      <div class="card-num-sc"><p>1</p></div>
+      <p class="card-name-sc">QC &amp; 전처리</p>
+      <p class="card-desc">필터링, 정규화<br/>HVG, PCA, Harmony</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-sc">
+      <div class="card-num-sc"><p>2</p></div>
+      <p class="card-name-sc">클러스터링</p>
+      <p class="card-desc">UMAP + Leiden<br/>세포 군집 식별</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-sc">
+      <div class="card-num-sc"><p>3</p></div>
+      <p class="card-name-sc">세포 주석</p>
+      <p class="card-desc">CellTypist<br/>자동 세포 분류</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-sc">
+      <div class="card-num-sc"><p>4</p></div>
+      <p class="card-name-sc">DEG 분석</p>
+      <p class="card-desc">Wilcoxon<br/>마커 유전자</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-sc">
+      <div class="card-num-sc"><p>5</p></div>
+      <p class="card-name-sc">DB 검증</p>
+      <p class="card-desc">COSMIC, OncoKB<br/>암 유전자 매칭</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-ml">
+      <div class="card-num-ml"><p>ML</p></div>
+      <p class="card-name-ml">ML 예측</p>
+      <p class="card-desc-ml">Pseudo-bulk<br/>암종 분류 (17종)</p>
+    </div>
+    <div class="arr"><p>&rarr;</p></div>
+    <div class="card-sc">
+      <div class="card-num-sc"><p>6</p></div>
+      <p class="card-name-sc">리포트</p>
+      <p class="card-desc">인터랙티브 HTML +<br/>ML + RAG</p>
+    </div>
+  </div>
+
+  <!-- ===== BOTTOM ===== -->
+  <div class="bottom-row">
+    <div class="bot-card">
+      <p class="bot-title">입력 데이터</p>
+      <p class="bot-desc">count_matrix.csv + metadata.csv (Bulk)</p>
+      <p class="bot-desc">10X Genomics / h5ad (Single-cell)</p>
+    </div>
+    <div class="bot-card">
+      <p class="bot-title">처리 성능</p>
+      <p class="bot-desc">TCGA BRCA 50 샘플: 총 ~8분</p>
+      <p class="bot-desc">(DEG 7,583개, 엣지 338만개)</p>
+    </div>
+    <div class="bot-dark">
+      <p class="bot-dark-title">출력 결과</p>
+      <p class="bot-dark-desc">11개 섹션 인터랙티브 HTML 리포트,</p>
+      <p class="bot-dark-desc">CSV 데이터 다운로드, ML 암종 예측 (98.8%)</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

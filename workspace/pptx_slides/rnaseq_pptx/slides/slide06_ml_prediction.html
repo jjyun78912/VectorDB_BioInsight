@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 12pt;
+}
+.top-row { display: flex; gap: 14pt; }
+.model-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 16pt; flex: 1;
+}
+.mc-title {
+  color: #FC1C49; font-size: 14pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.mc-desc {
+  color: #FFFFFF; font-size: 9pt; margin: 0 0 3pt 0; line-height: 1.6;
+}
+.stat-row { display: flex; gap: 6pt; margin: 10pt 0 0 0; }
+.stat-item {
+  background: rgba(252, 28, 73, 0.2); border-radius: 6pt; padding: 8pt 0; flex: 1;
+}
+.stat-num {
+  color: #FC1C49; font-size: 18pt; font-weight: bold; margin: 0; text-align: center;
+}
+.stat-label {
+  color: rgba(255,255,255,0.8); font-size: 7pt; margin: 0; text-align: center;
+}
+.mid-row { display: flex; gap: 14pt; }
+.info-card {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 16pt; flex: 1;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.ic-title {
+  color: #131866; font-size: 11pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.ic-desc {
+  color: #1E293B; font-size: 8.5pt; margin: 0 0 3pt 0; line-height: 1.5;
+}
+.bottom-bar {
+  background: #F0F1FF; border-radius: 10pt; padding: 12pt 16pt;
+  display: flex; gap: 20pt; align-items: center;
+}
+.warn-text {
+  color: #131866; font-size: 9pt; margin: 0; line-height: 1.5; flex: 1;
+}
+.warn-bold {
+  color: #FC1C49; font-size: 10pt; font-weight: bold; margin: 0;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">ML Cancer Type Prediction</p>
+</div>
+<div class="content">
+  <div class="top-row">
+    <div class="model-card">
+      <p class="mc-title">CatBoost + SHAP Model</p>
+      <p class="mc-desc">TCGA-trained gradient boosting classifier with Optuna hyperparameter optimization.</p>
+      <p class="mc-desc">SHAP waterfall explanations for every prediction showing top contributing genes.</p>
+      <div class="stat-row">
+        <div class="stat-item">
+          <p class="stat-num">0.998</p>
+          <p class="stat-label">BRCA AUC</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">98.8%</p>
+          <p class="stat-label">Pan-Cancer Acc</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">17</p>
+          <p class="stat-label">Cancer Types</p>
+        </div>
+        <div class="stat-item">
+          <p class="stat-num">11K+</p>
+          <p class="stat-label">TCGA Samples</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mid-row">
+    <div class="info-card">
+      <p class="ic-title">Training Pipeline</p>
+      <p class="ic-desc">TCGA Data &rarr; TPM &rarr; log2 transform &rarr; Standardization &rarr; Optuna HPO &rarr; CatBoost &rarr; SHAP</p>
+      <p class="ic-desc">User Data &rarr; Gene ID Mapping &rarr; Predict &rarr; SHAP Waterfall</p>
+    </div>
+    <div class="info-card">
+      <p class="ic-title">Secondary Validation</p>
+      <p class="ic-desc">Confidence gap analysis (Top1 - Top2 probability)</p>
+      <p class="ic-desc">Confusable cancer pair detection (e.g., SCC types: HNSC/LUSC/SKCM)</p>
+      <p class="ic-desc">Tissue-specific marker expression check</p>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <p class="warn-bold">Guardrail</p>
+    <p class="warn-text">All predictions include disclaimer: "This is a prediction, NOT a diagnosis. For reference only." Suggested validations: tissue biopsy confirmation, additional marker testing.</p>
+  </div>
+</div>
+</body>
+</html>

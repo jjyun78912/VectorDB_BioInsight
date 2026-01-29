@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 18pt 24pt 0 24pt; display: flex; flex-direction: column; gap: 14pt;
+}
+.row { display: flex; gap: 14pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 16pt 18pt;
+  flex: 1; box-shadow: 2px 2px 8px rgba(0,0,0,0.08);
+}
+.card-label {
+  color: #131866; font-size: 12pt; font-weight: bold; margin: 0 0 6pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 10pt; margin: 0; line-height: 1.5;
+}
+.flow-area {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 18pt;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.08);
+}
+.flow-label {
+  color: #131866; font-size: 12pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.flow-row { display: flex; gap: 8pt; align-items: center; justify-content: center; }
+.flow-box {
+  background: #07024E; border-radius: 6pt; padding: 8pt 14pt;
+}
+.flow-text {
+  color: #FFFFFF; font-size: 9pt; margin: 0; text-align: center;
+}
+.arrow-box { padding: 0; }
+.arrow {
+  color: #FC1C49; font-size: 14pt; margin: 0; font-weight: bold;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">프로젝트 개요</p>
+</div>
+<div class="content">
+  <div class="row">
+    <div class="card">
+      <p class="card-label">프로젝트 목표</p>
+      <p class="card-desc">바이오/헬스케어 연구자를 위한 AI 기반 통합 연구 지원 플랫폼. 연구자의 발견을 가속화하되, 판단은 연구자에게.</p>
+    </div>
+    <div class="card">
+      <p class="card-label">핵심 기능</p>
+      <p class="card-desc">RNA-seq 6-Agent 파이프라인, ML 암종 예측, RAG 문헌 해석, 인터랙티브 HTML 리포트</p>
+    </div>
+  </div>
+  <div class="row">
+    <div class="card">
+      <p class="card-label">활용 모델</p>
+      <p class="card-desc">Claude API (Opus/Sonnet), GPT-4o-mini, CatBoost + SHAP, PubMedBERT 임베딩</p>
+    </div>
+    <div class="card">
+      <p class="card-label">운영 환경</p>
+      <p class="card-desc">FastAPI + React + ChromaDB + DESeq2 (R) + Scanpy + PostgreSQL</p>
+    </div>
+  </div>
+  <div class="flow-area">
+    <p class="flow-label">분석 흐름</p>
+    <div class="flow-row">
+      <div class="flow-box"><p class="flow-text">데이터 업로드</p></div>
+      <div class="arrow-box"><p class="arrow">&rarr;</p></div>
+      <div class="flow-box"><p class="flow-text">6-Agent 파이프라인</p></div>
+      <div class="arrow-box"><p class="arrow">&rarr;</p></div>
+      <div class="flow-box"><p class="flow-text">ML 예측</p></div>
+      <div class="arrow-box"><p class="arrow">&rarr;</p></div>
+      <div class="flow-box"><p class="flow-text">RAG 해석</p></div>
+      <div class="arrow-box"><p class="arrow">&rarr;</p></div>
+      <div class="flow-box"><p class="flow-text">HTML 리포트</p></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

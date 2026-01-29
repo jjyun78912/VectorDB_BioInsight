@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.header {
+  background: #07024E; width: 720pt; height: 56pt;
+  display: flex; align-items: center;
+}
+.header-text {
+  color: #FFFFFF; font-size: 24pt; font-weight: bold; margin: 0 0 0 24pt;
+}
+.content {
+  margin: 16pt 24pt 0 24pt; display: flex; gap: 14pt;
+}
+.col { flex: 1; display: flex; flex-direction: column; gap: 12pt; }
+.card {
+  background: #F8F9FA; border-radius: 10pt; padding: 14pt 16pt;
+  box-shadow: 1px 1px 6px rgba(0,0,0,0.08);
+}
+.card-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.card-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.dark-card {
+  background: #07024E; border-radius: 10pt; padding: 14pt 16pt;
+}
+.dk-title {
+  color: #FC1C49; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.dk-desc {
+  color: #FFFFFF; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.tag-row { display: flex; gap: 6pt; margin: 8pt 0 0 0; flex-wrap: wrap; }
+.tag {
+  background: rgba(252, 28, 73, 0.15); border-radius: 4pt; padding: 3pt 8pt;
+}
+.tag-text {
+  color: #FC1C49; font-size: 8pt; margin: 0; font-weight: bold;
+}
+.rag-card {
+  background: #F0F1FF; border-radius: 10pt; padding: 14pt 16pt;
+}
+.rag-title {
+  color: #131866; font-size: 13pt; font-weight: bold; margin: 0 0 8pt 0;
+}
+.rag-desc {
+  color: #1E293B; font-size: 9pt; margin: 0 0 4pt 0; line-height: 1.6;
+}
+.quote-box {
+  background: #FFFFFF; border-radius: 6pt; padding: 8pt 12pt; margin: 8pt 0 0 0;
+  border-left: 4pt solid #FC1C49;
+}
+.quote-text {
+  color: #1E293B; font-size: 8pt; margin: 0; font-style: italic; line-height: 1.5;
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <p class="header-text">경로 분석 및 데이터베이스 검증</p>
+</div>
+<div class="content">
+  <div class="col">
+    <div class="card">
+      <p class="card-title">Agent 3: 경로 분석 (Pathway)</p>
+      <p class="card-desc">Enrichr API를 통한 GO 생물학적 과정, 분자 기능, 세포 구성요소 분석.</p>
+      <p class="card-desc">KEGG 경로 매핑으로 대사 및 신호전달 경로 식별.</p>
+      <p class="card-desc">유의성 임계값 기반 자동 바플롯 생성.</p>
+    </div>
+    <div class="dark-card">
+      <p class="dk-title">Agent 4: 암 DB 검증</p>
+      <p class="dk-desc">COSMIC: 알려진 암 유전자 목록 매칭 및 변이 빈도 데이터.</p>
+      <p class="dk-desc">OncoKB: 실행가능성 수준(1-4) 및 치료적 함의.</p>
+      <p class="dk-desc">DGIdb: 약물-유전자 상호작용, FDA 승인 약물 매핑.</p>
+      <div class="tag-row">
+        <div class="tag"><p class="tag-text">COSMIC</p></div>
+        <div class="tag"><p class="tag-text">OncoKB</p></div>
+        <div class="tag"><p class="tag-text">DGIdb</p></div>
+        <div class="tag"><p class="tag-text">DrugBank</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="rag-card">
+      <p class="rag-title">RAG 문헌 해석</p>
+      <p class="rag-desc">PubMedBERT 임베딩으로 17개 암종 850편 이상 논문(53K+ 청크)을 ChromaDB에 인덱싱.</p>
+      <p class="rag-desc">유전자 + 암종 + 발현 방향 쿼리로 관련 문헌 청크를 검색하여 Claude API가 해석 생성.</p>
+      <div class="quote-box">
+        <p class="quote-text">"BRCA1은 상동 재조합을 통한 DNA 손상 복구에 핵심적인 역할을 합니다..." [PMID: 12345678]</p>
+      </div>
+    </div>
+    <div class="card">
+      <p class="card-title">Agent 5: 시각화</p>
+      <p class="card-desc">Volcano Plot: log2FC vs -log10(padj) 유의성 구간 표시.</p>
+      <p class="card-desc">인터랙티브 Heatmap: 상위 DEG 발현 패턴.</p>
+      <p class="card-desc">3D 네트워크: 힘 기반 그래프 + Hub 유전자 하이라이트.</p>
+      <p class="card-desc">경로 바플롯: 상위 enriched 용어 + -log10(pvalue).</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
